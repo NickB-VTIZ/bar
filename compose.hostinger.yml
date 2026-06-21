@@ -1,0 +1,30 @@
+# Zomerbar POS — Hostinger Docker Manager
+#
+# Plak deze URL in Hostinger → Docker Manager → Compose from URL:
+# https://raw.githubusercontent.com/JOUW-GEBRUIKER/zomerbar-pos/main/compose.hostinger.yml
+#
+# Vervang JOUW-GEBRUIKER hieronder door je GitHub-gebruikersnaam.
+
+services:
+  zomerbar:
+    image: ghcr.io/JOUW-GEBRUIKER/zomerbar-pos:latest
+    container_name: zomerbar-pos
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - zomerbar_data:/data
+    environment:
+      - PORT=3000
+      - DB_PATH=/data/zomerbar.db
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  zomerbar_data:
+    driver: local

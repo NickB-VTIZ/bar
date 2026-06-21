@@ -71,7 +71,70 @@ docker run --rm -v zomerbar_data:/data -v $(pwd):/backup alpine \
 
 ---
 
-## Updaten
+## Deployen op Hostinger VPS
+
+Hostinger kan geen lokale `build:` uitvoeren — daarom gebruikt `compose.hostinger.yml` een
+pre-gebouwd image van GitHub Container Registry (ghcr.io).
+
+### Eenmalige setup (±5 min)
+
+**1. Zet de code op GitHub**
+```bash
+cd zomerbar
+git init
+git add .
+git commit -m "Zomerbar POS — initiële versie"
+git branch -M main
+git remote add origin https://github.com/JOUW-GEBRUIKER/zomerbar-pos.git
+git push -u origin main
+```
+
+**2. Vervang je gebruikersnaam in `compose.hostinger.yml`**
+
+Open het bestand en vervang `JOUW-GEBRUIKER` door je GitHub-gebruikersnaam.
+Commit en push opnieuw:
+```bash
+git add compose.hostinger.yml
+git commit -m "Gebruikersnaam ingevuld"
+git push
+```
+
+**3. Wacht op het Docker image (~2 min)**
+
+GitHub Actions bouwt automatisch een image en pusht het naar `ghcr.io`.
+Volg de voortgang op: `https://github.com/JOUW-GEBRUIKER/zomerbar-pos/actions`
+
+**4. Maak het image publiek toegankelijk**
+
+Ga op GitHub naar je profiel → **Packages** → `zomerbar-pos` → **Package settings**
+→ scroll naar **Danger Zone** → **Change visibility** → **Public**.
+
+**5. Deploy op Hostinger**
+
+- Ga naar **hPanel → VPS → Manage → Docker Manager**
+- Klik **Compose** → **Compose from URL**
+- Plak deze URL:
+  ```
+  https://raw.githubusercontent.com/JOUW-GEBRUIKER/zomerbar-pos/main/compose.hostinger.yml
+  ```
+- Geef het project de naam `zomerbar`
+- Klik **Deploy**
+
+De app draait nu op `http://JOUW-VPS-IP:3000` ✅
+
+### Updaten na code-wijziging
+
+```bash
+git add .
+git commit -m "Update"
+git push
+# Wacht ~2 min tot GitHub Actions klaar is, dan:
+# Hostinger → Docker Manager → project zomerbar → Options → Update
+```
+
+---
+
+## Updaten (lokaal)
 
 ```bash
 docker compose down
