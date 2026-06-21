@@ -1,0 +1,17 @@
+services:
+  zomerbar:
+    build: .
+    container_name: zomerbar-pos
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - zomerbar_data:/data
+    environment:
+      - PORT=3000
+      - DB_PATH=/data/zomerbar.db
+      - NODE_ENV=production
+
+volumes:
+  zomerbar_data:
+    driver: local

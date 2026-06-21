@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zomerbar · Start</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--sun:#EF9F27;--sun-dark:#BA7517;--sun-light:#FAEEDA;--sun-text:#412402;--teal:#1D9E75;--teal-light:#E1F5EE;--teal-dark:#0F6E56;--bg:#F7F6F2;--card:#fff;--border:#E5E3DC;--tx:#1A1917;--mu:#6B6A65;--r:12px;--rm:8px;}
+body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
+.hero{background:var(--sun);padding:40px 24px;text-align:center;}
+.hero-icon{font-size:52px;margin-bottom:12px;}
+.hero-title{font-size:28px;font-weight:600;color:var(--sun-text);}
+.hero-sub{font-size:15px;color:#633806;margin-top:6px;}
+.wrap{max-width:680px;margin:0 auto;padding:28px 20px 48px;}
+.section-title{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
+.app-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;}
+.app-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:18px 16px;text-decoration:none;color:inherit;transition:all .15s;display:flex;flex-direction:column;align-items:center;text-align:center;}
+.app-card:hover{border-color:var(--sun);background:var(--sun-light);}
+.app-card:active{transform:scale(.98);}
+.app-icon{font-size:34px;margin-bottom:10px;}
+.app-name{font-size:14px;font-weight:600;margin-bottom:4px;}
+.app-desc{font-size:12px;color:var(--mu);}
+.qr-section{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:20px;}
+.qr-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+.qr-controls input[type=text]{font-size:13px;padding:9px 12px;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--bg);color:var(--tx);flex:1;min-width:180px;}
+.qr-controls input[type=number]{font-size:13px;padding:9px 12px;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--bg);color:var(--tx);width:70px;}
+.gen-btn{padding:10px 18px;font-size:13px;font-weight:600;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;white-space:nowrap;}
+.qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;}
+.qr-item{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--rm);padding:12px;text-align:center;}
+.qr-label{font-size:13px;font-weight:600;margin-bottom:8px;}
+.qr-code{display:flex;justify-content:center;margin-bottom:6px;}
+.qr-url{font-size:9px;color:var(--mu);word-break:break-all;}
+.print-btn{margin-top:14px;padding:10px 18px;font-size:13px;font-weight:600;background:var(--sun-light);color:var(--sun-text);border:0.5px solid var(--sun);border-radius:var(--rm);cursor:pointer;display:none;}
+@media print{.hero,.wrap>*:not(.qr-section){display:none}.qr-item{break-inside:avoid}}
+@media(max-width:500px){.app-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="hero-icon">☀️</div>
+  <div class="hero-title">Zomerbar POS</div>
+  <div class="hero-sub">Lokaal gehoste bestelling- en betalingsoplossing</div>
+</div>
+<div class="wrap">
+  <div class="section-title">Apps</div>
+  <div class="app-grid">
+    <a class="app-card" href="/pos.html">
+      <div class="app-icon">📱</div>
+      <div class="app-name">POS</div>
+      <div class="app-desc">Bestellingen invoeren · gsm bediening</div>
+    </a>
+    <a class="app-card" href="/bar.html">
+      <div class="app-icon">🖥</div>
+      <div class="app-name">Bar-dashboard</div>
+      <div class="app-desc">Bestellingenbeheer · tablet bar</div>
+    </a>
+    <a class="app-card" href="/klant.html">
+      <div class="app-icon">👤</div>
+      <div class="app-name">Klantpagina</div>
+      <div class="app-desc">Live status · klant via QR-code</div>
+    </a>
+  </div>
+
+  <div class="section-title">QR-codes voor tafels</div>
+  <div class="qr-section">
+    <div class="qr-controls">
+      <input type="text" id="qr-url" placeholder="http://192.168.1.x:3000" value="">
+      <span style="font-size:13px;color:var(--mu)">Tafels 1 t/m</span>
+      <input type="number" id="qr-n" value="10" min="1" max="30">
+      <button class="gen-btn" onclick="generateQR()">Genereren</button>
+    </div>
+    <p style="font-size:12px;color:var(--mu);margin-bottom:14px;">Vul het IP-adres van je server in (zelfde netwerk als de klanten). Klanten scannen de QR en zien live hun bestellingstatus.</p>
+    <div class="qr-grid" id="qr-grid"></div>
+    <button class="print-btn" id="print-btn" onclick="window.print()">🖨 Afdrukken</button>
+  </div>
+</div>
+<script>
+// Auto-fill server URL
+document.getElementById('qr-url').value = location.origin;
+
+function generateQR() {
+  const base = document.getElementById('qr-url').value.trim().replace(/\/$/,'');
+  const n = parseInt(document.getElementById('qr-n').value)||10;
+  if(!base){alert('Vul een URL in');return;}
+  const grid = document.getElementById('qr-grid');
+  grid.innerHTML='';
+  for(let i=1;i<=n;i++){
+    const url=`${base}/klant.html?tafel=${i}`;
+    const div=document.createElement('div');
+    div.className='qr-item';
+    div.innerHTML=`<div class="qr-label">Tafel ${i}</div><div class="qr-code" id="qr-${i}"></div><div class="qr-url">${url}</div>`;
+    grid.appendChild(div);
+    new QRCode(document.getElementById('qr-'+i),{text:url,width:100,height:100,colorDark:'#1A1917',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+  }
+  document.getElementById('print-btn').style.display='inline-block';
+}
+</script>
+</body>
+</html>

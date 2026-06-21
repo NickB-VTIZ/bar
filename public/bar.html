@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zomerbar · Bar-dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sun:#EF9F27;--sun-dark:#BA7517;--sun-light:#FAEEDA;--sun-text:#412402;
+  --teal:#1D9E75;--teal-light:#E1F5EE;--teal-dark:#0F6E56;
+  --coral:#D85A30;--coral-light:#FAECE7;--coral-dark:#993C1D;
+  --bg:#F7F6F2;--card:#fff;--border:#E5E3DC;
+  --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
+  --r:12px;--rm:8px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
+header{background:var(--sun);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-icon{font-size:24px;}
+.logo-text{font-size:17px;font-weight:600;color:var(--sun-text);}
+.logo-sub{font-size:12px;color:#633806;margin-top:1px;}
+.hdr-right{display:flex;align-items:center;gap:12px;}
+.clock{font-size:13px;font-weight:500;color:var(--sun-text);background:rgba(65,36,2,.12);padding:6px 12px;border-radius:20px;}
+.pill{font-size:12px;padding:5px 12px;border-radius:20px;font-weight:500;display:flex;align-items:center;gap:6px;}
+.pill.ok{background:rgba(29,158,117,.15);color:var(--teal-dark);}
+.pill.err{background:rgba(65,36,2,.12);color:var(--sun-text);}
+.dot{width:7px;height:7px;border-radius:50%;}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px 24px 0;}
+.stat{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:14px 16px;}
+.stat-n{font-size:28px;font-weight:600;}
+.stat-l{font-size:12px;color:var(--mu);margin-top:2px;}
+.stat.s-open .stat-n{color:var(--coral);}
+.stat.s-rev .stat-n{color:var(--teal-dark);}
+
+.sound-toggle{position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:var(--card);border:0.5px solid var(--border);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:16px 24px 32px;}
+.card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;transition:all .2s;}
+.card.is-new{border-color:var(--sun);box-shadow:0 0 0 3px var(--sun-light);}
+.card.is-making{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-light);}
+.card.is-done{opacity:.5;}
+.card-head{padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-table{font-size:16px;font-weight:600;}
+.card-meta{font-size:12px;color:var(--mu);margin-top:2px;}
+.badge{font-size:11px;padding:4px 10px;border-radius:12px;font-weight:600;}
+.badge-new{background:var(--sun-light);color:var(--sun-text);}
+.badge-making{background:var(--teal-light);color:var(--teal-dark);}
+.badge-done{background:#F1EFE8;color:#6B6A65;}
+.card-items{padding:12px 16px;}
+.item-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px;border-bottom:0.5px solid var(--border);}
+.item-row:last-child{border-bottom:none;}
+.item-qty{font-weight:600;color:var(--sun-dark);min-width:22px;}
+.item-icon{font-size:18px;}
+.card-note{font-size:12px;color:var(--mu);font-style:italic;padding:0 16px 8px;}
+.card-actions{display:flex;border-top:0.5px solid var(--border);}
+.action-btn{flex:1;padding:13px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.action-btn:active{transform:scale(.97);}
+.btn-start{background:var(--teal-light);color:var(--teal-dark);}
+.btn-start:hover{background:#9FE1CB;}
+.btn-ready{background:var(--sun-light);color:var(--sun-text);}
+.btn-ready:hover{background:var(--sun);}
+.btn-del{background:var(--coral-light);color:var(--coral-dark);flex:0;padding:13px 16px;}
+.btn-del:hover{background:#F5C4B3;}
+.empty{text-align:center;padding:80px 24px;color:var(--mu);}
+.empty-icon{font-size:56px;opacity:.2;margin-bottom:16px;}
+.empty-title{font-size:18px;font-weight:500;margin-bottom:6px;}
+.empty-sub{font-size:14px;color:var(--mu2);}
+
+@keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(15deg)}30%{transform:rotate(-12deg)}45%{transform:rotate(10deg)}60%{transform:rotate(-8deg)}75%{transform:rotate(5deg)}}
+.ring{animation:ring .7s ease;}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:12px 22px;border-radius:24px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:1fr;padding:12px 14px 80px;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <span class="logo-icon">☀️</span>
+    <div><div class="logo-text">Bar-dashboard</div><div class="logo-sub">Zomerbar bestellingenbeheer</div></div>
+  </div>
+  <div class="hdr-right">
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="pill err" id="conn"><div class="dot" id="conn-dot" style="background:#BA7517"></div><span id="conn-lbl">Verbinden…</span></div>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat s-open"><div class="stat-n" id="s-new">0</div><div class="stat-l">🔴 Open</div></div>
+  <div class="stat"><div class="stat-n" id="s-making">0</div><div class="stat-l">🟡 Bezig</div></div>
+  <div class="stat"><div class="stat-n" id="s-done">0</div><div class="stat-l">✅ Klaar</div></div>
+  <div class="stat s-rev"><div class="stat-n" id="s-rev">€0</div><div class="stat-l">💶 Vandaag</div></div>
+</div>
+
+<div class="board" id="board">
+  <div class="empty"><div class="empty-icon">🍺</div><div class="empty-title">Klaar voor bestellingen</div><div class="empty-sub">Bestellingen verschijnen hier automatisch</div></div>
+</div>
+
+<button class="sound-toggle" id="sound-btn" onclick="toggleSound()" title="Geluid aan/uit">🔔</button>
+<div class="toast" id="toast"></div>
+
+<script src="/api.js"></script>
+<script>
+const API = window.ZomerbarAPI;
+let orders = {}, soundEnabled = true;
+
+// Clock
+setInterval(()=>{
+  document.getElementById('clock').textContent=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+},1000);
+
+// Sound
+function playBing() {
+  if(!soundEnabled)return;
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(); const g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.setValueAtTime(880,ctx.currentTime);
+    o.frequency.setValueAtTime(1108,ctx.currentTime+.1);
+    g.gain.setValueAtTime(.3,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.5);
+    o.start(); o.stop(ctx.currentTime+.5);
+  }catch(_){}
+}
+function toggleSound(){
+  soundEnabled=!soundEnabled;
+  document.getElementById('sound-btn').textContent=soundEnabled?'🔔':'🔕';
+  toast(soundEnabled?'Geluid aan':'Geluid uit');
+}
+
+// WS
+API.on('ws_open',()=>setConn(true));
+API.on('ws_close',()=>setConn(false));
+
+API.on('init', d=>{
+  orders={};
+  (d.orders||[]).forEach(o=>orders[o.id]=o);
+  render();
+});
+API.on('order_created', d=>{
+  orders[d.order.id]=d.order;
+  render(); playBing();
+  const el=document.getElementById('sound-btn');
+  el.classList.add('ring'); setTimeout(()=>el.classList.remove('ring'),700);
+  toast(`🆕 Nieuwe bestelling — Tafel ${d.order.table_num}`);
+});
+API.on('order_updated', d=>{ orders[d.order.id]=d.order; render(); });
+API.on('order_deleted', d=>{ delete orders[d.id]; render(); });
+
+function setConn(ok){
+  document.getElementById('conn').className='pill '+(ok?'ok':'err');
+  document.getElementById('conn-dot').style.background=ok?'var(--teal)':'var(--sun-dark)';
+  document.getElementById('conn-lbl').textContent=ok?'Verbonden':'Offline';
+}
+
+function timeAgo(ts){
+  const d=Math.floor((Date.now()-new Date(ts).getTime())/1000);
+  if(d<60)return d+'s';
+  if(d<3600)return Math.floor(d/60)+' min';
+  return Math.floor(d/3600)+' u';
+}
+
+function render(){
+  const list=Object.values(orders).sort((a,b)=>{
+    const p={new:0,making:1,done:2};
+    if(p[a.status]!==p[b.status])return p[a.status]-p[b.status];
+    return new Date(a.created_at)-new Date(b.created_at);
+  });
+  // Stats
+  document.getElementById('s-new').textContent=list.filter(o=>o.status==='new').length;
+  document.getElementById('s-making').textContent=list.filter(o=>o.status==='making').length;
+  document.getElementById('s-done').textContent=list.filter(o=>o.status==='done').length;
+  const rev=list.reduce((s,o)=>s+(o.amount||0),0);
+  document.getElementById('s-rev').textContent='€'+rev.toFixed(2).replace('.',',');
+  if(!list.length){
+    document.getElementById('board').innerHTML='<div class="empty"><div class="empty-icon">🍺</div><div class="empty-title">Klaar voor bestellingen</div><div class="empty-sub">Bestellingen verschijnen hier automatisch</div></div>';
+    return;
+  }
+  document.getElementById('board').innerHTML=list.map(o=>cardHTML(o)).join('');
+}
+
+function cardHTML(o){
+  const cls=o.status==='new'?'is-new':o.status==='making'?'is-making':'is-done';
+  const badgeCls=o.status==='new'?'badge-new':o.status==='making'?'badge-making':'badge-done';
+  const badgeTxt=o.status==='new'?'Nieuw':o.status==='making'?'Bezig':'Klaar';
+  const items=(o.items||[]).map(i=>`<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}</span></div>`).join('');
+  const actions=o.status==='done'
+    ?`<div class="card-actions"><button class="action-btn btn-del" style="flex:1" onclick="del('${o.id}')">🗑 Verwijderen</button></div>`
+    :o.status==='new'
+    ?`<div class="card-actions"><button class="action-btn btn-start" onclick="setStatus('${o.id}','making')">👨‍🍳 Aan de slag</button><button class="action-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
+    :`<div class="card-actions"><button class="action-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','done')">✅ Klaar — klant verwittigen</button><button class="action-btn btn-del" onclick="del('${o.id}')">✕</button></div>`;
+  return `<div class="card ${cls}">
+    <div class="card-head">
+      <div><div class="card-table">Tafel ${o.table_num} <span style="font-weight:400;font-size:13px;color:var(--mu)">· ${o.id}</span></div><div class="card-meta">${timeAgo(o.created_at)} geleden · ${(o.items||[]).reduce((s,i)=>s+i.qty,0)} items</div></div>
+      <span class="badge ${badgeCls}">${badgeTxt}</span>
+    </div>
+    <div class="card-items">${items}</div>
+    ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
+    ${actions}
+  </div>`;
+}
+
+async function setStatus(id, status) {
+  await API.orders.setStatus(id, status);
+  if(status==='done') toast(`✅ Tafel ${orders[id]?.table_num} verwittigd!`);
+}
+async function del(id) { await API.orders.remove(id); }
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+</script>
+</body>
+</html>

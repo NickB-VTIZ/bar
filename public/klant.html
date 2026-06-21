@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Zomerbar · Bestelling</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sun:#EF9F27;--sun-dark:#BA7517;--sun-light:#FAEEDA;--sun-text:#412402;
+  --teal:#1D9E75;--teal-light:#E1F5EE;--teal-dark:#0F6E56;
+  --bg:#F7F6F2;--card:#fff;--border:#E5E3DC;
+  --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
+  --r:16px;--rm:10px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
+.hero{background:var(--sun);padding:36px 20px 30px;text-align:center;}
+.hero-icon{font-size:44px;margin-bottom:10px;}
+.hero-title{font-size:22px;font-weight:600;color:var(--sun-text);}
+.hero-table{font-size:15px;color:#633806;margin-top:4px;}
+.hero-sub{font-size:13px;color:#7A4A10;margin-top:8px;}
+.wrap{max-width:440px;margin:0 auto;padding:20px 16px 40px;}
+
+.ready-banner{background:var(--teal);color:#fff;padding:14px 20px;border-radius:var(--r);margin-bottom:14px;display:none;align-items:center;gap:12px;}
+.ready-banner.show{display:flex;}
+.ready-banner-text{flex:1;font-size:14px;font-weight:600;}
+
+.order-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:14px;overflow:hidden;}
+.progress{padding:18px 18px 0;}
+.steps-row{display:flex;align-items:center;}
+.step-wrap{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;}
+.step-circle{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .4s;}
+.step-circle.done{background:var(--teal);border-color:var(--teal);color:#fff;font-size:14px;}
+.step-circle.active{background:var(--sun);border-color:var(--sun);}
+.step-line{flex:1;height:2px;background:var(--border);transition:background .4s;min-width:30px;}
+.step-line.done{background:var(--teal);}
+.steps-labels{display:flex;justify-content:space-between;padding:6px 0 16px;border-bottom:0.5px solid var(--border);}
+.step-label{font-size:11px;color:var(--mu);text-align:center;width:70px;}
+.step-label.active{color:var(--sun-dark);font-weight:600;}
+.step-label.done{color:var(--teal-dark);}
+
+.status-row{display:flex;align-items:center;gap:14px;padding:14px 18px;}
+.status-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.si-new{background:var(--sun-light);}
+.si-making{background:var(--teal-light);}
+.si-done{background:var(--teal);}
+.status-title{font-size:15px;font-weight:600;}
+.status-sub{font-size:13px;color:var(--mu);margin-top:2px;}
+
+.items-block{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:14px;}
+.items-head{padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.items-title{font-size:13px;font-weight:600;}
+.order-id-label{font-size:12px;color:var(--mu);}
+.items-list{padding:10px 16px;}
+.item-line{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:14px;border-bottom:0.5px solid var(--border);}
+.item-line:last-child{border-bottom:none;}
+.item-emoji{font-size:20px;width:26px;text-align:center;}
+.item-name{flex:1;}
+.item-qty{color:var(--mu);}
+.item-price{font-size:13px;color:var(--mu);}
+.total-row{display:flex;justify-content:space-between;padding:10px 0 4px;font-size:14px;font-weight:600;border-top:0.5px solid var(--border);margin-top:4px;}
+
+.loading{text-align:center;padding:60px 20px;}
+.loading-icon{font-size:48px;opacity:.25;margin-bottom:14px;}
+.loading-text{font-size:15px;color:var(--mu);}
+.loading-sub{font-size:13px;color:var(--mu2);margin-top:6px;}
+
+@keyframes pulse-teal{0%{box-shadow:0 0 0 0 rgba(29,158,117,.4)}70%{box-shadow:0 0 0 14px rgba(29,158,117,0)}100%{box-shadow:0 0 0 0 rgba(29,158,117,0)}}
+.pulse{animation:pulse-teal 1.5s ease 2;}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="hero-icon">☀️</div>
+  <div class="hero-title">Zomerbar</div>
+  <div class="hero-table" id="hero-table">Laden…</div>
+  <div class="hero-sub">Live bestellingstatus</div>
+</div>
+<div class="wrap">
+  <div class="ready-banner" id="ready-banner">
+    <span style="font-size:26px">🎉</span>
+    <span class="ready-banner-text">Klaar! Kom je bestelling ophalen aan de bar.</span>
+    <span style="cursor:pointer;opacity:.7;font-size:18px" onclick="this.parentElement.classList.remove('show')">✕</span>
+  </div>
+  <div id="content">
+    <div class="loading"><div class="loading-icon">🍺</div><div class="loading-text">Verbinden…</div></div>
+  </div>
+</div>
+<script src="/api.js"></script>
+<script>
+const API = window.ZomerbarAPI;
+const params = new URLSearchParams(location.search);
+const tableNum = parseInt(params.get('tafel')) || null;
+let myOrders = {}, prevStatuses = {};
+
+document.getElementById('hero-table').textContent = tableNum ? `Tafel ${tableNum}` : 'Scan de QR-code van je tafel';
+
+API.on('init', d => {
+  myOrders = {};
+  (d.orders || []).filter(o => !tableNum || o.table_num === tableNum)
+    .forEach(o => { myOrders[o.id] = o; prevStatuses[o.id] = o.status; });
+  render();
+});
+
+API.on('order_created', d => {
+  if (tableNum && d.order.table_num !== tableNum) return;
+  myOrders[d.order.id] = d.order;
+  prevStatuses[d.order.id] = d.order.status;
+  render();
+});
+
+API.on('order_updated', d => {
+  if (tableNum && d.order.table_num !== tableNum) return;
+  const prev = prevStatuses[d.order.id];
+  myOrders[d.order.id] = d.order;
+  if (prev && prev !== 'done' && d.order.status === 'done') {
+    document.getElementById('ready-banner').classList.add('show');
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Zomerbar — Bestelling klaar! 🎉', { body: 'Kom ophalen aan de bar.' });
+    }
+  }
+  prevStatuses[d.order.id] = d.order.status;
+  render();
+});
+
+API.on('order_deleted', d => { delete myOrders[d.id]; render(); });
+
+function timeAgo(ts) {
+  const d = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (d < 60) return d + 's geleden';
+  if (d < 3600) return Math.floor(d / 60) + ' min geleden';
+  return Math.floor(d / 3600) + ' u geleden';
+}
+
+function render() {
+  const list = Object.values(myOrders).sort((a, b) => {
+    const p = { new: 0, making: 1, done: 2 };
+    return (p[a.status] ?? 3) - (p[b.status] ?? 3);
+  });
+  if (!list.length) {
+    document.getElementById('content').innerHTML = `<div class="loading"><div class="loading-icon">🕐</div><div class="loading-text">${tableNum ? 'Nog geen bestellingen voor tafel ' + tableNum : 'Geen bestellingen'}</div><div class="loading-sub">Bestelling plaatsen via de bediening</div></div>`;
+    return;
+  }
+  document.getElementById('content').innerHTML = list.map(o => orderHTML(o)).join('');
+}
+
+function orderHTML(o) {
+  const si = o.status === 'new' ? 0 : o.status === 'making' ? 1 : 2;
+  const stepIcons = ['📋', '👨‍🍳', '✅'];
+  const stepLabels = ['Ontvangen', 'Bezig', 'Klaar'];
+  const stepsHTML = `<div class="progress">
+    <div class="steps-row">
+      ${[0,1,2].map(i => `
+        <div class="step-wrap">
+          <div class="step-circle ${i < si ? 'done' : i === si ? 'active' : ''}">${i < si ? '✓' : stepIcons[i]}</div>
+        </div>
+        ${i < 2 ? `<div class="step-line ${i < si ? 'done' : ''}"></div>` : ''}
+      `).join('')}
+    </div>
+    <div class="steps-labels">
+      ${stepLabels.map((l,i) => `<div class="step-label ${i < si ? 'done' : i === si ? 'active' : ''}">${l}</div>`).join('')}
+    </div>
+  </div>`;
+
+  const msgs = {
+    new: { title: 'Ontvangen', sub: 'We beginnen zo snel mogelijk!', cls: 'si-new', icon: '📋' },
+    making: { title: 'Wordt bereid', sub: 'Even wachten, we zijn bezig!', cls: 'si-making', icon: '👨‍🍳' },
+    done: { title: 'Klaar! Kom ophalen 🎉', sub: 'Je bestelling staat klaar aan de bar.', cls: 'si-done', icon: '✅' },
+  };
+  const m = msgs[o.status] || msgs.new;
+  const items = (o.items || []);
+  const total = items.reduce((s, i) => s + (i.price * i.qty), 0);
+
+  return `<div class="order-card ${o.status === 'done' ? 'pulse' : ''}">
+    ${stepsHTML}
+    <div class="status-row">
+      <div class="status-icon ${m.cls}">${m.icon}</div>
+      <div><div class="status-title">${m.title}</div><div class="status-sub">${m.sub}</div></div>
+    </div>
+  </div>
+  <div class="items-block">
+    <div class="items-head"><div class="items-title">Jouw bestelling</div><div class="order-id-label">${o.id} · ${timeAgo(o.created_at)}</div></div>
+    <div class="items-list">
+      ${items.map(i => `<div class="item-line"><span class="item-emoji">${i.icon||'🍺'}</span><span class="item-name">${i.name}</span><span class="item-qty">${i.qty}×</span><span class="item-price">€ ${(i.price*i.qty).toFixed(2).replace('.',',')}</span></div>`).join('')}
+      <div class="total-row"><span>Totaal</span><span>€ ${total.toFixed(2).replace('.',',')}</span></div>
+    </div>
+  </div>`;
+}
+
+// Request notification permission
+if ('Notification' in window && Notification.permission === 'default') {
+  setTimeout(() => Notification.requestPermission(), 1500);
+}
+</script>
+</body>
+</html>

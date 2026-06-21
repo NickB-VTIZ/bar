@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Zomerbar · POS</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sun:#EF9F27;--sun-dark:#BA7517;--sun-light:#FAEEDA;--sun-text:#412402;
+  --teal:#1D9E75;--teal-light:#E1F5EE;--teal-dark:#0F6E56;
+  --coral:#D85A30;--coral-light:#FAECE7;--coral-dark:#993C1D;
+  --bg:#F7F6F2;--card:#fff;--border:#E5E3DC;
+  --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
+  --r:12px;--rm:8px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
+header{background:var(--sun);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+.logo{font-size:15px;font-weight:600;color:var(--sun-text);}
+.logo-sub{font-size:11px;color:#633806;}
+.pill{font-size:11px;padding:4px 10px;border-radius:12px;font-weight:500;display:flex;align-items:center;gap:5px;}
+.pill.ok{background:rgba(29,158,117,.18);color:var(--teal-dark);}
+.pill.err{background:rgba(0,0,0,.1);color:var(--sun-text);}
+.dot{width:6px;height:6px;border-radius:50%;}
+.nav-row{display:flex;background:var(--card);border-bottom:0.5px solid var(--border);}
+.nav-btn{flex:1;padding:10px;font-size:12px;font-weight:500;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px;}
+.nav-btn.on{color:var(--sun-dark);border-bottom-color:var(--sun);}
+.nav-btn span{font-size:18px;}
+.screen{display:none;flex-direction:column;}
+.screen.on{display:flex;}
+
+/* POS */
+.total-bar{background:var(--card);border-bottom:0.5px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;}
+.total-amt{font-size:24px;font-weight:600;}
+.total-cnt{font-size:12px;color:var(--mu);margin-top:1px;}
+.clear-btn{font-size:12px;padding:6px 14px;border-radius:20px;border:0.5px solid var(--coral);background:var(--coral-light);color:var(--coral-dark);cursor:pointer;font-weight:500;}
+.section{padding:12px 16px 0;}
+.section-label{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.table-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;}
+.tbl{aspect-ratio:1;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--card);cursor:pointer;font-size:15px;font-weight:600;color:var(--tx);display:flex;align-items:center;justify-content:center;transition:all .12s;position:relative;}
+.tbl:active{transform:scale(.93);}
+.tbl.sel{background:var(--sun-light);border-color:var(--sun);color:var(--sun-text);}
+.tbl.busy{border-color:var(--teal);background:var(--teal-light);color:var(--teal-dark);}
+.busy-dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--teal);}
+.cats{display:flex;gap:7px;padding:12px 16px 0;overflow-x:auto;}
+.cat{padding:6px 14px;border-radius:20px;border:0.5px solid var(--border);background:var(--card);font-size:13px;font-weight:500;color:var(--mu);cursor:pointer;white-space:nowrap;}
+.cat.on{background:var(--sun-light);border-color:var(--sun);color:var(--sun-text);}
+.prod-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;padding:12px 16px;}
+.prod{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:13px;cursor:pointer;transition:all .12s;position:relative;}
+.prod:active{transform:scale(.97);}
+.prod.in-cart{border-color:var(--sun);}
+.prod-icon{font-size:26px;margin-bottom:7px;}
+.prod-name{font-size:14px;font-weight:500;}
+.prod-price{font-size:13px;color:var(--mu);margin-top:2px;}
+.prod-qty{position:absolute;top:7px;right:7px;background:var(--sun);color:var(--sun-text);font-size:12px;font-weight:600;width:22px;height:22px;border-radius:50%;display:none;align-items:center;justify-content:center;}
+.prod.in-cart .prod-qty{display:flex;}
+.cart-sec{background:var(--card);border-top:0.5px solid var(--border);padding:12px 16px;display:none;}
+.cart-title{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px;}
+.cart-row{display:flex;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:14px;}
+.cart-row:last-child{border-bottom:none;}
+.cart-name{flex:1;}
+.qctrl{display:flex;align-items:center;gap:7px;}
+.qbtn{width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border);background:var(--bg);cursor:pointer;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+.cart-price{font-size:13px;color:var(--mu);min-width:46px;text-align:right;}
+.inv-fields{display:none;padding:0 16px 10px;background:var(--card);}
+.inv-fields.show{display:block;}
+.inv-label{font-size:11px;font-weight:500;color:var(--mu);margin-bottom:4px;margin-top:8px;display:block;}
+.inv-input{width:100%;font-size:13px;padding:8px 11px;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--bg);color:var(--tx);}
+.inv-grid{display:grid;grid-template-columns:1fr 2fr;gap:8px;}
+.bottom{padding:12px 16px 28px;background:var(--card);border-top:0.5px solid var(--border);}
+.note-row{display:flex;gap:8px;margin-bottom:10px;}
+.note-input{flex:1;font-size:13px;padding:9px 12px;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--bg);color:var(--tx);}
+.inv-toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mu);padding:9px 12px;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--bg);cursor:pointer;white-space:nowrap;}
+.inv-toggle.on{background:var(--teal-light);color:var(--teal-dark);border-color:var(--teal);}
+.pay-btn{width:100%;padding:15px;font-size:15px;font-weight:600;background:var(--sun);color:var(--sun-text);border:none;border-radius:var(--r);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .12s;}
+.pay-btn:active{transform:scale(.98);}
+.pay-btn:disabled{background:var(--border);color:var(--mu2);cursor:not-allowed;transform:none;}
+
+/* Stats screen */
+.stats-wrap{padding:16px;}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
+.stat-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:14px;}
+.stat-n{font-size:26px;font-weight:600;}
+.stat-l{font-size:12px;color:var(--mu);margin-top:2px;}
+.stat-card.rev .stat-n{color:var(--teal-dark);}
+.top-title{font-size:13px;font-weight:600;color:var(--mu);margin-bottom:10px;}
+.top-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:14px;}
+.top-row:last-child{border-bottom:none;}
+.top-icon{font-size:20px;width:28px;text-align:center;}
+.top-name{flex:1;}
+.top-sold{font-size:13px;color:var(--mu);}
+.top-rev{font-size:13px;font-weight:600;color:var(--teal-dark);}
+
+/* Settings screen */
+.settings-wrap{padding:16px;}
+.settings-sec{margin-bottom:20px;}
+.settings-sec-title{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.settings-card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.settings-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:0.5px solid var(--border);}
+.settings-row:last-child{border-bottom:none;}
+.settings-label{flex:1;font-size:14px;}
+.settings-input{font-size:13px;padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--bg);color:var(--tx);text-align:right;width:170px;}
+.save-btn{width:100%;padding:12px;font-size:14px;font-weight:600;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;margin-top:10px;}
+.prod-manage{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.prod-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--border);}
+.prod-row:last-child{border-bottom:none;}
+.prod-row-icon{font-size:20px;width:28px;}
+.prod-row-info{flex:1;}
+.prod-row-name{font-size:14px;font-weight:500;}
+.prod-row-sub{font-size:12px;color:var(--mu);}
+.prod-row-price{font-size:14px;font-weight:500;margin-right:10px;}
+.icon-btn{width:32px;height:32px;border-radius:var(--rm);border:0.5px solid var(--border);background:var(--bg);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.add-prod-form{background:var(--card);border:0.5px solid var(--sun);border-radius:var(--r);padding:14px;margin-top:10px;display:none;}
+.add-prod-form.show{display:block;}
+.add-prod-form label{font-size:11px;font-weight:500;color:var(--mu);display:block;margin-bottom:4px;margin-top:8px;}
+.add-prod-form label:first-child{margin-top:0;}
+.add-prod-form input,.add-prod-form select{width:100%;font-size:13px;padding:8px 11px;border:0.5px solid var(--border);border-radius:var(--rm);background:var(--bg);color:var(--tx);}
+.add-prod-btns{display:flex;gap:8px;margin-top:12px;}
+.add-prod-btns button{flex:1;padding:10px;font-size:13px;font-weight:600;border:none;border-radius:var(--rm);cursor:pointer;}
+.btn-primary{background:var(--sun);color:var(--sun-text);}
+.btn-ghost{background:var(--bg);border:0.5px solid var(--border);color:var(--tx);}
+
+/* Pay modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;align-items:flex-end;justify-content:center;}
+.overlay.show{display:flex;}
+.sheet{background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:440px;}
+.handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 18px;}
+.sheet-title{font-size:18px;font-weight:600;margin-bottom:4px;}
+.sheet-amt{font-size:40px;font-weight:600;text-align:center;margin:14px 0;}
+.method-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.method{padding:14px;border:0.5px solid var(--border);border-radius:var(--r);background:var(--bg);cursor:pointer;text-align:center;}
+.method.sel{border-color:var(--sun);background:var(--sun-light);}
+.method-icon{font-size:26px;margin-bottom:6px;}
+.method-label{font-size:13px;font-weight:600;}
+.method-sub{font-size:11px;color:var(--mu);margin-top:2px;}
+.confirm-btn{width:100%;padding:15px;font-size:15px;font-weight:600;background:var(--sun);color:var(--sun-text);border:none;border-radius:var(--r);cursor:pointer;margin-bottom:10px;}
+.cancel-btn{width:100%;padding:10px;font-size:14px;background:none;border:none;color:var(--mu);cursor:pointer;}
+
+/* Transactions */
+.tx-wrap{padding:12px 16px;}
+.tx-item{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.tx-id{font-size:14px;font-weight:600;}
+.tx-meta{font-size:12px;color:var(--mu);margin-top:2px;}
+.tx-amt{font-size:15px;font-weight:600;text-align:right;}
+.tx-badge{font-size:11px;padding:2px 8px;border-radius:10px;margin-top:3px;display:inline-block;}
+.badge-card{background:var(--teal-light);color:var(--teal-dark);}
+.badge-cash{background:var(--sun-light);color:var(--sun-text);}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:12px 22px;border-radius:24px;opacity:0;transition:all .25s;z-index:200;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">☀️ Zomerbar POS</div>
+    <div class="logo-sub" id="hdr-date"></div>
+  </div>
+  <div id="conn" class="pill err"><div class="dot" id="conn-dot" style="background:#fff"></div><span id="conn-lbl">Verbinden…</span></div>
+</header>
+
+<div class="nav-row">
+  <button class="nav-btn on" onclick="showScreen('pos',this)"><span>🛒</span>Verkoop</button>
+  <button class="nav-btn" onclick="showScreen('stats',this); loadStats()"><span>📊</span>Stats</button>
+  <button class="nav-btn" onclick="showScreen('tx',this); loadTx()"><span>🧾</span>Transacties</button>
+  <button class="nav-btn" onclick="showScreen('settings',this); loadSettings()"><span>⚙️</span>Instellingen</button>
+</div>
+
+<!-- POS -->
+<div id="screen-pos" class="screen on">
+  <div class="total-bar">
+    <div><div class="total-amt" id="total-amt">€ 0,00</div><div class="total-cnt" id="total-cnt">0 artikelen</div></div>
+    <button class="clear-btn" onclick="clearCart()">Wissen</button>
+  </div>
+  <div class="section">
+    <div class="section-label">Tafel</div>
+    <div class="table-grid" id="table-grid"></div>
+  </div>
+  <div class="cats" id="cats"></div>
+  <div class="prod-grid" id="prod-grid"></div>
+  <div class="cart-sec" id="cart-sec">
+    <div class="cart-title">Bestelling</div>
+    <div id="cart-rows"></div>
+  </div>
+  <div class="inv-fields" id="inv-fields">
+    <div style="font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;padding-top:10px;margin-bottom:8px;">Factuurgegevens</div>
+    <label class="inv-label">Bedrijfsnaam</label><input class="inv-input" id="inv-company" placeholder="NV Voorbeeld">
+    <label class="inv-label">BTW-nummer</label><input class="inv-input" id="inv-vat" placeholder="BE0000000000">
+    <label class="inv-label">E-mail</label><input class="inv-input" id="inv-email" type="email" placeholder="contact@bedrijf.be">
+    <label class="inv-label">Straat + nr</label><input class="inv-input" id="inv-street" placeholder="Voorbeeldstraat 1">
+    <div class="inv-grid">
+      <div><label class="inv-label">Postcode</label><input class="inv-input" id="inv-zip" placeholder="9000"></div>
+      <div><label class="inv-label">Gemeente</label><input class="inv-input" id="inv-city" placeholder="Gent"></div>
+    </div>
+  </div>
+  <div class="bottom">
+    <div class="note-row">
+      <input class="note-input" id="order-note" placeholder="Opmerking…">
+      <div class="inv-toggle" id="inv-toggle" onclick="toggleInv()">🧾 Factuur</div>
+    </div>
+    <button class="pay-btn" id="pay-btn" onclick="openPay()" disabled>💳 Betalen</button>
+  </div>
+</div>
+
+<!-- Stats -->
+<div id="screen-stats" class="screen">
+  <div class="stats-wrap">
+    <div class="stat-grid" id="stat-grid"><div style="font-size:13px;color:var(--mu)">Laden…</div></div>
+    <div class="top-title">Top producten vandaag</div>
+    <div class="settings-card" id="top-products"></div>
+  </div>
+</div>
+
+<!-- Transactions -->
+<div id="screen-tx" class="screen">
+  <div class="tx-wrap" id="tx-list"><div style="font-size:13px;color:var(--mu);padding:20px">Laden…</div></div>
+</div>
+
+<!-- Settings -->
+<div id="screen-settings" class="screen">
+  <div class="settings-wrap">
+    <div class="settings-sec">
+      <div class="settings-sec-title">SumUp</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">API-sleutel</div><input class="settings-input" id="s-sumup" type="password" placeholder="sup_sk_…"></div>
+        <div class="settings-row"><div class="settings-label">Merchant ID</div><input class="settings-input" id="s-merchant" placeholder="MXXXXXXX"></div>
+      </div>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">Billit Facturatie</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">Client ID</div><input class="settings-input" id="s-billit-id" placeholder="Client ID"></div>
+        <div class="settings-row"><div class="settings-label">Client Secret</div><input class="settings-input" id="s-billit-secret" type="password" placeholder="Secret"></div>
+        <div class="settings-row"><div class="settings-label">Omgeving</div>
+          <select class="settings-input" id="s-billit-env"><option value="sandbox">Sandbox</option><option value="production">Productie</option></select>
+        </div>
+        <div class="settings-row"><div class="settings-label">Naam bar</div><input class="settings-input" id="s-bar-name" placeholder="Zomerbar"></div>
+        <div class="settings-row"><div class="settings-label">BTW-nr bar</div><input class="settings-input" id="s-bar-vat" placeholder="BE0000000000"></div>
+      </div>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">BTW-tarieven</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">Dranken</div>
+          <select class="settings-input" id="s-vat-drinks"><option value="21">21%</option><option value="12">12%</option><option value="6" selected>6%</option></select>
+        </div>
+        <div class="settings-row"><div class="settings-label">Maaltijden</div>
+          <select class="settings-input" id="s-vat-food"><option value="21">21%</option><option value="12" selected>12%</option><option value="6">6%</option></select>
+        </div>
+      </div>
+      <button class="save-btn" onclick="saveSettings()">Instellingen opslaan</button>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">Menu beheren</div>
+      <div class="prod-manage" id="prod-manage"></div>
+      <div class="add-prod-form" id="add-prod-form">
+        <label>Naam</label><input id="np-name" placeholder="Rosé">
+        <label>Categorie</label><input id="np-cat" placeholder="Cocktails">
+        <label>Prijs (€)</label><input id="np-price" type="number" step="0.5" placeholder="4.50">
+        <label>Emoji</label><input id="np-icon" placeholder="🍷">
+        <label>Type</label>
+        <select id="np-vat"><option value="drinks">Drank (6% BTW)</option><option value="food">Maaltijd (12% BTW)</option></select>
+        <div class="add-prod-btns">
+          <button class="btn-ghost" onclick="document.getElementById('add-prod-form').classList.remove('show')">Annuleren</button>
+          <button class="btn-primary" onclick="saveNewProduct()">Toevoegen</button>
+        </div>
+      </div>
+      <button class="save-btn" style="background:var(--sun);color:var(--sun-text);margin-top:10px" onclick="document.getElementById('add-prod-form').classList.toggle('show')">+ Product toevoegen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pay modal -->
+<div class="overlay" id="pay-overlay">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="sheet-title">Betaling</div>
+    <div style="font-size:13px;color:var(--mu)" id="pay-sub">Kies betaalmethode</div>
+    <div class="sheet-amt" id="pay-amt">€ 0,00</div>
+    <div class="method-grid">
+      <div class="method sel" id="m-card" onclick="selMethod('card')"><div class="method-icon">💳</div><div class="method-label">Kaart</div><div class="method-sub">SumUp reader</div></div>
+      <div class="method" id="m-cash" onclick="selMethod('cash')"><div class="method-icon">💶</div><div class="method-label">Cash</div><div class="method-sub">Contant</div></div>
+    </div>
+    <button class="confirm-btn" id="confirm-btn" onclick="processPayment()">Betaling starten</button>
+    <button class="cancel-btn" onclick="closePay()">Annuleren</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/api.js"></script>
+<script>
+const API = window.ZomerbarAPI;
+let products = [], cart = {}, activeCat = 'Alle', selTable = null, wantsInv = false, payMethod = 'card';
+let busyTables = new Set(), settings = {};
+
+document.getElementById('hdr-date').textContent =
+  new Date().toLocaleDateString('nl-BE',{weekday:'short',day:'numeric',month:'long'});
+
+// WS connection status
+API.on('ws_open', () => setConn(true));
+API.on('ws_close', () => setConn(false));
+API.on('order_created', () => refreshBusy());
+API.on('order_updated', () => refreshBusy());
+API.on('order_deleted', () => refreshBusy());
+API.on('product_added', d => { products.push(d.product); renderCats(); renderProds(); renderProdManage(); });
+API.on('product_updated', d => { const i=products.findIndex(p=>p.id===d.product.id); if(i>=0)products[i]=d.product; renderProds(); });
+API.on('product_deleted', d => { products=products.filter(p=>p.id!=d.id); renderCats(); renderProds(); renderProdManage(); });
+
+function setConn(ok) {
+  document.getElementById('conn').className='pill '+(ok?'ok':'err');
+  document.getElementById('conn-dot').style.background=ok?'var(--teal)':'#fff';
+  document.getElementById('conn-lbl').textContent=ok?'Verbonden':'Offline';
+}
+
+function showScreen(name, btn) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('screen-'+name).classList.add('on');
+  if(btn)btn.classList.add('on');
+}
+
+async function init() {
+  [products, settings] = await Promise.all([API.products.list(), API.settings.get()]);
+  renderCats(); renderTables(); renderProds(); renderProdManage();
+  refreshBusy();
+}
+
+async function refreshBusy() {
+  const orders = await API.orders.list();
+  busyTables = new Set(orders.filter(o=>o.status!=='done').map(o=>o.table_num));
+  renderTables();
+}
+
+function renderTables() {
+  document.getElementById('table-grid').innerHTML = Array.from({length:10},(_,i)=>i+1).map(n=>{
+    const busy=busyTables.has(n), sel=selTable===n;
+    return `<div class="tbl ${sel?'sel':busy&&!sel?'busy':''}" onclick="selectTable(${n})">${n}${busy&&!sel?'<div class="busy-dot"></div>':''}</div>`;
+  }).join('');
+}
+
+function selectTable(n) { selTable=n; renderTables(); updatePayBtn(); }
+
+const cats = () => ['Alle',...new Set(products.map(p=>p.category))];
+function renderCats() {
+  document.getElementById('cats').innerHTML = cats().map(c=>
+    `<div class="cat ${c===activeCat?'on':''}" onclick="setCat('${c}')">${c}</div>`
+  ).join('');
+}
+function setCat(c) { activeCat=c; renderCats(); renderProds(); }
+
+function renderProds() {
+  const list = activeCat==='Alle' ? products : products.filter(p=>p.category===activeCat);
+  document.getElementById('prod-grid').innerHTML = list.map(p=>{
+    const qty=cart[p.id]||0;
+    return `<div class="prod ${qty>0?'in-cart':''}" onclick="addItem(${p.id})">
+      <div class="prod-qty">${qty}</div>
+      <div class="prod-icon">${p.icon}</div>
+      <div class="prod-name">${p.name}</div>
+      <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')} · ${p.category}</div>
+    </div>`;
+  }).join('');
+}
+
+function addItem(id) { cart[id]=(cart[id]||0)+1; updateUI(); }
+function changeQty(id,d) { cart[id]=(cart[id]||0)+d; if(cart[id]<=0)delete cart[id]; updateUI(); }
+function clearCart() { cart={}; updateUI(); }
+
+function getTotal() {
+  return Object.entries(cart).reduce((s,[id,qty])=>{const p=products.find(x=>x.id==id);return s+(p?p.price*qty:0);},0);
+}
+function getCount() { return Object.values(cart).reduce((a,b)=>a+b,0); }
+
+function updateUI() {
+  const total=getTotal(), count=getCount();
+  document.getElementById('total-amt').textContent='€ '+total.toFixed(2).replace('.',',');
+  document.getElementById('total-cnt').textContent=count+' artikel'+(count!==1?'en':'');
+  renderProds(); renderCart(); updatePayBtn();
+}
+
+function renderCart() {
+  const entries=Object.entries(cart);
+  const sec=document.getElementById('cart-sec');
+  if(!entries.length){sec.style.display='none';return;}
+  sec.style.display='block';
+  document.getElementById('cart-rows').innerHTML=entries.map(([id,qty])=>{
+    const p=products.find(x=>x.id==id); if(!p)return'';
+    return `<div class="cart-row">
+      <span class="cart-name">${p.icon} ${p.name}</span>
+      <div class="qctrl">
+        <button class="qbtn" onclick="changeQty(${id},-1)">−</button>
+        <span style="font-size:14px;min-width:18px;text-align:center">${qty}</span>
+        <button class="qbtn" onclick="changeQty(${id},1)">+</button>
+      </div>
+      <span class="cart-price">€ ${(p.price*qty).toFixed(2).replace('.',',')}</span>
+    </div>`;
+  }).join('');
+}
+
+function updatePayBtn() {
+  const ok=getCount()>0&&selTable!==null;
+  const btn=document.getElementById('pay-btn');
+  btn.disabled=!ok;
+  btn.textContent=ok?`💳 Betalen — Tafel ${selTable}`:'💳 Betalen';
+}
+
+function toggleInv() {
+  wantsInv=!wantsInv;
+  document.getElementById('inv-toggle').classList.toggle('on',wantsInv);
+  document.getElementById('inv-fields').classList.toggle('show',wantsInv);
+}
+
+function openPay() {
+  document.getElementById('pay-amt').textContent='€ '+getTotal().toFixed(2).replace('.',',');
+  document.getElementById('pay-overlay').classList.add('show');
+}
+function closePay() { document.getElementById('pay-overlay').classList.remove('show'); }
+
+function selMethod(m) {
+  payMethod=m;
+  document.getElementById('m-card').classList.toggle('sel',m==='card');
+  document.getElementById('m-cash').classList.toggle('sel',m==='cash');
+  document.getElementById('confirm-btn').textContent=m==='card'?'Betalen via SumUp':'Cash ontvangen';
+}
+
+async function processPayment() {
+  const btn=document.getElementById('confirm-btn');
+  btn.textContent='Verwerken…'; btn.disabled=true;
+  const total=getTotal();
+  const items=Object.entries(cart).map(([id,qty])=>{
+    const p=products.find(x=>x.id==id);
+    return p?{product_id:p.id,name:p.name,icon:p.icon,price:p.price,qty}:null;
+  }).filter(Boolean);
+  const invoice=wantsInv?{
+    company:document.getElementById('inv-company').value,
+    vat:document.getElementById('inv-vat').value,
+    email:document.getElementById('inv-email').value,
+    street:document.getElementById('inv-street').value,
+    zip:document.getElementById('inv-zip').value,
+    city:document.getElementById('inv-city').value,
+  }:null;
+
+  // SumUp
+  let sumupId=null;
+  if(payMethod==='card' && settings.sumupKey){
+    try{
+      const r=await fetch('https://api.sumup.com/v0.1/checkouts',{
+        method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.sumupKey},
+        body:JSON.stringify({checkout_reference:'ZBAR-'+Date.now(),amount:total,currency:'EUR',description:items.map(i=>`${i.qty}x ${i.name}`).join(', ')}),
+      });
+      const d=await r.json();
+      if(d.id)sumupId=d.id;
+    }catch(_){}
+  }
+
+  try {
+    await API.orders.create({table_num:selTable,items,amount:total,method:payMethod,note:document.getElementById('order-note').value||'',invoice,sumup_id:sumupId});
+    closePay();
+    cart={}; selTable=null; wantsInv=false;
+    document.getElementById('inv-toggle').classList.remove('on');
+    document.getElementById('inv-fields').classList.remove('show');
+    document.getElementById('order-note').value='';
+    updateUI(); renderTables();
+    toast('✅ Bestelling doorgestuurd naar bar!');
+  } catch(e) { toast('Fout: '+e.message); }
+  btn.textContent='Betaling starten'; btn.disabled=false;
+}
+
+async function loadStats() {
+  const s=await API.stats();
+  document.getElementById('stat-grid').innerHTML=`
+    <div class="stat-card"><div class="stat-n">${s.total_orders}</div><div class="stat-l">Bestellingen</div></div>
+    <div class="stat-card rev"><div class="stat-n">€ ${(s.revenue||0).toFixed(2).replace('.',',')}</div><div class="stat-l">Omzet vandaag</div></div>
+    <div class="stat-card"><div class="stat-n">${s.open_orders||0}</div><div class="stat-l">🔴 Open</div></div>
+    <div class="stat-card"><div class="stat-n">${s.done_orders||0}</div><div class="stat-l">✅ Klaar</div></div>`;
+  document.getElementById('top-products').innerHTML=(s.top_products||[]).map(p=>
+    `<div class="top-row"><span class="top-icon">${p.icon}</span><span class="top-name">${p.name}</span><span class="top-sold">${p.sold}×</span><span class="top-rev">€ ${(p.revenue||0).toFixed(2).replace('.',',')}</span></div>`
+  ).join('') || '<div style="padding:14px;font-size:13px;color:var(--mu)">Nog geen verkopen vandaag</div>';
+}
+
+async function loadTx() {
+  const txs=await API.transactions();
+  document.getElementById('tx-list').innerHTML=txs.length?txs.map(t=>{
+    const d=new Date(t.created_at);
+    return `<div class="tx-item">
+      <div><div class="tx-id">${t.order_id} · Tafel ${t.table_num}</div><div class="tx-meta">${d.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}</div></div>
+      <div><div class="tx-amt">€ ${(t.amount||0).toFixed(2).replace('.',',')}</div><span class="tx-badge ${t.method==='card'?'badge-card':'badge-cash'}">${t.method==='card'?'Kaart':'Cash'}</span></div>
+    </div>`;
+  }).join(''):'<div style="font-size:13px;color:var(--mu);padding:20px">Nog geen transacties</div>';
+}
+
+async function loadSettings() {
+  const s=await API.settings.get();
+  settings=s;
+  if(s.sumupKey)document.getElementById('s-sumup').value=s.sumupKey;
+  if(s.merchant)document.getElementById('s-merchant').value=s.merchant;
+  if(s.billitId)document.getElementById('s-billit-id').value=s.billitId;
+  if(s.billitSecret)document.getElementById('s-billit-secret').value=s.billitSecret;
+  if(s.billitEnv)document.getElementById('s-billit-env').value=s.billitEnv;
+  if(s.barName)document.getElementById('s-bar-name').value=s.barName;
+  if(s.barVat)document.getElementById('s-bar-vat').value=s.barVat;
+  if(s.vatDrinks)document.getElementById('s-vat-drinks').value=s.vatDrinks;
+  if(s.vatFood)document.getElementById('s-vat-food').value=s.vatFood;
+  renderProdManage();
+}
+
+async function saveSettings() {
+  const s={
+    sumupKey:document.getElementById('s-sumup').value,
+    merchant:document.getElementById('s-merchant').value,
+    billitId:document.getElementById('s-billit-id').value,
+    billitSecret:document.getElementById('s-billit-secret').value,
+    billitEnv:document.getElementById('s-billit-env').value,
+    barName:document.getElementById('s-bar-name').value,
+    barVat:document.getElementById('s-bar-vat').value,
+    vatDrinks:document.getElementById('s-vat-drinks').value,
+    vatFood:document.getElementById('s-vat-food').value,
+  };
+  await API.settings.save(s); settings=s; toast('✅ Instellingen opgeslagen');
+}
+
+function renderProdManage() {
+  document.getElementById('prod-manage').innerHTML=products.map(p=>
+    `<div class="prod-row">
+      <span class="prod-row-icon">${p.icon}</span>
+      <div class="prod-row-info"><div class="prod-row-name">${p.name}</div><div class="prod-row-sub">${p.category} · ${p.vat_type==='food'?'Eten':'Drank'}</div></div>
+      <span class="prod-row-price">€ ${p.price.toFixed(2).replace('.',',')}</span>
+      <button class="icon-btn" onclick="deleteProduct(${p.id})" title="Verwijderen">🗑</button>
+    </div>`
+  ).join('');
+}
+
+async function deleteProduct(id) {
+  if(!confirm('Product verwijderen?'))return;
+  await API.products.remove(id);
+  products=products.filter(p=>p.id!==id);
+  renderCats(); renderProds(); renderProdManage(); toast('Product verwijderd');
+}
+
+async function saveNewProduct() {
+  const name=document.getElementById('np-name').value.trim();
+  const category=document.getElementById('np-cat').value.trim();
+  const price=parseFloat(document.getElementById('np-price').value);
+  const icon=document.getElementById('np-icon').value.trim()||'🍺';
+  const vat_type=document.getElementById('np-vat').value;
+  if(!name||!category||isNaN(price)){toast('Vul naam, categorie en prijs in');return;}
+  const p=await API.products.add({name,category,price,icon,vat_type});
+  products.push(p);
+  document.getElementById('add-prod-form').classList.remove('show');
+  ['np-name','np-cat','np-price','np-icon'].forEach(id=>document.getElementById(id).value='');
+  renderCats(); renderProds(); renderProdManage(); toast('✅ Product toegevoegd');
+}
+
+function toast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+init();
+</script>
+</body>
+</html>
