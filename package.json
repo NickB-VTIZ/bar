@@ -1,7 +1,7 @@
 {
   "name": "zomerbar-pos",
-  "version": "1.0.0",
-  "description": "Zomerbar POS — lokale self-hosted oplossing",
+  "version": "2.0.0",
+  "description": "Zomerbar POS — self-hosted met SumUp integratie",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,6 +10,7 @@
   "dependencies": {
     "better-sqlite3": "^9.4.3",
     "express": "^4.19.2",
-    "ws": "^8.17.0"
+    "ws": "^8.17.0",
+    "node-fetch": "^2.7.0"
   }
 }

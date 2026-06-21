@@ -11,6 +11,7 @@ services:
       - PORT=3000
       - DB_PATH=/data/zomerbar.db
       - NODE_ENV=production
+      - ADMIN_PASSWORD=zomerbar2025
 
 volumes:
   zomerbar_data:

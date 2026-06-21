@@ -3,218 +3,465 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Zomerbar · Bar-dashboard</title>
+<title>Zomerbar · Bar</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --sun:#EF9F27;--sun-dark:#BA7517;--sun-light:#FAEEDA;--sun-text:#412402;
-  --teal:#1D9E75;--teal-light:#E1F5EE;--teal-dark:#0F6E56;
-  --coral:#D85A30;--coral-light:#FAECE7;--coral-dark:#993C1D;
-  --bg:#F7F6F2;--card:#fff;--border:#E5E3DC;
+  --sun:#EF9F27;--sun-d:#BA7517;--sun-l:#FAEEDA;--sun-t:#412402;
+  --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
+  --coral:#D85A30;--coral-l:#FAECE7;--coral-d:#993C1D;
+  --bg:#F7F6F2;--card:#fff;--bd:#E5E3DC;
   --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
   --r:12px;--rm:8px;
 }
 body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
-header{background:var(--sun);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
-.logo{display:flex;align-items:center;gap:10px;}
-.logo-icon{font-size:24px;}
-.logo-text{font-size:17px;font-weight:600;color:var(--sun-text);}
-.logo-sub{font-size:12px;color:#633806;margin-top:1px;}
-.hdr-right{display:flex;align-items:center;gap:12px;}
-.clock{font-size:13px;font-weight:500;color:var(--sun-text);background:rgba(65,36,2,.12);padding:6px 12px;border-radius:20px;}
-.pill{font-size:12px;padding:5px 12px;border-radius:20px;font-weight:500;display:flex;align-items:center;gap:6px;}
-.pill.ok{background:rgba(29,158,117,.15);color:var(--teal-dark);}
-.pill.err{background:rgba(65,36,2,.12);color:var(--sun-text);}
-.dot{width:7px;height:7px;border-radius:50%;}
+header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+.logo{font-size:16px;font-weight:600;color:var(--sun-t);}
+.logo-sub{font-size:11px;color:#633806;}
+.hdr-r{display:flex;align-items:center;gap:10px;}
+.clock{font-size:13px;font-weight:500;color:var(--sun-t);background:rgba(65,36,2,.12);padding:5px 12px;border-radius:20px;}
+.pill{font-size:11px;padding:4px 10px;border-radius:12px;font-weight:500;display:flex;align-items:center;gap:5px;}
+.pill.ok{background:rgba(29,158,117,.18);color:var(--teal-d);}
+.pill.err{background:rgba(65,36,2,.12);color:var(--sun-t);}
+.dot{width:6px;height:6px;border-radius:50%;}
 
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px 24px 0;}
-.stat{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);padding:14px 16px;}
-.stat-n{font-size:28px;font-weight:600;}
-.stat-l{font-size:12px;color:var(--mu);margin-top:2px;}
+.nav{display:flex;background:var(--card);border-bottom:0.5px solid var(--bd);}
+.nav-btn{flex:1;padding:10px 4px;font-size:12px;font-weight:500;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px;}
+.nav-btn span{font-size:18px;}
+.nav-btn.on{color:var(--sun-d);border-bottom-color:var(--sun);}
+
+.screen{display:none;}.screen.on{display:block;}
+
+/* Stats */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px 16px 0;}
+.stat{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:12px 14px;}
+.stat-n{font-size:22px;font-weight:600;}
+.stat-l{font-size:11px;color:var(--mu);margin-top:1px;}
 .stat.s-open .stat-n{color:var(--coral);}
-.stat.s-rev .stat-n{color:var(--teal-dark);}
+.stat.s-rev .stat-n{color:var(--teal-d);}
 
-.sound-toggle{position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:var(--card);border:0.5px solid var(--border);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+/* Stock alert */
+.stock-alert{margin:12px 16px 0;background:var(--coral-l);border:0.5px solid var(--coral);border-radius:var(--rm);padding:10px 14px;display:none;}
+.stock-alert.show{display:block;}
+.stock-alert-title{font-size:12px;font-weight:600;color:var(--coral-d);margin-bottom:6px;}
+.stock-alert-item{font-size:13px;color:var(--coral-d);padding:2px 0;}
 
-.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:16px 24px 32px;}
-.card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;transition:all .2s;}
-.card.is-new{border-color:var(--sun);box-shadow:0 0 0 3px var(--sun-light);}
-.card.is-making{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-light);}
-.card.is-done{opacity:.5;}
-.card-head{padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-.card-table{font-size:16px;font-weight:600;}
-.card-meta{font-size:12px;color:var(--mu);margin-top:2px;}
-.badge{font-size:11px;padding:4px 10px;border-radius:12px;font-weight:600;}
-.badge-new{background:var(--sun-light);color:var(--sun-text);}
-.badge-making{background:var(--teal-light);color:var(--teal-dark);}
-.badge-done{background:#F1EFE8;color:#6B6A65;}
-.card-items{padding:12px 16px;}
-.item-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px;border-bottom:0.5px solid var(--border);}
+/* Orders board */
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;padding:14px 16px 32px;}
+.card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);overflow:hidden;transition:all .15s;}
+.card.is-paid{border-color:var(--sun);box-shadow:0 0 0 3px var(--sun-l);}
+.card.is-preparing{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-l);}
+.card.is-ready{border-color:var(--teal);background:var(--teal-l);}
+.card.is-pending{opacity:.6;}
+.card-head{padding:10px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
+.order-num{font-size:24px;font-weight:600;color:var(--sun-d);}
+.order-meta{font-size:12px;color:var(--mu);margin-top:1px;}
+.badge{font-size:11px;padding:3px 9px;border-radius:12px;font-weight:600;}
+.badge-pending{background:#F1EFE8;color:var(--mu);}
+.badge-paid{background:var(--sun-l);color:var(--sun-t);}
+.badge-preparing{background:var(--teal-l);color:var(--teal-d);}
+.badge-ready{background:var(--teal);color:#fff;}
+.card-items{padding:10px 14px;}
+.item-row{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:14px;border-bottom:0.5px solid var(--bd);}
 .item-row:last-child{border-bottom:none;}
-.item-qty{font-weight:600;color:var(--sun-dark);min-width:22px;}
-.item-icon{font-size:18px;}
-.card-note{font-size:12px;color:var(--mu);font-style:italic;padding:0 16px 8px;}
-.card-actions{display:flex;border-top:0.5px solid var(--border);}
-.action-btn{flex:1;padding:13px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px;}
-.action-btn:active{transform:scale(.97);}
-.btn-start{background:var(--teal-light);color:var(--teal-dark);}
-.btn-start:hover{background:#9FE1CB;}
-.btn-ready{background:var(--sun-light);color:var(--sun-text);}
+.item-qty{font-weight:600;color:var(--sun-d);min-width:20px;}
+.item-icon{font-size:17px;}
+.card-note{font-size:12px;color:var(--mu);font-style:italic;padding:0 14px 8px;}
+.card-method{font-size:11px;color:var(--mu);padding:0 14px 8px;display:flex;align-items:center;gap:4px;}
+.card-actions{display:flex;border-top:0.5px solid var(--bd);}
+.act-btn{flex:1;padding:11px;font-size:12px;font-weight:600;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .12s;}
+.act-btn:active{transform:scale(.97);}
+.btn-prep{background:var(--teal-l);color:var(--teal-d);}
+.btn-prep:hover{background:#9FE1CB;}
+.btn-ready{background:var(--sun-l);color:var(--sun-t);}
 .btn-ready:hover{background:var(--sun);}
-.btn-del{background:var(--coral-light);color:var(--coral-dark);flex:0;padding:13px 16px;}
+.btn-collect{background:var(--teal);color:#fff;}
+.btn-del{background:var(--coral-l);color:var(--coral-d);flex:0;padding:11px 14px;}
 .btn-del:hover{background:#F5C4B3;}
-.empty{text-align:center;padding:80px 24px;color:var(--mu);}
-.empty-icon{font-size:56px;opacity:.2;margin-bottom:16px;}
-.empty-title{font-size:18px;font-weight:500;margin-bottom:6px;}
-.empty-sub{font-size:14px;color:var(--mu2);}
 
-@keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(15deg)}30%{transform:rotate(-12deg)}45%{transform:rotate(10deg)}60%{transform:rotate(-8deg)}75%{transform:rotate(5deg)}}
-.ring{animation:ring .7s ease;}
-.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:12px 22px;border-radius:24px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;white-space:nowrap;}
+.empty{text-align:center;padding:60px 20px;color:var(--mu);}
+.empty-icon{font-size:48px;opacity:.2;margin-bottom:12px;}
+
+/* Stock screen */
+.stock-wrap{padding:14px 16px;}
+.stock-section-title{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.stock-table{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);overflow:hidden;}
+.stock-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--bd);}
+.stock-row:last-child{border-bottom:none;}
+.stock-icon{font-size:20px;width:28px;text-align:center;}
+.stock-info{flex:1;}
+.stock-name{font-size:14px;font-weight:500;}
+.stock-cat{font-size:11px;color:var(--mu);}
+.stock-n{font-size:16px;font-weight:600;min-width:40px;text-align:right;}
+.stock-n.low{color:var(--coral-d);}
+.stock-n.ok{color:var(--teal-d);}
+.stock-n.unlimited{color:var(--mu2);}
+.stock-ctrl{display:flex;align-items:center;gap:6px;margin-left:8px;}
+.sbtn{width:26px;height:26px;border-radius:50%;border:0.5px solid var(--bd);background:var(--bg);cursor:pointer;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+.stock-edit-input{width:60px;font-size:13px;padding:5px 8px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);color:var(--sun-t);text-align:center;}
+
+/* Settings screen */
+.settings-wrap{padding:14px 16px;}
+.settings-sec{margin-bottom:18px;}
+.settings-sec-title{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.settings-card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);overflow:hidden;}
+.settings-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--bd);}
+.settings-row:last-child{border-bottom:none;}
+.settings-label{flex:1;font-size:14px;}
+.settings-input{font-size:13px;padding:6px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);text-align:right;width:180px;}
+.save-btn{width:100%;padding:12px;font-size:14px;font-weight:600;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;margin-top:10px;}
+.sync-btn{width:100%;padding:11px;font-size:13px;font-weight:600;background:var(--sun-l);color:var(--sun-t);border:0.5px solid var(--sun);border-radius:var(--rm);cursor:pointer;margin-top:8px;}
+
+.sound-btn{position:fixed;bottom:16px;right:16px;width:44px;height:44px;border-radius:50%;background:var(--card);border:0.5px solid var(--bd);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:30;}
+
+.toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:11px 20px;border-radius:24px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;white-space:nowrap;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:1fr;padding:12px 14px 80px;}}
+
+@keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(12deg)}30%{transform:rotate(-10deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}75%{transform:rotate(4deg)}}
+.ring{animation:ring .6s ease;}
+@media(max-width:600px){.stat-row{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:1fr;padding-bottom:80px;}}
 </style>
 </head>
 <body>
 <header>
-  <div class="logo">
-    <span class="logo-icon">☀️</span>
-    <div><div class="logo-text">Bar-dashboard</div><div class="logo-sub">Zomerbar bestellingenbeheer</div></div>
-  </div>
-  <div class="hdr-right">
-    <div class="clock" id="clock">--:--:--</div>
-    <div class="pill err" id="conn"><div class="dot" id="conn-dot" style="background:#BA7517"></div><span id="conn-lbl">Verbinden…</span></div>
+  <div><div class="logo">☀️ Bar-dashboard</div><div class="logo-sub" id="hdr-clock">--:--:--</div></div>
+  <div class="hdr-r">
+    <div class="pill err" id="conn"><div class="dot" id="conn-dot" style="background:var(--sun-d)"></div><span id="conn-lbl">…</span></div>
   </div>
 </header>
 
-<div class="stats">
-  <div class="stat s-open"><div class="stat-n" id="s-new">0</div><div class="stat-l">🔴 Open</div></div>
-  <div class="stat"><div class="stat-n" id="s-making">0</div><div class="stat-l">🟡 Bezig</div></div>
-  <div class="stat"><div class="stat-n" id="s-done">0</div><div class="stat-l">✅ Klaar</div></div>
-  <div class="stat s-rev"><div class="stat-n" id="s-rev">€0</div><div class="stat-l">💶 Vandaag</div></div>
+<div class="nav">
+  <button class="nav-btn on" onclick="showScreen('orders',this)"><span>📋</span>Bestellingen</button>
+  <button class="nav-btn" onclick="showScreen('stock',this);renderStock()"><span>📦</span>Stock</button>
+  <button class="nav-btn" onclick="showScreen('settings',this);loadSettings()"><span>⚙️</span>Instellingen</button>
 </div>
 
-<div class="board" id="board">
-  <div class="empty"><div class="empty-icon">🍺</div><div class="empty-title">Klaar voor bestellingen</div><div class="empty-sub">Bestellingen verschijnen hier automatisch</div></div>
+<!-- Orders -->
+<div id="screen-orders" class="screen on">
+  <div class="stat-row">
+    <div class="stat s-open"><div class="stat-n" id="s-open">0</div><div class="stat-l">🔴 Nieuw</div></div>
+    <div class="stat"><div class="stat-n" id="s-prep">0</div><div class="stat-l">🟡 Bezig</div></div>
+    <div class="stat"><div class="stat-n" id="s-ready">0</div><div class="stat-l">✅ Klaar</div></div>
+    <div class="stat s-rev"><div class="stat-n" id="s-rev">€0</div><div class="stat-l">💶 Vandaag</div></div>
+  </div>
+  <div class="stock-alert" id="stock-alert">
+    <div class="stock-alert-title">⚠️ Lage stock</div>
+    <div id="stock-alert-items"></div>
+  </div>
+  <div class="board" id="board"></div>
 </div>
 
-<button class="sound-toggle" id="sound-btn" onclick="toggleSound()" title="Geluid aan/uit">🔔</button>
+<!-- Stock -->
+<div id="screen-stock" class="screen">
+  <div class="stock-wrap">
+    <div class="stock-section-title">Voorraad per product</div>
+    <div class="stock-table" id="stock-table"></div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="screen-settings" class="screen">
+  <div class="settings-wrap">
+    <div class="settings-sec">
+      <div class="settings-sec-title">SumUp</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">API-sleutel</div><input class="settings-input" id="s-sumup" type="password" placeholder="sup_sk_…"></div>
+        <div class="settings-row"><div class="settings-label">Merchant ID</div><input class="settings-input" id="s-merchant" placeholder="MXXXXXXX"></div>
+      </div>
+      <button class="sync-btn" onclick="syncSumup()">🔄 Producten sync met SumUp catalog</button>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">Billit Facturatie</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">API-sleutel</div><input class="settings-input" id="s-billit-key" type="password" placeholder="Billit apiKey"></div>
+        <div class="settings-row"><div class="settings-label">Omgeving</div>
+          <select class="settings-input" id="s-billit-env"><option value="sandbox">Sandbox</option><option value="production">Productie</option></select></div>
+        <div class="settings-row"><div class="settings-label">Naam bar</div><input class="settings-input" id="s-bar-name" placeholder="Zomerbar"></div>
+        <div class="settings-row"><div class="settings-label">BTW-nr bar</div><input class="settings-input" id="s-bar-vat" placeholder="BE0000000000"></div>
+      </div>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">BTW-tarieven</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">Dranken</div>
+          <select class="settings-input" id="s-vat-drinks"><option value="21">21%</option><option value="12">12%</option><option value="6" selected>6%</option></select></div>
+        <div class="settings-row"><div class="settings-label">Maaltijden</div>
+          <select class="settings-input" id="s-vat-food"><option value="21">21%</option><option value="12" selected>12%</option><option value="6">6%</option></select></div>
+      </div>
+      <button class="save-btn" onclick="saveSettings()">Opslaan</button>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">Boekhouding</div>
+      <a href="/kasdagboek.html" style="display:block;text-decoration:none;">
+        <div class="settings-card" style="cursor:pointer;">
+          <div class="settings-row">
+            <span style="font-size:20px;">📒</span>
+            <div class="settings-label">Kasdagboek & maandfactuur</div>
+            <span style="font-size:16px;color:var(--mu)">→</span>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">Klantbestelling QR</div>
+      <div class="settings-card">
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+          <div class="settings-label">Bestel-URL voor klanten</div>
+          <div style="font-size:13px;color:var(--teal-d);word-break:break-all;" id="bestel-url"></div>
+          <button onclick="copyBestelUrl()" style="font-size:12px;padding:6px 14px;border:0.5px solid var(--teal);background:var(--teal-l);color:var(--teal-d);border-radius:20px;cursor:pointer;font-weight:500;">Kopiëren</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">Beveiliging</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">Admin-wachtwoord wijzigen</div>
+          <input class="settings-input" id="s-new-password" type="password" placeholder="Nieuw wachtwoord"></div>
+      </div>
+      <button class="save-btn" style="background:var(--sun);color:var(--sun-t);" onclick="changePassword()">Wachtwoord wijzigen</button>
+      <button class="save-btn" style="background:var(--coral-l);color:var(--coral-d);border:0.5px solid var(--coral);margin-top:8px;" onclick="logout()">🚪 Uitloggen</button>
+    </div>
+  </div>
+</div>
+
+<button class="sound-btn" id="sound-btn" onclick="toggleSound()">🔔</button>
 <div class="toast" id="toast"></div>
 
 <script src="/api.js"></script>
 <script>
-const API = window.ZomerbarAPI;
-let orders = {}, soundEnabled = true;
+// ── Auth guard ──
+(async () => {
+  if (!API.getToken()) { window.location.href = '/login.html?next=/bar.html'; return; }
+  try { const c = await API.auth.check(); if (!c.valid) { window.location.href = '/login.html?next=/bar.html'; return; } }
+  catch(_) { window.location.href = '/login.html?next=/bar.html'; return; }
+})();
+</script>
+<script>
+let orders = {}, products = [], soundOn = true;
 
-// Clock
-setInterval(()=>{
-  document.getElementById('clock').textContent=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-},1000);
-
-// Sound
-function playBing() {
-  if(!soundEnabled)return;
-  try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    const o=ctx.createOscillator(); const g=ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.frequency.setValueAtTime(880,ctx.currentTime);
-    o.frequency.setValueAtTime(1108,ctx.currentTime+.1);
-    g.gain.setValueAtTime(.3,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.5);
-    o.start(); o.stop(ctx.currentTime+.5);
-  }catch(_){}
-}
-function toggleSound(){
-  soundEnabled=!soundEnabled;
-  document.getElementById('sound-btn').textContent=soundEnabled?'🔔':'🔕';
-  toast(soundEnabled?'Geluid aan':'Geluid uit');
-}
+setInterval(() => {
+  document.getElementById('hdr-clock').textContent =
+    new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
 
 // WS
-API.on('ws_open',()=>setConn(true));
-API.on('ws_close',()=>setConn(false));
-
-API.on('init', d=>{
-  orders={};
-  (d.orders||[]).forEach(o=>orders[o.id]=o);
-  render();
+API.on('ws_open', () => setConn(true));
+API.on('ws_close', () => setConn(false));
+API.on('init', d => { orders={}; (d.orders||[]).forEach(o=>orders[o.id]=o); renderBoard(); loadStats(); });
+API.on('order_created', d => {
+  orders[d.order.id]=d.order; renderBoard(); loadStats();
+  if(soundOn) playBing();
+  const sb=document.getElementById('sound-btn');
+  sb.classList.add('ring'); setTimeout(()=>sb.classList.remove('ring'),600);
+  toast(`🆕 Bestelling #${d.order.order_number}`);
 });
-API.on('order_created', d=>{
-  orders[d.order.id]=d.order;
-  render(); playBing();
-  const el=document.getElementById('sound-btn');
-  el.classList.add('ring'); setTimeout(()=>el.classList.remove('ring'),700);
-  toast(`🆕 Nieuwe bestelling — Tafel ${d.order.table_num}`);
-});
-API.on('order_updated', d=>{ orders[d.order.id]=d.order; render(); });
-API.on('order_deleted', d=>{ delete orders[d.id]; render(); });
+API.on('order_updated', d => { orders[d.order.id]=d.order; renderBoard(); loadStats(); });
+API.on('order_deleted', d => { delete orders[d.id]; renderBoard(); });
+API.on('product_updated', d => { const i=products.findIndex(p=>p.id===d.product.id); if(i>=0)products[i]=d.product; });
+API.on('low_stock', d => showStockAlert(d.products));
+API.on('products_reloaded', d => { products=d.products; toast('✅ SumUp sync klaar'); });
 
 function setConn(ok){
   document.getElementById('conn').className='pill '+(ok?'ok':'err');
-  document.getElementById('conn-dot').style.background=ok?'var(--teal)':'var(--sun-dark)';
-  document.getElementById('conn-lbl').textContent=ok?'Verbonden':'Offline';
+  document.getElementById('conn-dot').style.background=ok?'var(--teal)':'var(--sun-d)';
+  document.getElementById('conn-lbl').textContent=ok?'Live':'Offline';
+}
+
+function playBing(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    o.frequency.setValueAtTime(880,ctx.currentTime);
+    o.frequency.setValueAtTime(1108,ctx.currentTime+.1);
+    g.gain.setValueAtTime(.25,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.5);
+    o.start();o.stop(ctx.currentTime+.5);
+  }catch(_){}
+}
+function toggleSound(){soundOn=!soundOn;document.getElementById('sound-btn').textContent=soundOn?'🔔':'🔕';}
+
+function showScreen(name,btn){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('screen-'+name).classList.add('on');
+  if(btn)btn.classList.add('on');
 }
 
 function timeAgo(ts){
   const d=Math.floor((Date.now()-new Date(ts).getTime())/1000);
-  if(d<60)return d+'s';
-  if(d<3600)return Math.floor(d/60)+' min';
-  return Math.floor(d/3600)+' u';
+  if(d<60)return d+'s';if(d<3600)return Math.floor(d/60)+' min';return Math.floor(d/3600)+' u';
 }
 
-function render(){
-  const list=Object.values(orders).sort((a,b)=>{
-    const p={new:0,making:1,done:2};
-    if(p[a.status]!==p[b.status])return p[a.status]-p[b.status];
-    return new Date(a.created_at)-new Date(b.created_at);
-  });
-  // Stats
-  document.getElementById('s-new').textContent=list.filter(o=>o.status==='new').length;
-  document.getElementById('s-making').textContent=list.filter(o=>o.status==='making').length;
-  document.getElementById('s-done').textContent=list.filter(o=>o.status==='done').length;
-  const rev=list.reduce((s,o)=>s+(o.amount||0),0);
-  document.getElementById('s-rev').textContent='€'+rev.toFixed(2).replace('.',',');
+function renderBoard(){
+  const priority={paid:0,preparing:1,ready:2,pending:3};
+  const list=Object.values(orders).sort((a,b)=>(priority[a.status]??9)-(priority[b.status]??9)||new Date(a.created_at)-new Date(b.created_at));
+  document.getElementById('s-open').textContent=list.filter(o=>o.status==='paid').length;
+  document.getElementById('s-prep').textContent=list.filter(o=>o.status==='preparing').length;
+  document.getElementById('s-ready').textContent=list.filter(o=>o.status==='ready').length;
   if(!list.length){
-    document.getElementById('board').innerHTML='<div class="empty"><div class="empty-icon">🍺</div><div class="empty-title">Klaar voor bestellingen</div><div class="empty-sub">Bestellingen verschijnen hier automatisch</div></div>';
+    document.getElementById('board').innerHTML='<div class="empty"><div class="empty-icon">🍺</div><div style="font-size:16px;font-weight:500">Klaar voor bestellingen</div><div style="font-size:13px;margin-top:6px">Bestellingen verschijnen hier automatisch</div></div>';
     return;
   }
-  document.getElementById('board').innerHTML=list.map(o=>cardHTML(o)).join('');
+  document.getElementById('board').innerHTML=list.map(cardHTML).join('');
 }
 
 function cardHTML(o){
-  const cls=o.status==='new'?'is-new':o.status==='making'?'is-making':'is-done';
-  const badgeCls=o.status==='new'?'badge-new':o.status==='making'?'badge-making':'badge-done';
-  const badgeTxt=o.status==='new'?'Nieuw':o.status==='making'?'Bezig':'Klaar';
+  const cls=o.status==='paid'?'is-paid':o.status==='preparing'?'is-preparing':o.status==='ready'?'is-ready':o.status==='pending'?'is-pending':'';
+  const badgeMap={pending:'badge-pending Wachten op betaling',paid:'badge-paid Betaald',preparing:'badge-preparing Bezig',ready:'badge-ready Klaar!'};
+  const [badgeCls,badgeTxt]=(badgeMap[o.status]||'badge-pending Onbekend').split(' ');
   const items=(o.items||[]).map(i=>`<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}</span></div>`).join('');
-  const actions=o.status==='done'
-    ?`<div class="card-actions"><button class="action-btn btn-del" style="flex:1" onclick="del('${o.id}')">🗑 Verwijderen</button></div>`
-    :o.status==='new'
-    ?`<div class="card-actions"><button class="action-btn btn-start" onclick="setStatus('${o.id}','making')">👨‍🍳 Aan de slag</button><button class="action-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
-    :`<div class="card-actions"><button class="action-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','done')">✅ Klaar — klant verwittigen</button><button class="action-btn btn-del" onclick="del('${o.id}')">✕</button></div>`;
+  const actions=o.status==='paid'
+    ?`<div class="card-actions"><button class="act-btn btn-prep" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button><button class="act-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
+    :o.status==='preparing'
+    ?`<div class="card-actions"><button class="act-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button><button class="act-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
+    :o.status==='ready'
+    ?`<div class="card-actions"><button class="act-btn btn-collect" style="flex:2" onclick="setStatus('${o.id}','collected')">👋 Opgehaald</button><button class="act-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
+    :o.status==='pending'
+    ?`<div class="card-actions"><button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button></div>`
+    :`<div class="card-actions"><button class="act-btn btn-del" style="flex:1" onclick="del('${o.id}')">🗑 Verwijderen</button></div>`;
   return `<div class="card ${cls}">
     <div class="card-head">
-      <div><div class="card-table">Tafel ${o.table_num} <span style="font-weight:400;font-size:13px;color:var(--mu)">· ${o.id}</span></div><div class="card-meta">${timeAgo(o.created_at)} geleden · ${(o.items||[]).reduce((s,i)=>s+i.qty,0)} items</div></div>
+      <div><div class="order-num">#${o.order_number}</div><div class="order-meta">${timeAgo(o.created_at)} geleden · € ${(o.amount||0).toFixed(2).replace('.',',')}</div></div>
       <span class="badge ${badgeCls}">${badgeTxt}</span>
     </div>
     <div class="card-items">${items}</div>
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
+    <div class="card-method">${o.method==='sumup'?'💳 Kaart':'💶 Cash'}</div>
     ${actions}
   </div>`;
 }
 
-async function setStatus(id, status) {
-  await API.orders.setStatus(id, status);
-  if(status==='done') toast(`✅ Tafel ${orders[id]?.table_num} verwittigd!`);
+async function setStatus(id,status){
+  await API.orders.setStatus(id,status);
+  if(status==='ready') toast(`✅ #${orders[id]?.order_number} is klaar!`);
 }
-async function del(id) { await API.orders.remove(id); }
+async function del(id){ await API.orders.remove(id); delete orders[id]; renderBoard(); }
+
+async function loadStats(){
+  try{
+    const s=await API.stats();
+    document.getElementById('s-rev').textContent='€'+Math.round(s.revenue||0);
+    if(s.low_stock?.length) showStockAlert(s.low_stock);
+  }catch(_){}
+}
+
+function showStockAlert(prods){
+  const el=document.getElementById('stock-alert');
+  if(!prods?.length){el.classList.remove('show');return;}
+  el.classList.add('show');
+  document.getElementById('stock-alert-items').innerHTML=prods.map(p=>`<div class="stock-alert-item">${p.icon} ${p.name} — nog ${p.stock} over</div>`).join('');
+}
+
+// Stock screen
+async function renderStock(){
+  if(!products.length) products=await API.products.list();
+  document.getElementById('stock-table').innerHTML=products.map(p=>{
+    const unlimited=p.stock<0;
+    const low=!unlimited&&p.stock<=p.low_stock;
+    const nCls=unlimited?'unlimited':low?'low':'ok';
+    const nTxt=unlimited?'∞':p.stock;
+    return `<div class="stock-row">
+      <span class="stock-icon">${p.icon}</span>
+      <div class="stock-info"><div class="stock-name">${p.name}</div><div class="stock-cat">${p.category}</div></div>
+      <div class="stock-n ${nCls}">${nTxt}</div>
+      <div class="stock-ctrl">
+        <button class="sbtn" onclick="adjStock(${p.id},-1)">−</button>
+        <button class="sbtn" onclick="adjStock(${p.id},1)">+</button>
+        <button class="sbtn" onclick="setStockManual(${p.id},${p.stock})" title="Instellen">✏️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function adjStock(id,delta){
+  const p=products.find(x=>x.id===id);
+  if(!p||p.stock<0) return;
+  const newStock=Math.max(0,p.stock+delta);
+  await API.products.setStock(id,newStock);
+  p.stock=newStock;
+  renderStock();
+}
+
+async function setStockManual(id,cur){
+  const val=prompt('Nieuwe stock voor dit product:', cur<0?'∞':cur);
+  if(val===null)return;
+  const n=val.trim()===''||val==='∞'?-1:parseInt(val);
+  if(isNaN(n))return;
+  await API.products.setStock(id,n);
+  const p=products.find(x=>x.id===id);
+  if(p)p.stock=n;
+  renderStock();
+}
+
+// Settings
+async function loadSettings(){
+  const s=await API.settings.get();
+  if(s.sumupKey)document.getElementById('s-sumup').value=s.sumupKey;
+  if(s.merchant)document.getElementById('s-merchant').value=s.merchant;
+  if(s.billitApiKey)document.getElementById('s-billit-key').value=s.billitApiKey;
+  if(s.billitEnv)document.getElementById('s-billit-env').value=s.billitEnv;
+  if(s.barName)document.getElementById('s-bar-name').value=s.barName;
+  if(s.barVat)document.getElementById('s-bar-vat').value=s.barVat;
+  if(s.vatDrinks)document.getElementById('s-vat-drinks').value=s.vatDrinks;
+  if(s.vatFood)document.getElementById('s-vat-food').value=s.vatFood;
+  document.getElementById('bestel-url').textContent=location.origin+'/bestel.html';
+}
+
+async function saveSettings(){
+  await API.settings.save({
+    sumupKey:document.getElementById('s-sumup').value,
+    merchant:document.getElementById('s-merchant').value,
+    billitApiKey:document.getElementById('s-billit-key').value,
+    billitEnv:document.getElementById('s-billit-env').value,
+    barName:document.getElementById('s-bar-name').value,
+    barVat:document.getElementById('s-bar-vat').value,
+    vatDrinks:document.getElementById('s-vat-drinks').value,
+    vatFood:document.getElementById('s-vat-food').value,
+  });
+  toast('✅ Opgeslagen');
+}
+
+async function syncSumup(){
+  toast('Synchroniseren met SumUp…');
+  try{ await API.products.syncSumup(); toast('✅ Sync klaar'); }
+  catch(e){ toast('SumUp fout: '+e.message); }
+}
+
+async function changePassword(){
+  const pw=document.getElementById('s-new-password').value;
+  if(!pw||pw.length<4){toast('Minstens 4 tekens');return;}
+  try{
+    await API.auth.changePassword(pw);
+    document.getElementById('s-new-password').value='';
+    toast('✅ Wachtwoord gewijzigd');
+  }catch(e){toast('Fout: '+e.message);}
+}
+
+async function logout(){
+  if(!confirm('Uitloggen?'))return;
+  try{ await API.auth.logout(); }catch(_){}
+  API.setToken(null);
+  window.location.href='/login.html';
+}
+
+function copyBestelUrl(){
+  navigator.clipboard.writeText(location.origin+'/bestel.html');
+  toast('✅ URL gekopieerd');
+}
 
 function toast(msg){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
+  t.textContent=msg;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
 }
+
+// Init
+(async()=>{
+  products=await API.products.list();
+  loadStats();
+})();
 </script>
 </body>
 </html>

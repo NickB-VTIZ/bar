@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Zomerbar · Bestel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sun:#EF9F27;--sun-d:#BA7517;--sun-l:#FAEEDA;--sun-t:#412402;
+  --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
+  --coral:#D85A30;--coral-l:#FAECE7;--coral-d:#993C1D;
+  --bg:#F7F6F2;--card:#fff;--bd:#E5E3DC;
+  --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
+  --r:14px;--rm:9px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
+
+/* Hero */
+.hero{background:var(--sun);padding:28px 20px 22px;text-align:center;}
+.hero-icon{font-size:40px;margin-bottom:8px;}
+.hero-title{font-size:20px;font-weight:600;color:var(--sun-t);}
+.hero-sub{font-size:13px;color:#633806;margin-top:4px;}
+
+/* Cart bar */
+.cart-bar{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:0.5px solid var(--bd);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
+.cart-bar-info{font-size:14px;font-weight:600;}
+.cart-bar-sub{font-size:12px;color:var(--mu);}
+.cart-btn{background:var(--sun);color:var(--sun-t);border:none;border-radius:20px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;}
+.cart-btn:disabled{background:var(--bd);color:var(--mu2);cursor:not-allowed;}
+
+/* Categories */
+.cats{display:flex;gap:7px;padding:14px 16px 0;overflow-x:auto;scrollbar-width:none;}
+.cats::-webkit-scrollbar{display:none;}
+.cat{padding:7px 16px;border-radius:20px;border:0.5px solid var(--bd);background:var(--card);font-size:13px;font-weight:500;color:var(--mu);cursor:pointer;white-space:nowrap;transition:all .12s;}
+.cat.on{background:var(--sun-l);border-color:var(--sun);color:var(--sun-t);}
+
+/* Products */
+.prod-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px 16px 120px;}
+.prod{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 12px;cursor:pointer;transition:all .12s;position:relative;user-select:none;}
+.prod:active{transform:scale(.97);}
+.prod.in-cart{border-color:var(--sun);background:#FFFBF3;}
+.prod.out{opacity:.45;cursor:not-allowed;}
+.prod-icon{font-size:28px;margin-bottom:8px;}
+.prod-name{font-size:14px;font-weight:500;line-height:1.3;}
+.prod-price{font-size:13px;color:var(--mu);margin-top:3px;}
+.prod-stock{font-size:11px;margin-top:3px;}
+.stock-low{color:var(--coral-d);}
+.prod-qty-badge{position:absolute;top:8px;right:8px;background:var(--sun);color:var(--sun-t);font-size:12px;font-weight:600;width:24px;height:24px;border-radius:50%;display:none;align-items:center;justify-content:center;}
+.prod.in-cart .prod-qty-badge{display:flex;}
+
+/* Cart sheet */
+.sheet-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;align-items:flex-end;justify-content:center;}
+.sheet-overlay.show{display:flex;}
+.sheet{background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;}
+.sheet-handle{width:36px;height:4px;background:var(--bd);border-radius:2px;margin:0 auto 16px;}
+.sheet-title{font-size:17px;font-weight:600;margin-bottom:14px;}
+.cart-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--bd);}
+.cart-row:last-child{border-bottom:none;}
+.cr-icon{font-size:20px;width:28px;text-align:center;}
+.cr-name{flex:1;font-size:14px;}
+.cr-ctrl{display:flex;align-items:center;gap:7px;}
+.qbtn{width:28px;height:28px;border-radius:50%;border:0.5px solid var(--bd);background:var(--bg);cursor:pointer;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;color:var(--tx);}
+.cr-price{font-size:13px;color:var(--mu);min-width:48px;text-align:right;}
+.cart-total{display:flex;justify-content:space-between;font-size:16px;font-weight:600;padding:14px 0 0;border-top:0.5px solid var(--bd);margin-top:8px;}
+
+.note-input{width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin:12px 0;}
+
+/* Payment methods */
+.pay-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;}
+.pay-method{padding:14px;border:0.5px solid var(--bd);border-radius:var(--r);background:var(--bg);cursor:pointer;text-align:center;transition:all .12s;}
+.pay-method:active{transform:scale(.97);}
+.pay-method.sel{border-color:var(--sun);background:var(--sun-l);}
+.pay-method-icon{font-size:26px;margin-bottom:6px;}
+.pay-method-label{font-size:13px;font-weight:600;}
+.pay-method-sub{font-size:11px;color:var(--mu);margin-top:2px;}
+
+.order-btn{width:100%;padding:15px;font-size:15px;font-weight:600;background:var(--sun);color:var(--sun-t);border:none;border-radius:var(--r);cursor:pointer;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.order-btn:disabled{background:var(--bd);color:var(--mu2);cursor:not-allowed;}
+.cancel-btn{width:100%;padding:11px;background:none;border:none;font-size:14px;color:var(--mu);cursor:pointer;}
+
+/* Status / confirmation screen */
+.status-screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:60;flex-direction:column;align-items:center;padding:40px 24px;}
+.status-screen.show{display:flex;}
+.status-icon-big{font-size:64px;margin-bottom:16px;}
+.status-number{font-size:72px;font-weight:600;color:var(--sun-d);line-height:1;margin:8px 0;}
+.status-number-label{font-size:15px;color:var(--mu);margin-bottom:24px;}
+.status-title{font-size:22px;font-weight:600;margin-bottom:8px;text-align:center;}
+.status-sub{font-size:15px;color:var(--mu);text-align:center;line-height:1.6;margin-bottom:28px;}
+.status-card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 20px;width:100%;max-width:360px;margin-bottom:16px;}
+.status-step{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:14px;border-bottom:0.5px solid var(--bd);}
+.status-step:last-child{border-bottom:none;}
+.step-dot{width:10px;height:10px;border-radius:50%;background:var(--bd);flex-shrink:0;}
+.step-dot.done{background:var(--teal);}
+.step-dot.active{background:var(--sun);}
+.step-dot.waiting{background:var(--bd);}
+.new-order-btn{padding:13px 28px;font-size:14px;font-weight:600;background:var(--sun);color:var(--sun-t);border:none;border-radius:var(--r);cursor:pointer;}
+
+/* SumUp payment pending */
+.pay-pending{background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:16px;display:none;}
+.pay-pending.show{display:block;}
+.pay-pending-title{font-size:15px;font-weight:600;color:var(--sun-t);margin-bottom:4px;}
+.pay-pending-sub{font-size:13px;color:var(--sun-d);}
+.pay-link{display:inline-block;margin-top:10px;padding:10px 20px;background:var(--sun);color:var(--sun-t);border-radius:20px;font-size:13px;font-weight:600;text-decoration:none;}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulsing{animation:pulse 1.5s ease infinite;}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:12px 22px;border-radius:24px;opacity:0;transition:all .25s;z-index:200;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-icon">☀️</div>
+  <div class="hero-title">Zomerbar</div>
+  <div class="hero-sub">Bestel en betaal hier — haal op aan de bar</div>
+</div>
+
+<div class="cart-bar">
+  <div>
+    <div class="cart-bar-info" id="cart-bar-info">Kies je drankjes</div>
+    <div class="cart-bar-sub" id="cart-bar-sub">Tik een product om toe te voegen</div>
+  </div>
+  <button class="cart-btn" id="cart-open-btn" onclick="openCart()" disabled>
+    🛒 Bestellen
+  </button>
+</div>
+
+<div class="cats" id="cats"></div>
+<div class="prod-grid" id="prod-grid"></div>
+
+<!-- Cart sheet -->
+<div class="sheet-overlay" id="cart-overlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Jouw bestelling</div>
+    <div id="cart-rows"></div>
+    <div class="cart-total"><span>Totaal</span><span id="cart-total-amt">€ 0,00</span></div>
+    <input class="note-input" id="order-note" placeholder="Opmerking (bv. geen ijs)">
+    <div style="font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Betaalmethode</div>
+    <div class="pay-methods">
+      <div class="pay-method sel" id="pm-sumup" onclick="selPay('sumup')">
+        <div class="pay-method-icon">💳</div>
+        <div class="pay-method-label">Kaart</div>
+        <div class="pay-method-sub">Via SumUp</div>
+      </div>
+      <div class="pay-method" id="pm-cash" onclick="selPay('cash')">
+        <div class="pay-method-icon">💶</div>
+        <div class="pay-method-label">Cash</div>
+        <div class="pay-method-sub">Aan de bar</div>
+      </div>
+    </div>
+    <button class="order-btn" id="place-order-btn" onclick="placeOrder()">✅ Bestelling plaatsen</button>
+    <button class="cancel-btn" onclick="closeCart()">Annuleren</button>
+  </div>
+</div>
+
+<!-- Status / confirmation screen -->
+<div class="status-screen" id="status-screen">
+  <div class="status-icon-big" id="st-icon">⏳</div>
+  <div style="font-size:14px;color:var(--mu);margin-bottom:4px;">Jouw bestelnummer</div>
+  <div class="status-number" id="st-number">—</div>
+  <div class="status-number-label">Toon dit nummer aan de bar</div>
+  <div class="status-title" id="st-title">Bestelling geplaatst</div>
+  <div class="status-sub" id="st-sub">Even geduld</div>
+
+  <div class="pay-pending" id="pay-pending">
+    <div class="pay-pending-title">💳 Betaal via SumUp</div>
+    <div class="pay-pending-sub">Klik hieronder om je betaling af te ronden</div>
+    <a class="pay-link" id="pay-link" href="#" target="_blank">Betalen →</a>
+  </div>
+
+  <div class="status-card" id="st-steps">
+    <div class="status-step"><div class="step-dot active" id="dot-paid"></div><span id="lbl-paid">Wachten op betaling…</span></div>
+    <div class="status-step"><div class="step-dot waiting" id="dot-prep"></div><span>Bar bereidt je bestelling</span></div>
+    <div class="status-step"><div class="step-dot waiting" id="dot-ready"></div><span>Klaar om op te halen</span></div>
+  </div>
+
+  <button class="new-order-btn" onclick="resetOrder()">Nieuwe bestelling</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/api.js"></script>
+<script>
+let products = [], cart = {}, activeCat = 'Alle', payMethod = 'sumup';
+let currentOrderId = null, pollInterval = null;
+
+async function init() {
+  products = await API.products.list();
+  renderCats(); renderProds();
+}
+
+// WS: live status updates for current order
+API.on('order_updated', d => {
+  if (d.order.id === currentOrderId) updateStatusScreen(d.order);
+});
+
+const cats = () => ['Alle', ...new Set(products.map(p => p.category))];
+
+function renderCats() {
+  document.getElementById('cats').innerHTML = cats().map(c =>
+    `<div class="cat ${c===activeCat?'on':''}" onclick="setCat('${c}')">${c}</div>`
+  ).join('');
+}
+function setCat(c) { activeCat = c; renderCats(); renderProds(); }
+
+function renderProds() {
+  const list = activeCat === 'Alle' ? products : products.filter(p => p.category === activeCat);
+  document.getElementById('prod-grid').innerHTML = list.map(p => {
+    const qty = cart[p.id] || 0;
+    const outOfStock = p.stock === 0;
+    const lowStock = p.stock > 0 && p.stock <= p.low_stock;
+    const stockLabel = p.stock >= 0
+      ? (outOfStock ? '<div class="prod-stock stock-low">Uitverkocht</div>'
+        : lowStock ? `<div class="prod-stock stock-low">Nog ${p.stock}</div>` : '')
+      : '';
+    return `<div class="prod ${qty>0?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock?'':'addItem('+p.id+')'}">
+      <div class="prod-qty-badge">${qty}</div>
+      <div class="prod-icon">${p.icon}</div>
+      <div class="prod-name">${p.name}</div>
+      <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
+      ${stockLabel}
+    </div>`;
+  }).join('');
+}
+
+function addItem(id) {
+  const p = products.find(x => x.id === id);
+  if (!p || p.stock === 0) return;
+  const curQty = cart[id] || 0;
+  if (p.stock > 0 && curQty >= p.stock) { toast(`Nog maar ${p.stock} beschikbaar`); return; }
+  cart[id] = curQty + 1;
+  updateCartBar(); renderProds();
+}
+
+function changeQty(id, d) {
+  cart[id] = (cart[id] || 0) + d;
+  if (cart[id] <= 0) delete cart[id];
+  updateCartBar(); renderProds(); renderCartRows();
+}
+
+function getTotal() {
+  return Object.entries(cart).reduce((s, [id, qty]) => {
+    const p = products.find(x => x.id == id);
+    return s + (p ? p.price * qty : 0);
+  }, 0);
+}
+function getCount() { return Object.values(cart).reduce((a,b)=>a+b, 0); }
+
+function updateCartBar() {
+  const count = getCount(), total = getTotal();
+  const btn = document.getElementById('cart-open-btn');
+  btn.disabled = count === 0;
+  document.getElementById('cart-bar-info').textContent = count > 0
+    ? `${count} item${count>1?'s':''} · € ${total.toFixed(2).replace('.',',')}` : 'Kies je drankjes';
+  document.getElementById('cart-bar-sub').textContent = count > 0
+    ? 'Tik "Bestellen" om af te ronden' : 'Tik een product om toe te voegen';
+}
+
+function renderCartRows() {
+  const entries = Object.entries(cart);
+  document.getElementById('cart-rows').innerHTML = entries.map(([id, qty]) => {
+    const p = products.find(x => x.id == id); if (!p) return '';
+    return `<div class="cart-row">
+      <span class="cr-icon">${p.icon}</span>
+      <span class="cr-name">${p.name}</span>
+      <div class="cr-ctrl">
+        <button class="qbtn" onclick="changeQty(${id},-1)">−</button>
+        <span style="font-size:14px;min-width:18px;text-align:center">${qty}</span>
+        <button class="qbtn" onclick="changeQty(${id},1)">+</button>
+      </div>
+      <span class="cr-price">€ ${(p.price*qty).toFixed(2).replace('.',',')}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('cart-total-amt').textContent = '€ ' + getTotal().toFixed(2).replace('.',',');
+}
+
+function openCart() { renderCartRows(); document.getElementById('cart-overlay').classList.add('show'); }
+function closeCart() { document.getElementById('cart-overlay').classList.remove('show'); }
+
+function selPay(m) {
+  payMethod = m;
+  document.getElementById('pm-sumup').classList.toggle('sel', m==='sumup');
+  document.getElementById('pm-cash').classList.toggle('sel', m==='cash');
+}
+
+async function placeOrder() {
+  const btn = document.getElementById('place-order-btn');
+  btn.disabled = true; btn.textContent = 'Bestelling plaatsen…';
+  const items = Object.entries(cart).map(([id, qty]) => {
+    const p = products.find(x => x.id == id);
+    return p ? { product_id: p.id, name: p.name, icon: p.icon, price: p.price, qty } : null;
+  }).filter(Boolean);
+  try {
+    const result = await API.orders.create({
+      items, method: payMethod,
+      note: document.getElementById('order-note').value || '',
+    });
+    currentOrderId = result.order.id;
+    closeCart();
+    showStatusScreen(result.order, result.sumupCheckoutId);
+    cart = {};
+    updateCartBar(); renderProds();
+  } catch(e) {
+    toast('Fout: ' + e.message);
+    btn.disabled = false; btn.textContent = '✅ Bestelling plaatsen';
+  }
+}
+
+function showStatusScreen(order, checkoutId) {
+  document.getElementById('st-number').textContent = order.order_number;
+  document.getElementById('status-screen').classList.add('show');
+  updateStatusScreen(order);
+
+  if (order.method === 'sumup' && checkoutId) {
+    const pending = document.getElementById('pay-pending');
+    pending.classList.add('show');
+    // SumUp hosted checkout URL
+    document.getElementById('pay-link').href = `https://pay.sumup.com/b2c/checkout/${checkoutId}`;
+    // Start polling for payment
+    pollInterval = setInterval(async () => {
+      try {
+        const r = await API.orders.pollPayment(order.id);
+        if (r.status === 'paid') {
+          clearInterval(pollInterval);
+          pending.classList.remove('show');
+          updateStatusScreen(r.order || { ...order, status: 'paid' });
+        }
+      } catch(_) {}
+    }, 3000);
+  }
+}
+
+function updateStatusScreen(order) {
+  const s = order.status;
+  const icon = s==='pending'?'⏳':s==='paid'?'✅':s==='preparing'?'👨‍🍳':s==='ready'?'🎉':'✅';
+  const title = s==='pending'?'Wachten op betaling':s==='paid'?'Betaald — we beginnen eraan!':s==='preparing'?'Wordt bereid':s==='ready'?'Klaar! Kom ophalen 🎉':'Bedankt!';
+  const sub = s==='pending'?'Rond je betaling af via de link hieronder.':s==='paid'?'Je bestelling is ontvangen en wordt zo bereid.':s==='preparing'?'Even geduld, we zijn bezig!':s==='ready'?`Toon bestelnummer ${order.order_number} aan de bar.`:'Geniet ervan! ☀️';
+  document.getElementById('st-icon').textContent = icon;
+  document.getElementById('st-title').textContent = title;
+  document.getElementById('st-sub').textContent = sub;
+  // Steps
+  const paid = ['paid','preparing','ready','collected'].includes(s);
+  const prep = ['preparing','ready','collected'].includes(s);
+  const ready = ['ready','collected'].includes(s);
+  setDot('dot-paid', paid ? 'done' : s==='pending' ? 'active' : 'waiting');
+  setDot('dot-prep', prep ? 'done' : paid ? 'active' : 'waiting');
+  setDot('dot-ready', ready ? 'done' : prep ? 'active' : 'waiting');
+  document.getElementById('lbl-paid').textContent = paid ? '✓ Betaald' : 'Wachten op betaling…';
+  if (s === 'ready') {
+    document.getElementById('st-number').classList.add('pulsing');
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Zomerbar 🎉', { body: `Bestelling #${order.order_number} is klaar! Kom ophalen.` });
+    }
+  }
+}
+
+function setDot(id, cls) {
+  const el = document.getElementById(id);
+  el.className = 'step-dot ' + cls;
+}
+
+function resetOrder() {
+  clearInterval(pollInterval);
+  currentOrderId = null;
+  document.getElementById('status-screen').classList.remove('show');
+  document.getElementById('pay-pending').classList.remove('show');
+  document.getElementById('st-number').classList.remove('pulsing');
+  document.getElementById('order-note').value = '';
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+if ('Notification' in window && Notification.permission === 'default') {
+  setTimeout(() => Notification.requestPermission(), 2000);
+}
+
+init();
+</script>
+</body>
+</html>
