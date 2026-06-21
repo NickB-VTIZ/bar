@@ -7,7 +7,7 @@
 
 services:
   zomerbar:
-    image: ghcr.io/NickB-VTIZ/zomerbar-pos:latest
+    image: ghcr.io/NickB-VTIZ/bar:latest
     container_name: zomerbar-pos
     restart: unless-stopped
     ports:
