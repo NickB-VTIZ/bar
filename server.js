@@ -80,6 +80,12 @@ db.exec(`
   );
 `);
 
+// ── Migrations (idempotent) ──────────────────────────────────────
+// Mollie payment id for online customer payments
+try { db.exec("ALTER TABLE orders ADD COLUMN mollie_payment_id TEXT"); } catch {}
+// Source of the order: 'customer' (QR self-order) or 'pos' (counter sale)
+try { db.exec("ALTER TABLE orders ADD COLUMN source TEXT DEFAULT 'customer'"); } catch {}
+
 // Seed default products if empty
 if (!db.prepare('SELECT id FROM products LIMIT 1').get()) {
   const ins = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,sort_order) VALUES (?,?,?,?,?,?,?)`);
@@ -114,6 +120,8 @@ const wss = new WebSocket.Server({ server });
 const clients = new Set();
 
 app.use(express.json());
+// Mollie posts webhooks as application/x-www-form-urlencoded (id=tr_xxx)
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 wss.on('connection', ws => {
@@ -221,6 +229,43 @@ async function sumupRequest(method, path, body) {
   return data;
 }
 
+// ── Mollie API ───────────────────────────────────────────────────
+async function mollieRequest(method, apiPath, body) {
+  const key = getSetting('mollieKey');
+  if (!key) throw new Error('Geen Mollie API-sleutel ingesteld');
+  const r = await fetch('https://api.mollie.com' + apiPath, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || data.title || 'Mollie fout');
+  return data;
+}
+
+// Public base URL — behind a reverse proxy (Nginx Proxy Manager) trust forwarded headers.
+// Optional override via the `publicUrl` setting.
+function getBaseUrl(req) {
+  const configured = getSetting('publicUrl');
+  if (configured) return String(configured).replace(/\/$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
+// Mark an order as paid: update status, deduct stock, broadcast. Idempotent on status.
+function markOrderPaid(orderId, { mollie_payment_id, sumup_tx_id } = {}) {
+  const o = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+  if (!o || o.status !== 'pending') return o ? hydrate(o) : null;
+  db.prepare("UPDATE orders SET status='paid', mollie_payment_id=COALESCE(?,mollie_payment_id), sumup_tx_id=COALESCE(?,sumup_tx_id), updated_at=datetime('now') WHERE id=?")
+    .run(mollie_payment_id || null, sumup_tx_id || null, orderId);
+  const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(orderId);
+  deductStock(items, orderId);
+  const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(orderId));
+  broadcast('order_updated', { order });
+  return order;
+}
+
 // ── REST API ─────────────────────────────────────────────────────
 
 // Auth
@@ -292,32 +337,6 @@ app.delete('/api/products/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// SumUp catalog sync
-app.post('/api/products/sync-sumup', requireAuth, async (req, res) => {
-  try {
-    const catalog = await sumupRequest('GET', '/v0.1/catalog');
-    const products = catalog.items || catalog.products || [];
-    const upsert = db.prepare(`
-      INSERT INTO products (sumup_id,name,category,price,icon,vat_type,stock,sort_order)
-      VALUES (?,?,?,?,?,?,-1,999)
-      ON CONFLICT(sumup_id) DO UPDATE SET name=excluded.name,price=excluded.price
-    `);
-    // Add unique constraint on sumup_id if not exists
-    try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sumup_id ON products(sumup_id) WHERE sumup_id IS NOT NULL'); } catch {}
-    let synced = 0;
-    products.forEach(p => {
-      const price = p.price?.amount ? p.price.amount / 100 : (p.price || 0);
-      upsert.run(p.id || p.product_id, p.name, p.category?.name || 'Overige', price, '🍺', 'drinks');
-      synced++;
-    });
-    const all = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY sort_order').all();
-    broadcast('products_reloaded', { products: all });
-    res.json({ synced, products: all });
-  } catch(e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
 // Orders
 app.get('/api/orders', (req, res) => res.json(getActiveOrders()));
 
@@ -327,9 +346,9 @@ app.get('/api/orders/:id', (req, res) => {
   res.json(hydrate(o));
 });
 
-// Create order + SumUp checkout
+// Create order — supports cash, counter (POS) sales, and Mollie online payment
 app.post('/api/orders', async (req, res) => {
-  const { items, method, note, table_ref } = req.body;
+  const { items, method, note, table_ref, paid, source } = req.body;
   if (!items?.length) return res.status(400).json({ error: 'Geen items' });
 
   // Validate stock
@@ -345,39 +364,69 @@ app.post('/api/orders', async (req, res) => {
   const id = generateOrderId();
   const orderNumber = nextOrderNumber();
   const amount = items.reduce((s, i) => s + i.price * i.qty, 0);
-  let sumupCheckoutId = null;
+  const barName = getSetting('barName') || 'Zomerbar';
 
-  // Create SumUp checkout for card payments
-  if (method === 'sumup') {
+  // Cash, or a counter sale already charged on the SumUp reader (paid:true), is paid immediately.
+  // Mollie / other online methods start as 'pending' until the payment is confirmed.
+  const paidImmediately = method === 'cash' || paid === true;
+
+  let mollieCheckoutUrl = null;
+  let molliePaymentId = null;
+
+  // Online payment via Mollie (Bancontact / card) for customer self-orders
+  if (method === 'mollie' && !paidImmediately) {
     try {
-      const checkout = await sumupRequest('POST', '/v0.1/checkouts', {
-        checkout_reference: id,
-        amount: parseFloat(amount.toFixed(2)),
-        currency: 'EUR',
-        description: `Bestelling #${orderNumber} — Zomerbar`,
-        redirect_url: null,
+      const baseUrl = getBaseUrl(req);
+      const isPublicHttps = /^https:\/\//.test(baseUrl) && !/localhost|127\.0\.0\.1/.test(baseUrl);
+      const payment = await mollieRequest('POST', '/v2/payments', {
+        amount: { currency: 'EUR', value: amount.toFixed(2) },
+        description: `Bestelling #${orderNumber} — ${barName}`,
+        redirectUrl: `${baseUrl}/bestel.html?order=${id}`,
+        // Mollie only accepts a publicly reachable https webhook; otherwise we fall back to polling
+        ...(isPublicHttps ? { webhookUrl: `${baseUrl}/api/webhooks/mollie` } : {}),
+        metadata: { orderId: id },
       });
-      sumupCheckoutId = checkout.id;
-    } catch(e) {
-      console.error('SumUp checkout fout:', e.message);
+      molliePaymentId = payment.id;
+      mollieCheckoutUrl = payment._links?.checkout?.href || null;
+    } catch (e) {
+      return res.status(400).json({ error: 'Mollie: ' + e.message });
     }
   }
 
-  const status = method === 'cash' ? 'paid' : 'pending';
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,sumup_checkout_id,note,table_ref)
-    VALUES (?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, method||'sumup', sumupCheckoutId, note||'', table_ref||'');
+  const status = paidImmediately ? 'paid' : 'pending';
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,mollie_payment_id,note,table_ref,source)
+    VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(id, orderNumber, status, amount, method || 'cash', molliePaymentId, note || '', table_ref || '', source || 'customer');
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
-  items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
+  items.forEach(i => insertItem.run(id, i.product_id || null, i.name, i.icon || '🍺', i.price, i.qty));
 
-  // Deduct stock immediately for cash, wait for payment confirmation for card
-  if (method === 'cash') {
-    deductStock(items.map((i,_) => ({...i, product_id: i.product_id})), id);
-  }
+  // Deduct stock immediately when paid; otherwise wait for payment confirmation
+  if (paidImmediately) deductStock(items, id);
 
   const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
   broadcast('order_created', { order });
-  res.json({ order, sumupCheckoutId });
+  res.json({ order, mollieCheckoutUrl });
+});
+
+// Mollie webhook — Mollie POSTs the payment id when status changes
+app.post('/api/webhooks/mollie', async (req, res) => {
+  const paymentId = req.body?.id;
+  if (!paymentId) return res.status(400).end();
+  try {
+    const payment = await mollieRequest('GET', `/v2/payments/${paymentId}`);
+    const orderId = payment.metadata?.orderId;
+    const o = orderId
+      ? db.prepare('SELECT * FROM orders WHERE id=?').get(orderId)
+      : db.prepare('SELECT * FROM orders WHERE mollie_payment_id=?').get(paymentId);
+    if (o && payment.status === 'paid') {
+      markOrderPaid(o.id, { mollie_payment_id: paymentId });
+    }
+    res.status(200).end();
+  } catch (e) {
+    console.error('Mollie webhook fout:', e.message);
+    res.status(500).end(); // non-2xx → Mollie retries later
+  }
 });
 
 // SumUp payment webhook / poll
@@ -398,25 +447,35 @@ app.post('/api/orders/:id/confirm-payment', async (req, res) => {
   res.json(order);
 });
 
-// Poll SumUp checkout status
+// Poll payment status (Mollie / SumUp) — fallback when no webhook is available
 app.get('/api/orders/:id/payment-status', async (req, res) => {
   const o = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Niet gevonden' });
-  if (o.status !== 'pending' || !o.sumup_checkout_id) return res.json({ status: o.status });
+  if (o.status !== 'pending') return res.json({ status: o.status });
 
   try {
-    const checkout = await sumupRequest('GET', `/v0.1/checkouts/${o.sumup_checkout_id}`);
-    if (checkout.status === 'PAID') {
-      db.prepare("UPDATE orders SET status='paid', sumup_tx_id=?, updated_at=datetime('now') WHERE id=?")
-        .run(checkout.transaction_id || null, o.id);
-      const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
-      deductStock(items, o.id);
-      const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
-      broadcast('order_updated', { order: updated });
-      return res.json({ status: 'paid', order: updated });
+    // Mollie online payment
+    if (o.mollie_payment_id) {
+      const payment = await mollieRequest('GET', `/v2/payments/${o.mollie_payment_id}`);
+      if (payment.status === 'paid') {
+        const order = markOrderPaid(o.id, { mollie_payment_id: o.mollie_payment_id });
+        return res.json({ status: 'paid', order });
+      }
+      // open/pending → still waiting; canceled/expired/failed → report as-is
+      const map = { open: 'pending', pending: 'pending' };
+      return res.json({ status: map[payment.status] || payment.status });
     }
-    res.json({ status: checkout.status?.toLowerCase() || 'pending' });
-  } catch(e) {
+    // SumUp hosted checkout (legacy)
+    if (o.sumup_checkout_id) {
+      const checkout = await sumupRequest('GET', `/v0.1/checkouts/${o.sumup_checkout_id}`);
+      if (checkout.status === 'PAID') {
+        const order = markOrderPaid(o.id, { sumup_tx_id: checkout.transaction_id });
+        return res.json({ status: 'paid', order });
+      }
+      return res.json({ status: checkout.status?.toLowerCase() || 'pending' });
+    }
+    res.json({ status: o.status });
+  } catch (e) {
     res.json({ status: o.status });
   }
 });
@@ -459,6 +518,17 @@ app.get('/api/stats', requireAuth, (req, res) => {
   res.json({ ...stats, top_products: topProducts, low_stock: lowStock });
 });
 
+// Recent transactions (today's paid orders) — for the counter POS
+app.get('/api/transactions', requireAuth, (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = db.prepare(`
+    SELECT * FROM orders
+    WHERE DATE(created_at)=? AND status NOT IN ('cancelled','archived','pending')
+    ORDER BY created_at DESC LIMIT 50
+  `).all(today);
+  res.json(rows.map(hydrate));
+});
+
 // Settings — admin only (contains secrets)
 app.get('/api/settings', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT * FROM settings').all();
@@ -473,6 +543,7 @@ app.get('/api/settings/public', (req, res) => {
   res.json({
     barName: getSetting('barName') || 'Zomerbar',
     hasSumup: !!getSetting('sumupKey'),
+    hasMollie: !!getSetting('mollieKey'),
   });
 });
 

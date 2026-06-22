@@ -142,10 +142,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
     <input class="note-input" id="order-note" placeholder="Opmerking (bv. geen ijs)">
     <div style="font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Betaalmethode</div>
     <div class="pay-methods">
-      <div class="pay-method sel" id="pm-sumup" onclick="selPay('sumup')">
+      <div class="pay-method sel" id="pm-mollie" onclick="selPay('mollie')">
         <div class="pay-method-icon">💳</div>
-        <div class="pay-method-label">Kaart</div>
-        <div class="pay-method-sub">Via SumUp</div>
+        <div class="pay-method-label">Online betalen</div>
+        <div class="pay-method-sub">Bancontact / kaart</div>
       </div>
       <div class="pay-method" id="pm-cash" onclick="selPay('cash')">
         <div class="pay-method-icon">💶</div>
@@ -168,9 +168,9 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
   <div class="status-sub" id="st-sub">Even geduld</div>
 
   <div class="pay-pending" id="pay-pending">
-    <div class="pay-pending-title">💳 Betaal via SumUp</div>
-    <div class="pay-pending-sub">Klik hieronder om je betaling af te ronden</div>
-    <a class="pay-link" id="pay-link" href="#" target="_blank">Betalen →</a>
+    <div class="pay-pending-title">💳 Betaling afronden</div>
+    <div class="pay-pending-sub" id="pay-pending-sub">Je wordt doorgestuurd naar de betaalpagina…</div>
+    <a class="pay-link" id="pay-link" href="#" style="display:none">Opnieuw betalen →</a>
   </div>
 
   <div class="status-card" id="st-steps">
@@ -186,12 +186,21 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 
 <script src="/api.js"></script>
 <script>
-let products = [], cart = {}, activeCat = 'Alle', payMethod = 'sumup';
+let products = [], cart = {}, activeCat = 'Alle', payMethod = 'mollie';
 let currentOrderId = null, pollInterval = null;
 
 async function init() {
   products = await API.products.list();
   renderCats(); renderProds();
+  // Returning from the Mollie checkout? Show the order's live status.
+  const orderId = new URLSearchParams(location.search).get('order');
+  if (orderId) {
+    try {
+      const order = await API.orders.get(orderId);
+      currentOrderId = order.id;
+      resumeStatusScreen(order);
+    } catch(_) {}
+  }
 }
 
 // WS: live status updates for current order
@@ -284,7 +293,7 @@ function closeCart() { document.getElementById('cart-overlay').classList.remove(
 
 function selPay(m) {
   payMethod = m;
-  document.getElementById('pm-sumup').classList.toggle('sel', m==='sumup');
+  document.getElementById('pm-mollie').classList.toggle('sel', m==='mollie');
   document.getElementById('pm-cash').classList.toggle('sel', m==='cash');
 }
 
@@ -300,10 +309,15 @@ async function placeOrder() {
       items, method: payMethod,
       note: document.getElementById('order-note').value || '',
     });
+    cart = {};
+    // Online payment → redirect to the Mollie checkout page
+    if (payMethod === 'mollie' && result.mollieCheckoutUrl) {
+      window.location.href = result.mollieCheckoutUrl;
+      return;
+    }
     currentOrderId = result.order.id;
     closeCart();
-    showStatusScreen(result.order, result.sumupCheckoutId);
-    cart = {};
+    showStatusScreen(result.order);
     updateCartBar(); renderProds();
   } catch(e) {
     toast('Fout: ' + e.message);
@@ -311,32 +325,51 @@ async function placeOrder() {
   }
 }
 
-function showStatusScreen(order, checkoutId) {
+function showStatusScreen(order) {
   document.getElementById('st-number').textContent = order.order_number;
   document.getElementById('status-screen').classList.add('show');
   updateStatusScreen(order);
+  if (order.status === 'pending') startPaymentPolling(order);
+}
 
-  if (order.method === 'sumup' && checkoutId) {
+// Resume the status screen after returning from the Mollie checkout
+function resumeStatusScreen(order) {
+  closeCart();
+  document.getElementById('st-number').textContent = order.order_number;
+  document.getElementById('status-screen').classList.add('show');
+  updateStatusScreen(order);
+  if (order.status === 'pending') {
     const pending = document.getElementById('pay-pending');
     pending.classList.add('show');
-    // SumUp hosted checkout URL
-    document.getElementById('pay-link').href = `https://pay.sumup.com/b2c/checkout/${checkoutId}`;
-    // Start polling for payment
-    pollInterval = setInterval(async () => {
-      try {
-        const r = await API.orders.pollPayment(order.id);
-        if (r.status === 'paid') {
-          clearInterval(pollInterval);
-          pending.classList.remove('show');
-          updateStatusScreen(r.order || { ...order, status: 'paid' });
-        }
-      } catch(_) {}
-    }, 3000);
+    document.getElementById('pay-pending-sub').textContent = 'Betaling controleren…';
+    startPaymentPolling(order);
   }
+}
+
+function startPaymentPolling(order) {
+  const pending = document.getElementById('pay-pending');
+  clearInterval(pollInterval);
+  let tries = 0;
+  pollInterval = setInterval(async () => {
+    tries++;
+    try {
+      const r = await API.orders.pollPayment(order.id);
+      if (r.status === 'paid') {
+        clearInterval(pollInterval);
+        pending.classList.remove('show');
+        updateStatusScreen(r.order || { ...order, status: 'paid' });
+      } else if (['canceled','expired','failed'].includes(r.status)) {
+        clearInterval(pollInterval);
+        document.getElementById('pay-pending-sub').textContent = 'Betaling niet voltooid. Plaats je bestelling opnieuw.';
+      }
+    } catch(_) {}
+    if (tries > 200) clearInterval(pollInterval); // stop after ~10 min
+  }, 3000);
 }
 
 function updateStatusScreen(order) {
   const s = order.status;
+  if (s !== 'pending') document.getElementById('pay-pending').classList.remove('show');
   const icon = s==='pending'?'⏳':s==='paid'?'✅':s==='preparing'?'👨‍🍳':s==='ready'?'🎉':'✅';
   const title = s==='pending'?'Wachten op betaling':s==='paid'?'Betaald — we beginnen eraan!':s==='preparing'?'Wordt bereid':s==='ready'?'Klaar! Kom ophalen 🎉':'Bedankt!';
   const sub = s==='pending'?'Rond je betaling af via de link hieronder.':s==='paid'?'Je bestelling is ontvangen en wordt zo bereid.':s==='preparing'?'Even geduld, we zijn bezig!':s==='ready'?`Toon bestelnummer ${order.order_number} aan de bar.`:'Geniet ervan! ☀️';

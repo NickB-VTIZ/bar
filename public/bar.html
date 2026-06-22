@@ -164,12 +164,24 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 <div id="screen-settings" class="screen">
   <div class="settings-wrap">
     <div class="settings-sec">
-      <div class="settings-sec-title">SumUp</div>
+      <div class="settings-sec-title">Mollie (online betaling klant)</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-label">API-sleutel</div><input class="settings-input" id="s-mollie" type="password" placeholder="live_… of test_…"></div>
+      </div>
+      <div style="font-size:12px;color:var(--mu);margin-top:8px;line-height:1.5;">
+        Klanten betalen via QR met Bancontact of kaart. Maak een API-sleutel aan op
+        <span style="color:var(--teal-d)">mollie.com → Developers → API-keys</span>. Zorg dat Bancontact actief staat in je Mollie-account.
+      </div>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">SumUp (kaartlezer aan de balie)</div>
       <div class="settings-card">
         <div class="settings-row"><div class="settings-label">API-sleutel</div><input class="settings-input" id="s-sumup" type="password" placeholder="sup_sk_…"></div>
         <div class="settings-row"><div class="settings-label">Merchant ID</div><input class="settings-input" id="s-merchant" placeholder="MXXXXXXX"></div>
       </div>
-      <button class="sync-btn" onclick="syncSumup()">🔄 Producten sync met SumUp catalog</button>
+      <div style="font-size:12px;color:var(--mu);margin-top:8px;line-height:1.5;">
+        De SumUp-lezer gebruik je aan de balie. In de balie-kassa registreer je een kaartbetaling nadat ze op de lezer geslaagd is.
+      </div>
     </div>
     <div class="settings-sec">
       <div class="settings-sec-title">Billit Facturatie</div>
@@ -190,6 +202,18 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
           <select class="settings-input" id="s-vat-food"><option value="21">21%</option><option value="12" selected>12%</option><option value="6">6%</option></select></div>
       </div>
       <button class="save-btn" onclick="saveSettings()">Opslaan</button>
+    </div>
+    <div class="settings-sec">
+      <div class="settings-sec-title">Balie-kassa</div>
+      <a href="/pos.html" style="display:block;text-decoration:none;">
+        <div class="settings-card" style="cursor:pointer;">
+          <div class="settings-row">
+            <span style="font-size:20px;">🛒</span>
+            <div class="settings-label">Verkoop aan de balie (cash & kaart)</div>
+            <span style="font-size:16px;color:var(--mu)">→</span>
+          </div>
+        </div>
+      </a>
     </div>
     <div class="settings-sec">
       <div class="settings-sec-title">Boekhouding</div>
@@ -260,7 +284,6 @@ API.on('order_updated', d => { orders[d.order.id]=d.order; renderBoard(); loadSt
 API.on('order_deleted', d => { delete orders[d.id]; renderBoard(); });
 API.on('product_updated', d => { const i=products.findIndex(p=>p.id===d.product.id); if(i>=0)products[i]=d.product; });
 API.on('low_stock', d => showStockAlert(d.products));
-API.on('products_reloaded', d => { products=d.products; toast('✅ SumUp sync klaar'); });
 
 function setConn(ok){
   document.getElementById('conn').className='pill '+(ok?'ok':'err');
@@ -398,6 +421,7 @@ async function setStockManual(id,cur){
 // Settings
 async function loadSettings(){
   const s=await API.settings.get();
+  if(s.mollieKey)document.getElementById('s-mollie').value=s.mollieKey;
   if(s.sumupKey)document.getElementById('s-sumup').value=s.sumupKey;
   if(s.merchant)document.getElementById('s-merchant').value=s.merchant;
   if(s.billitApiKey)document.getElementById('s-billit-key').value=s.billitApiKey;
@@ -411,6 +435,7 @@ async function loadSettings(){
 
 async function saveSettings(){
   await API.settings.save({
+    mollieKey:document.getElementById('s-mollie').value,
     sumupKey:document.getElementById('s-sumup').value,
     merchant:document.getElementById('s-merchant').value,
     billitApiKey:document.getElementById('s-billit-key').value,
@@ -421,12 +446,6 @@ async function saveSettings(){
     vatFood:document.getElementById('s-vat-food').value,
   });
   toast('✅ Opgeslagen');
-}
-
-async function syncSumup(){
-  toast('Synchroniseren met SumUp…');
-  try{ await API.products.syncSumup(); toast('✅ Sync klaar'); }
-  catch(e){ toast('SumUp fout: '+e.message); }
 }
 
 async function changePassword(){

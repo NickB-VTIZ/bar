@@ -52,7 +52,6 @@ window.API = (() => {
       update: (id, p) => req('PUT', `/api/products/${id}`, p),
       setStock: (id, stock) => req('PATCH', `/api/products/${id}/stock`, { stock }),
       remove: (id) => req('DELETE', `/api/products/${id}`),
-      syncSumup: () => req('POST', '/api/products/sync-sumup'),
     },
     orders: {
       list: () => req('GET', '/api/orders'),
@@ -64,6 +63,7 @@ window.API = (() => {
       remove: (id) => req('DELETE', `/api/orders/${id}`),
     },
     stats: () => req('GET', '/api/stats'),
+    transactions: () => req('GET', '/api/transactions'),
     cashbook: (from, to) => req('GET', `/api/cashbook?from=${from}&to=${to}`),
     invoice: {
       preview: (year, month) => req('GET', `/api/invoice/preview?year=${year}&month=${month}`),
