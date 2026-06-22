@@ -110,6 +110,8 @@ header{background:var(--sun);padding:12px 16px;display:flex;align-items:center;j
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:12px 22px;border-radius:24px;opacity:0;transition:all .25s;z-index:200;pointer-events:none;white-space:nowrap;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulsing{animation:pulse 1.4s ease infinite;}
 </style>
 </head>
 <body>
@@ -169,13 +171,26 @@ header{background:var(--sun);padding:12px 16px;display:flex;align-items:center;j
     <div class="sheet-title">Afrekenen</div>
     <div style="font-size:13px;color:var(--mu)">Kies hoe de klant betaalt</div>
     <div class="sheet-amt" id="pay-amt">€ 0,00</div>
-    <div class="method-grid">
-      <div class="method sel" id="m-cash" onclick="selMethod('cash')"><div class="method-icon">💶</div><div class="method-label">Cash</div><div class="method-sub">Contant geld</div></div>
-      <div class="method" id="m-card" onclick="selMethod('card')"><div class="method-icon">💳</div><div class="method-label">Kaart</div><div class="method-sub">SumUp-lezer</div></div>
+
+    <!-- Method selection -->
+    <div id="pay-choose">
+      <div class="method-grid" style="grid-template-columns:1fr;gap:8px;">
+        <div class="method sel" id="m-cash" onclick="selMethod('cash')" style="display:flex;align-items:center;gap:12px;text-align:left;"><div class="method-icon" style="margin:0">💶</div><div><div class="method-label">Cash</div><div class="method-sub">Contant geld</div></div></div>
+        <div class="method" id="m-terminal" onclick="selMethod('terminal')" style="display:flex;align-items:center;gap:12px;text-align:left;"><div class="method-icon" style="margin:0">💳</div><div><div class="method-label">Kaart op SumUp-toestel</div><div class="method-sub">Bedrag wordt naar de terminal gestuurd</div></div></div>
+        <div class="method" id="m-manual" onclick="selMethod('manual')" style="display:flex;align-items:center;gap:12px;text-align:left;"><div class="method-icon" style="margin:0">🧾</div><div><div class="method-label">Kaart (manueel)</div><div class="method-sub">Reeds afgerekend, enkel registreren</div></div></div>
+      </div>
+      <div class="method-hint" id="method-hint">Ontvang het cashgeld en bevestig de verkoop.</div>
+      <button class="confirm-btn" id="confirm-btn" onclick="processPayment()">Verkoop bevestigen</button>
+      <button class="cancel-btn" onclick="closePay()">Annuleren</button>
     </div>
-    <div class="method-hint" id="method-hint">Ontvang het cashgeld en bevestig de verkoop.</div>
-    <button class="confirm-btn" id="confirm-btn" onclick="processPayment()">Verkoop bevestigen</button>
-    <button class="cancel-btn" onclick="closePay()">Annuleren</button>
+
+    <!-- Terminal waiting state -->
+    <div id="pay-waiting" style="display:none;text-align:center;">
+      <div style="font-size:40px;margin:6px 0" class="pulsing">💳</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px;">Volg de betaling op het toestel</div>
+      <div style="font-size:13px;color:var(--mu);margin-bottom:18px;" id="waiting-sub">De klant tikt of steekt de kaart in de SumUp-terminal…</div>
+      <button class="cancel-btn" onclick="cancelTerminal()">Annuleren</button>
+    </div>
   </div>
 </div>
 
@@ -192,6 +207,7 @@ header{background:var(--sun);padding:12px 16px;display:flex;align-items:center;j
 </script>
 <script>
 let products = [], cart = {}, activeCat = 'Alle', payMethod = 'cash';
+let terminalOrderId = null, terminalPoll = null;
 
 document.getElementById('hdr-date').textContent =
   new Date().toLocaleDateString('nl-BE',{weekday:'short',day:'numeric',month:'long'});
@@ -200,6 +216,9 @@ API.on('ws_open', () => setConn(true));
 API.on('ws_close', () => setConn(false));
 API.on('product_updated', d => { const i=products.findIndex(p=>p.id===d.product.id); if(i>=0)products[i]=d.product; else products.push(d.product); renderCats(); renderProds(); });
 API.on('product_deleted', d => { products=products.filter(p=>p.id!=d.id); renderCats(); renderProds(); });
+// Terminal payment result arrives via the SumUp webhook → broadcast
+API.on('order_updated', d => { if(d.order.id===terminalOrderId && d.order.status==='paid') terminalSuccess(d.order); });
+API.on('order_deleted', d => { if(d.id===terminalOrderId) terminalFailed(); });
 
 function setConn(ok){
   document.getElementById('conn').className='pill '+(ok?'ok':'err');
@@ -289,6 +308,8 @@ function updatePayBtn(){
 
 function openPay(){
   document.getElementById('pay-amt').textContent='€ '+getTotal().toFixed(2).replace('.',',');
+  document.getElementById('pay-choose').style.display='block';
+  document.getElementById('pay-waiting').style.display='none';
   document.getElementById('pay-overlay').classList.add('show');
 }
 function closePay(){ document.getElementById('pay-overlay').classList.remove('show'); }
@@ -296,35 +317,91 @@ function closePay(){ document.getElementById('pay-overlay').classList.remove('sh
 function selMethod(m){
   payMethod=m;
   document.getElementById('m-cash').classList.toggle('sel',m==='cash');
-  document.getElementById('m-card').classList.toggle('sel',m==='card');
-  document.getElementById('method-hint').textContent = m==='cash'
-    ? 'Ontvang het cashgeld en bevestig de verkoop.'
-    : 'Reken het bedrag af op de SumUp-lezer. Bevestig pas als de betaling op de lezer geslaagd is.';
-  document.getElementById('confirm-btn').textContent = m==='cash' ? 'Cash ontvangen' : 'Kaartbetaling gelukt';
+  document.getElementById('m-terminal').classList.toggle('sel',m==='terminal');
+  document.getElementById('m-manual').classList.toggle('sel',m==='manual');
+  const hints={
+    cash:'Ontvang het cashgeld en bevestig de verkoop.',
+    terminal:'Het bedrag wordt naar de SumUp-terminal gestuurd. De klant betaalt op het toestel.',
+    manual:'Gebruik enkel als de kaartbetaling al elders gelukt is. Registreert de verkoop voor de boekhouding.',
+  };
+  const labels={cash:'Cash ontvangen', terminal:'Naar terminal sturen', manual:'Verkoop registreren'};
+  document.getElementById('method-hint').textContent=hints[m];
+  document.getElementById('confirm-btn').textContent=labels[m];
+}
+
+function cartItems(){
+  return Object.entries(cart).map(([id,qty])=>{
+    const p=products.find(x=>x.id==id);
+    return p?{product_id:p.id,name:p.name,icon:p.icon,price:p.price,qty}:null;
+  }).filter(Boolean);
 }
 
 async function processPayment(){
   const btn=document.getElementById('confirm-btn');
   btn.textContent='Verwerken…'; btn.disabled=true;
-  const items=Object.entries(cart).map(([id,qty])=>{
-    const p=products.find(x=>x.id==id);
-    return p?{product_id:p.id,name:p.name,icon:p.icon,price:p.price,qty}:null;
-  }).filter(Boolean);
+  const note=document.getElementById('order-note').value||'';
   try{
-    const r=await API.orders.create({
-      items,
-      method: payMethod==='card' ? 'sumup' : 'cash',
-      paid: true,
-      source: 'pos',
-      note: document.getElementById('order-note').value || '',
-    });
-    closePay();
-    cart={}; document.getElementById('order-note').value='';
-    updateUI();
-    toast(`✅ Verkoop #${r.order.order_number} geregistreerd`);
+    if(payMethod==='terminal'){
+      await startTerminalPayment(cartItems(), note);
+    }else{
+      const r=await API.orders.create({
+        items:cartItems(),
+        method: payMethod==='manual' ? 'sumup' : 'cash',
+        paid:true, source:'pos', note,
+      });
+      finishSale(`✅ Verkoop #${r.order.order_number} geregistreerd`);
+    }
   }catch(e){ toast('Fout: '+e.message); }
-  selMethod(payMethod);
-  btn.disabled=false;
+  btn.disabled=false; selMethod(payMethod);
+}
+
+function finishSale(msg){
+  closePay();
+  cart={}; document.getElementById('order-note').value='';
+  updateUI();
+  if(msg) toast(msg);
+}
+
+async function startTerminalPayment(items, note){
+  // 1. Create a pending card order  2. push the amount to the SumUp terminal
+  const r=await API.orders.create({ items, method:'sumup', source:'pos', note });
+  terminalOrderId=r.order.id;
+  try{
+    await API.orders.sumupTerminal(terminalOrderId);
+  }catch(e){
+    // Couldn't reach the terminal — clean up the pending order
+    try{ await API.orders.remove(terminalOrderId); }catch(_){}
+    terminalOrderId=null;
+    throw e;
+  }
+  // Show waiting state; result comes via websocket (or polling fallback)
+  document.getElementById('pay-choose').style.display='none';
+  document.getElementById('pay-waiting').style.display='block';
+  clearInterval(terminalPoll);
+  terminalPoll=setInterval(async()=>{
+    if(!terminalOrderId){clearInterval(terminalPoll);return;}
+    try{
+      const s=await API.orders.pollPayment(terminalOrderId);
+      if(s.status==='paid') terminalSuccess(s.order);
+      else if(['cancelled','canceled','failed','expired'].includes(s.status)) terminalFailed();
+    }catch(_){}
+  },3000);
+}
+
+function terminalSuccess(order){
+  clearInterval(terminalPoll); terminalOrderId=null;
+  finishSale(`✅ Kaartbetaling #${order?order.order_number:''} gelukt`);
+}
+function terminalFailed(){
+  clearInterval(terminalPoll); terminalOrderId=null;
+  document.getElementById('waiting-sub').textContent='Betaling niet gelukt of geannuleerd.';
+  setTimeout(()=>{ closePay(); }, 2500);
+  toast('Betaling niet voltooid');
+}
+async function cancelTerminal(){
+  if(terminalOrderId){ try{ await API.orders.remove(terminalOrderId); }catch(_){} }
+  clearInterval(terminalPoll); terminalOrderId=null;
+  closePay();
 }
 
 async function loadStats(){
@@ -343,7 +420,7 @@ async function loadTx(){
   const txs=await API.transactions();
   document.getElementById('tx-list').innerHTML=txs.length?txs.map(t=>{
     const d=new Date(t.created_at);
-    const isCard=t.method==='sumup';
+    const isCard=t.method!=='cash';
     const count=(t.items||[]).reduce((a,i)=>a+i.qty,0);
     return `<div class="tx-item">
       <div><div class="tx-id">#${t.order_number}</div><div class="tx-meta">${d.toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})} · ${count} artikel${count!==1?'en':''}</div></div>

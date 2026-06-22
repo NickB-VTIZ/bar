@@ -85,6 +85,20 @@ db.exec(`
 try { db.exec("ALTER TABLE orders ADD COLUMN mollie_payment_id TEXT"); } catch {}
 // Source of the order: 'customer' (QR self-order) or 'pos' (counter sale)
 try { db.exec("ALTER TABLE orders ADD COLUMN source TEXT DEFAULT 'customer'"); } catch {}
+// SumUp reader (terminal) client transaction id, to match webhook callbacks to an order
+try { db.exec("ALTER TABLE orders ADD COLUMN sumup_client_tx_id TEXT"); } catch {}
+// Per-article VAT rate (%). Each product can have its own rate (6/12/21…)
+try { db.exec("ALTER TABLE products ADD COLUMN vat_rate REAL"); } catch {}
+// Snapshot of the VAT rate at sale time, so changing a product later doesn't rewrite history
+try { db.exec("ALTER TABLE order_items ADD COLUMN vat_rate REAL"); } catch {}
+// Backfill existing products from their vat_type using the configured rates
+try {
+  const vd = parseFloat(JSON.parse(db.prepare("SELECT value FROM settings WHERE key='vatDrinks'").get()?.value ?? '"6"')) || 6;
+  const vf = parseFloat(JSON.parse(db.prepare("SELECT value FROM settings WHERE key='vatFood'").get()?.value ?? '"12"')) || 12;
+  db.prepare("UPDATE products SET vat_rate=? WHERE vat_rate IS NULL AND vat_type='drinks'").run(vd);
+  db.prepare("UPDATE products SET vat_rate=? WHERE vat_rate IS NULL AND vat_type='food'").run(vf);
+  db.prepare("UPDATE products SET vat_rate=? WHERE vat_rate IS NULL").run(vd);
+} catch {}
 
 // Seed default products if empty
 if (!db.prepare('SELECT id FROM products LIMIT 1').get()) {
@@ -266,6 +280,22 @@ function markOrderPaid(orderId, { mollie_payment_id, sumup_tx_id } = {}) {
   return order;
 }
 
+// ── VAT helpers ──────────────────────────────────────────────────
+function vatRates() {
+  return {
+    drinks: parseFloat(getSetting('vatDrinks') || '6') || 6,
+    food: parseFloat(getSetting('vatFood') || '12') || 12,
+  };
+}
+// Resolve the effective VAT rate for a product/line: explicit per-article rate
+// wins, otherwise fall back to the drinks/food bucket.
+function resolveVatRate({ vat_rate, vat_type } = {}) {
+  const n = parseFloat(vat_rate);
+  if (vat_rate != null && !isNaN(n)) return n;
+  const r = vatRates();
+  return vat_type === 'food' ? r.food : r.drinks;
+}
+
 // ── REST API ─────────────────────────────────────────────────────
 
 // Auth
@@ -304,20 +334,22 @@ app.get('/api/products', (req, res) => {
 });
 
 app.post('/api/products', requireAuth, (req, res) => {
-  const { name, category, price, icon, vat_type, stock, low_stock } = req.body;
+  const { name, category, price, icon, vat_type, vat_rate, stock, low_stock } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
+  const rate = resolveVatRate({ vat_rate, vat_type });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
-  const r = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,sort_order) VALUES (?,?,?,?,?,?,?,?)`)
-    .run(name, category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, maxOrd+1);
+  const r = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,vat_rate,stock,low_stock,sort_order) VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(name, category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', rate, stock??-1, low_stock??5, maxOrd+1);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
 });
 
 app.put('/api/products/:id', requireAuth, (req, res) => {
-  const { name, category, price, icon, vat_type, stock, low_stock, active } = req.body;
-  db.prepare(`UPDATE products SET name=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=? WHERE id=?`)
-    .run(name, category, parseFloat(price), icon, vat_type, stock??-1, low_stock??5, active??1, req.params.id);
+  const { name, category, price, icon, vat_type, vat_rate, stock, low_stock, active } = req.body;
+  const rate = resolveVatRate({ vat_rate, vat_type });
+  db.prepare(`UPDATE products SET name=?,category=?,price=?,icon=?,vat_type=?,vat_rate=?,stock=?,low_stock=?,active=? WHERE id=?`)
+    .run(name, category, parseFloat(price), icon, vat_type, rate, stock??-1, low_stock??5, active??1, req.params.id);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -398,8 +430,14 @@ app.post('/api/orders', async (req, res) => {
     VALUES (?,?,?,?,?,?,?,?,?)`)
     .run(id, orderNumber, status, amount, method || 'cash', molliePaymentId, note || '', table_ref || '', source || 'customer');
 
-  const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
-  items.forEach(i => insertItem.run(id, i.product_id || null, i.name, i.icon || '🍺', i.price, i.qty));
+  const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty,vat_rate) VALUES (?,?,?,?,?,?,?)');
+  const getProd = db.prepare('SELECT vat_rate, vat_type FROM products WHERE id=?');
+  items.forEach(i => {
+    // Snapshot the VAT rate at sale time: explicit on the line, else from the product
+    const prod = i.product_id ? getProd.get(i.product_id) : null;
+    const rate = resolveVatRate({ vat_rate: i.vat_rate ?? prod?.vat_rate, vat_type: prod?.vat_type });
+    insertItem.run(id, i.product_id || null, i.name, i.icon || '🍺', i.price, i.qty, rate);
+  });
 
   // Deduct stock immediately when paid; otherwise wait for payment confirmation
   if (paidImmediately) deductStock(items, id);
@@ -426,6 +464,57 @@ app.post('/api/webhooks/mollie', async (req, res) => {
   } catch (e) {
     console.error('Mollie webhook fout:', e.message);
     res.status(500).end(); // non-2xx → Mollie retries later
+  }
+});
+
+// SumUp terminal — push an existing (pending) order's amount to the physical reader
+app.post('/api/pos/sumup-terminal', requireAuth, async (req, res) => {
+  const { orderId } = req.body;
+  const o = orderId ? db.prepare('SELECT * FROM orders WHERE id=?').get(orderId) : null;
+  if (!o) return res.status(404).json({ error: 'Bestelling niet gevonden' });
+  const merchantCode = getSetting('merchant');
+  const readerId = getSetting('sumupReaderId');
+  if (!merchantCode || !readerId) {
+    return res.status(400).json({ error: 'Stel eerst SumUp Merchant ID én Reader-ID in (Instellingen).' });
+  }
+  try {
+    const baseUrl = getBaseUrl(req);
+    const result = await sumupRequest('POST', `/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout`, {
+      total_amount: { value: Math.round(o.amount * 100), currency: 'EUR', minor_unit: 2 },
+      description: `Bestelling #${o.order_number}`,
+      return_url: `${baseUrl}/api/webhooks/sumup`,
+    });
+    const clientTxId = result?.data?.client_transaction_id || result?.client_transaction_id || null;
+    db.prepare("UPDATE orders SET sumup_client_tx_id=?, updated_at=datetime('now') WHERE id=?").run(clientTxId, o.id);
+    res.json({ ok: true, clientTransactionId: clientTxId });
+  } catch (e) {
+    res.status(400).json({ error: 'SumUp: ' + e.message });
+  }
+});
+
+// SumUp reader webhook — result of a terminal payment (return_url callback)
+app.post('/api/webhooks/sumup', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const payload = body.payload || body;
+    const clientTxId = payload.client_transaction_id || body.client_transaction_id;
+    const status = (payload.status || body.status || '').toString().toLowerCase();
+    const txId = payload.transaction_id || payload.id || null;
+    if (clientTxId) {
+      const o = db.prepare('SELECT * FROM orders WHERE sumup_client_tx_id=?').get(clientTxId);
+      if (o && o.status === 'pending') {
+        if (['successful', 'success', 'paid'].includes(status)) {
+          markOrderPaid(o.id, { sumup_tx_id: txId });
+        } else if (['failed', 'cancelled', 'canceled', 'timeout'].includes(status)) {
+          db.prepare("UPDATE orders SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(o.id);
+          broadcast('order_deleted', { id: o.id });
+        }
+      }
+    }
+    res.status(200).end();
+  } catch (e) {
+    console.error('SumUp webhook fout:', e.message);
+    res.status(200).end();
   }
 });
 
@@ -504,8 +593,8 @@ app.get('/api/stats', requireAuth, (req, res) => {
     SELECT COUNT(*) as total, COALESCE(SUM(amount),0) as revenue,
       COUNT(CASE WHEN method='cash' THEN 1 END) as cash_count,
       COALESCE(SUM(CASE WHEN method='cash' THEN amount END),0) as cash_revenue,
-      COUNT(CASE WHEN method='sumup' THEN 1 END) as card_count,
-      COALESCE(SUM(CASE WHEN method='sumup' THEN amount END),0) as card_revenue
+      COUNT(CASE WHEN method!='cash' THEN 1 END) as card_count,
+      COALESCE(SUM(CASE WHEN method!='cash' THEN amount END),0) as card_revenue
     FROM orders WHERE DATE(created_at)=? AND status NOT IN ('cancelled','archived','pending')
   `).get(today);
   const topProducts = db.prepare(`
@@ -580,22 +669,20 @@ app.get('/api/cashbook', requireAuth, (req, res) => {
     ORDER BY o.created_at ASC
   `).all(dateFrom, dateTo);
 
-  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
-  const vatFood = parseFloat(getSetting('vatFood') || '12');
-
   // Group by day
   const days = {};
+  const itemsStmt = db.prepare('SELECT oi.*, p.vat_type AS p_vat_type, p.vat_rate AS p_vat_rate FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?');
   orders.forEach(o => {
     if (!days[o.day]) days[o.day] = { date: o.day, orders: [], cash: 0, card: 0, total: 0, vat: {} };
     const d = days[o.day];
-    const items = db.prepare('SELECT oi.*, p.vat_type FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
+    const items = itemsStmt.all(o.id);
     d.orders.push({ ...o, items });
     if (o.method === 'cash') d.cash += o.amount;
     else d.card += o.amount;
     d.total += o.amount;
-    // VAT breakdown per line
+    // VAT breakdown per line — use the snapshot rate, fall back to the product
     items.forEach(it => {
-      const rate = it.vat_type === 'food' ? vatFood : vatDrinks;
+      const rate = resolveVatRate({ vat_rate: it.vat_rate ?? it.p_vat_rate, vat_type: it.p_vat_type });
       const lineTotal = it.price * it.qty; // incl VAT
       const excl = lineTotal / (1 + rate/100);
       const vat = lineTotal - excl;
@@ -659,15 +746,13 @@ app.post('/api/invoice/monthly', requireAuth, async (req, res) => {
 
   if (!orders.length) return res.status(400).json({ error: 'Geen ontvangsten in deze maand' });
 
-  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
-  const vatFood = parseFloat(getSetting('vatFood') || '12');
-
   // Aggregate per VAT rate (amounts incl VAT)
   const byVat = {};
+  const itemsStmt = db.prepare('SELECT oi.*, p.vat_type AS p_vat_type, p.vat_rate AS p_vat_rate FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?');
   orders.forEach(o => {
-    const items = db.prepare('SELECT oi.*, p.vat_type FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
+    const items = itemsStmt.all(o.id);
     items.forEach(it => {
-      const rate = it.vat_type === 'food' ? vatFood : vatDrinks;
+      const rate = resolveVatRate({ vat_rate: it.vat_rate ?? it.p_vat_rate, vat_type: it.p_vat_type });
       const lineTotal = it.price * it.qty;
       if (!byVat[rate]) byVat[rate] = 0;
       byVat[rate] += lineTotal;
@@ -735,15 +820,14 @@ app.get('/api/invoice/preview', requireAuth, (req, res) => {
       AND o.status NOT IN ('cancelled','archived','pending')
   `).all(dateFrom, dateTo);
 
-  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
-  const vatFood = parseFloat(getSetting('vatFood') || '12');
   const byVat = {};
   let cash = 0, card = 0;
+  const itemsStmt = db.prepare('SELECT oi.*, p.vat_type AS p_vat_type, p.vat_rate AS p_vat_rate FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?');
   orders.forEach(o => {
     if (o.method === 'cash') cash += o.amount; else card += o.amount;
-    const items = db.prepare('SELECT oi.*, p.vat_type FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
+    const items = itemsStmt.all(o.id);
     items.forEach(it => {
-      const rate = it.vat_type === 'food' ? vatFood : vatDrinks;
+      const rate = resolveVatRate({ vat_rate: it.vat_rate ?? it.p_vat_rate, vat_type: it.p_vat_type });
       const lineTotal = it.price * it.qty;
       if (!byVat[rate]) byVat[rate] = { rate, incl: 0, excl: 0, vat: 0 };
       byVat[rate].incl += lineTotal;

@@ -94,11 +94,11 @@ De app draait daarna op `http://JOUW-VPS-IP:3000`.
 Via **bar-dashboard → ⚙️ Instellingen**:
 
 - **Mollie API-sleutel** → `live_…` / `test_…` via mollie.com → Developers → API-keys (online klantbetaling; zet Bancontact actief in je Mollie-account)
-- **SumUp API-sleutel / Merchant ID** → voor de kaartlezer aan de balie
-- **BTW-tarieven** → 6% dranken / 12% maaltijden
+- **SumUp** → API-sleutel + Merchant code + **Reader-ID** voor de terminal aan de balie
+- **BTW** → standaardtarieven voor nieuwe producten (6% dranken / 12% maaltijden). **Per product** stel je een eigen tarief in (6/12/21%) via *Menu beheren*.
 - **Billit** → API-sleutel + omgeving voor de maandfactuur
 
-> Producten beheer je rechtstreeks in het systeem (bar-dashboard → POS-instellingen). De vroegere "SumUp catalog sync" is verwijderd: SumUp biedt geen publieke producten-API, dus die kon nooit werken.
+> Producten beheer je rechtstreeks in het systeem (bar-dashboard → ⚙️ Instellingen → **Menu beheren**: toevoegen, prijs, emoji, BTW-tarief, voorraad). De vroegere "SumUp catalog sync" is verwijderd: SumUp biedt geen publieke producten-API, dus die kon nooit werken.
 
 ---
 
@@ -114,9 +114,18 @@ Via **bar-dashboard → ⚙️ Instellingen**:
 
 ---
 
-## SumUp aan de balie
+## SumUp terminal aan de balie
 
-De SumUp-kaartlezer gebruik je los aan de balie. In de balie-kassa (`/pos.html`) kies je bij het afrekenen **Kaart**, rekent af op de lezer, en bevestigt de verkoop. Het systeem registreert dan een kaartbetaling voor je boekhouding (het systeem stuurt zelf niets naar de lezer).
+Met een **standalone SumUp-toestel** (Solo / terminal) stuurt de balie-kassa het bedrag rechtstreeks naar het toestel via de SumUp Reader-API:
+
+1. In `/pos.html` sla je de producten aan → **Afrekenen** → **Kaart op SumUp-toestel**
+2. Het bedrag verschijnt op de terminal; de klant betaalt
+3. Het resultaat komt binnen via de webhook (`/api/webhooks/sumup`); bij succes is de verkoop geregistreerd
+4. Als fallback is er ook **Kaart (manueel)** — voor wanneer je elders al afrekende
+
+Vereist in de instellingen: **SumUp API-sleutel**, **Merchant code** en **Reader-ID**. Het toestel moet een standalone reader zijn (een Air-lezer die via de gsm-app werkt, kan niet op afstand aangestuurd worden).
+
+> De exacte payload van de SumUp reader-webhook kan per toestel verschillen — test dit één keer met je toestel en controleer dat een betaalde verkoop in het kasdagboek verschijnt.
 
 ---
 
@@ -142,6 +151,8 @@ docker run --rm -v zomerbar_data:/data -v $(pwd):/backup alpine \
 | PATCH | `/api/orders/:id/status` | Status wijzigen |
 | GET | `/api/orders/:id/payment-status` | Betaalstatus pollen (Mollie/SumUp) |
 | POST | `/api/webhooks/mollie` | Mollie betaal-webhook |
+| POST | `/api/pos/sumup-terminal` | Bedrag naar SumUp-terminal sturen |
+| POST | `/api/webhooks/sumup` | SumUp terminal betaal-webhook |
 | GET | `/api/transactions` | Betaalde verkopen van vandaag |
 | GET | `/api/stats` | Stats van vandaag |
 | GET/POST | `/api/settings` | Instellingen |

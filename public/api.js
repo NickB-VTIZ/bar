@@ -61,6 +61,7 @@ window.API = (() => {
       confirmPayment: (id, tx) => req('POST', `/api/orders/${id}/confirm-payment`, { sumup_tx_id: tx }),
       pollPayment: (id) => req('GET', `/api/orders/${id}/payment-status`),
       remove: (id) => req('DELETE', `/api/orders/${id}`),
+      sumupTerminal: (orderId) => req('POST', '/api/pos/sumup-terminal', { orderId }),
     },
     stats: () => req('GET', '/api/stats'),
     transactions: () => req('GET', '/api/transactions'),

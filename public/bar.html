@@ -112,6 +112,30 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .settings-input{font-size:13px;padding:6px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);text-align:right;width:180px;}
 .save-btn{width:100%;padding:12px;font-size:14px;font-weight:600;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;margin-top:10px;}
 .sync-btn{width:100%;padding:11px;font-size:13px;font-weight:600;background:var(--sun-l);color:var(--sun-t);border:0.5px solid var(--sun);border-radius:var(--rm);cursor:pointer;margin-top:8px;}
+.prod-manage{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);overflow:hidden;}
+.prod-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--bd);}
+.prod-row:last-child{border-bottom:none;}
+.prod-row-icon{font-size:20px;width:28px;text-align:center;}
+.prod-row-info{flex:1;min-width:0;}
+.prod-row-name{font-size:14px;font-weight:500;}
+.prod-row-sub{font-size:12px;color:var(--mu);}
+.prod-row-price{font-size:14px;font-weight:500;margin-right:6px;}
+.icon-btn{width:32px;height:32px;border-radius:var(--rm);border:0.5px solid var(--bd);background:var(--bg);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.prod-edit{padding:12px 14px;background:var(--sun-l);border-bottom:0.5px solid var(--bd);}
+.prod-edit label{font-size:11px;font-weight:500;color:var(--sun-t);display:block;margin:6px 0 3px;}
+.prod-edit input,.prod-edit select{width:100%;font-size:13px;padding:7px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:#fff;color:var(--tx);}
+.prod-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.prod-edit-btns{display:flex;gap:8px;margin-top:10px;}
+.prod-edit-btns button{flex:1;padding:9px;font-size:13px;font-weight:600;border:none;border-radius:var(--rm);cursor:pointer;}
+.add-prod-form{background:var(--card);border:0.5px solid var(--sun);border-radius:var(--r);padding:14px;margin-top:10px;display:none;}
+.add-prod-form.show{display:block;}
+.add-prod-form label{font-size:11px;font-weight:500;color:var(--mu);display:block;margin-bottom:4px;margin-top:8px;}
+.add-prod-form label:first-child{margin-top:0;}
+.add-prod-form input,.add-prod-form select{width:100%;font-size:13px;padding:8px 11px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);}
+.add-prod-btns{display:flex;gap:8px;margin-top:12px;}
+.add-prod-btns button{flex:1;padding:10px;font-size:13px;font-weight:600;border:none;border-radius:var(--rm);cursor:pointer;}
+.btn-primary{background:var(--sun);color:var(--sun-t);}
+.btn-ghost{background:var(--bg);border:0.5px solid var(--bd);color:var(--tx);}
 
 .sound-btn{position:fixed;bottom:16px;right:16px;width:44px;height:44px;border-radius:50%;background:var(--card);border:0.5px solid var(--bd);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:30;}
 
@@ -174,13 +198,14 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
       </div>
     </div>
     <div class="settings-sec">
-      <div class="settings-sec-title">SumUp (kaartlezer aan de balie)</div>
+      <div class="settings-sec-title">SumUp terminal (balie)</div>
       <div class="settings-card">
         <div class="settings-row"><div class="settings-label">API-sleutel</div><input class="settings-input" id="s-sumup" type="password" placeholder="sup_sk_…"></div>
-        <div class="settings-row"><div class="settings-label">Merchant ID</div><input class="settings-input" id="s-merchant" placeholder="MXXXXXXX"></div>
+        <div class="settings-row"><div class="settings-label">Merchant code</div><input class="settings-input" id="s-merchant" placeholder="MXXXXXXX"></div>
+        <div class="settings-row"><div class="settings-label">Reader-ID</div><input class="settings-input" id="s-sumup-reader" placeholder="rdr_XXXXXXXX"></div>
       </div>
       <div style="font-size:12px;color:var(--mu);margin-top:8px;line-height:1.5;">
-        De SumUp-lezer gebruik je aan de balie. In de balie-kassa registreer je een kaartbetaling nadat ze op de lezer geslaagd is.
+        Met deze gegevens stuurt de balie-kassa het bedrag rechtstreeks naar het SumUp-toestel. Reader-ID vind je via SumUp → toestelinstellingen (of de API <span style="color:var(--teal-d)">/v0.1/merchants/&lt;code&gt;/readers</span>).
       </div>
     </div>
     <div class="settings-sec">
@@ -194,14 +219,36 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
       </div>
     </div>
     <div class="settings-sec">
-      <div class="settings-sec-title">BTW-tarieven</div>
+      <div class="settings-sec-title">BTW — standaardtarieven</div>
       <div class="settings-card">
         <div class="settings-row"><div class="settings-label">Dranken</div>
           <select class="settings-input" id="s-vat-drinks"><option value="21">21%</option><option value="12">12%</option><option value="6" selected>6%</option></select></div>
         <div class="settings-row"><div class="settings-label">Maaltijden</div>
           <select class="settings-input" id="s-vat-food"><option value="21">21%</option><option value="12" selected>12%</option><option value="6">6%</option></select></div>
       </div>
+      <div style="font-size:12px;color:var(--mu);margin-top:8px;line-height:1.5;">
+        Dit zijn standaardtarieven voor nieuwe producten. Per product kun je hieronder een eigen BTW-tarief instellen.
+      </div>
       <button class="save-btn" onclick="saveSettings()">Opslaan</button>
+    </div>
+
+    <div class="settings-sec">
+      <div class="settings-sec-title">Menu beheren</div>
+      <div class="prod-manage" id="prod-manage"></div>
+      <div class="add-prod-form" id="add-prod-form">
+        <label>Naam</label><input id="np-name" placeholder="Rosé">
+        <label>Categorie</label><input id="np-cat" placeholder="Wijnen">
+        <label>Prijs (€)</label><input id="np-price" type="number" step="0.5" placeholder="4.50">
+        <label>Emoji</label><input id="np-icon" placeholder="🍷">
+        <label>BTW-tarief</label>
+        <select id="np-vat"><option value="6">6%</option><option value="12">12%</option><option value="21">21%</option></select>
+        <label>Startvoorraad (leeg = onbeperkt)</label><input id="np-stock" type="number" placeholder="∞">
+        <div class="add-prod-btns">
+          <button class="btn-ghost" onclick="document.getElementById('add-prod-form').classList.remove('show')">Annuleren</button>
+          <button class="btn-primary" onclick="saveNewProduct()">Toevoegen</button>
+        </div>
+      </div>
+      <button class="save-btn" style="background:var(--sun);color:var(--sun-t);" onclick="document.getElementById('add-prod-form').classList.toggle('show')">+ Product toevoegen</button>
     </div>
     <div class="settings-sec">
       <div class="settings-sec-title">Balie-kassa</div>
@@ -351,7 +398,7 @@ function cardHTML(o){
     </div>
     <div class="card-items">${items}</div>
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
-    <div class="card-method">${o.method==='sumup'?'💳 Kaart':'💶 Cash'}</div>
+    <div class="card-method">${o.method==='sumup'?'💳 Kaart':o.method==='mollie'?'🌐 Online':'💶 Cash'}</div>
     ${actions}
   </div>`;
 }
@@ -424,6 +471,7 @@ async function loadSettings(){
   if(s.mollieKey)document.getElementById('s-mollie').value=s.mollieKey;
   if(s.sumupKey)document.getElementById('s-sumup').value=s.sumupKey;
   if(s.merchant)document.getElementById('s-merchant').value=s.merchant;
+  if(s.sumupReaderId)document.getElementById('s-sumup-reader').value=s.sumupReaderId;
   if(s.billitApiKey)document.getElementById('s-billit-key').value=s.billitApiKey;
   if(s.billitEnv)document.getElementById('s-billit-env').value=s.billitEnv;
   if(s.barName)document.getElementById('s-bar-name').value=s.barName;
@@ -431,6 +479,8 @@ async function loadSettings(){
   if(s.vatDrinks)document.getElementById('s-vat-drinks').value=s.vatDrinks;
   if(s.vatFood)document.getElementById('s-vat-food').value=s.vatFood;
   document.getElementById('bestel-url').textContent=location.origin+'/bestel.html';
+  if(!products.length) products=await API.products.list();
+  renderProdManage();
 }
 
 async function saveSettings(){
@@ -438,6 +488,7 @@ async function saveSettings(){
     mollieKey:document.getElementById('s-mollie').value,
     sumupKey:document.getElementById('s-sumup').value,
     merchant:document.getElementById('s-merchant').value,
+    sumupReaderId:document.getElementById('s-sumup-reader').value,
     billitApiKey:document.getElementById('s-billit-key').value,
     billitEnv:document.getElementById('s-billit-env').value,
     barName:document.getElementById('s-bar-name').value,
@@ -468,6 +519,92 @@ async function logout(){
 function copyBestelUrl(){
   navigator.clipboard.writeText(location.origin+'/bestel.html');
   toast('✅ URL gekopieerd');
+}
+
+// ── Menu beheren (producten + per-artikel BTW) ──
+let editingProductId = null;
+const vatOf = p => p.vat_rate!=null ? p.vat_rate : (p.vat_type==='food'?12:6);
+const escapeAttr = s => String(s||'').replace(/"/g,'&quot;');
+
+function renderProdManage(){
+  const el=document.getElementById('prod-manage');
+  if(!el) return;
+  el.innerHTML=products.map(p=>{
+    if(editingProductId===p.id) return prodEditHTML(p);
+    const stock=p.stock<0?'∞':p.stock;
+    return `<div class="prod-row">
+      <span class="prod-row-icon">${p.icon}</span>
+      <div class="prod-row-info"><div class="prod-row-name">${p.name}</div><div class="prod-row-sub">${p.category} · ${vatOf(p)}% BTW · voorraad ${stock}</div></div>
+      <span class="prod-row-price">€ ${p.price.toFixed(2).replace('.',',')}</span>
+      <button class="icon-btn" onclick="toggleEdit(${p.id})" title="Bewerken">✏️</button>
+      <button class="icon-btn" onclick="deleteProduct(${p.id})" title="Verwijderen">🗑</button>
+    </div>`;
+  }).join('') || '<div style="padding:14px;font-size:13px;color:var(--mu)">Nog geen producten</div>';
+}
+
+function prodEditHTML(p){
+  const vat=vatOf(p);
+  const opt=r=>`<option value="${r}" ${vat==r?'selected':''}>${r}%</option>`;
+  return `<div class="prod-edit">
+    <label>Naam</label><input id="e-name-${p.id}" value="${escapeAttr(p.name)}">
+    <div class="prod-edit-grid">
+      <div><label>Categorie</label><input id="e-cat-${p.id}" value="${escapeAttr(p.category)}"></div>
+      <div><label>Emoji</label><input id="e-icon-${p.id}" value="${escapeAttr(p.icon)}"></div>
+    </div>
+    <div class="prod-edit-grid">
+      <div><label>Prijs (€)</label><input id="e-price-${p.id}" type="number" step="0.5" value="${p.price}"></div>
+      <div><label>BTW-tarief</label><select id="e-vat-${p.id}">${opt(6)}${opt(12)}${opt(21)}</select></div>
+    </div>
+    <div class="prod-edit-btns">
+      <button class="btn-ghost" onclick="toggleEdit(null)">Annuleren</button>
+      <button class="btn-primary" onclick="saveProduct(${p.id})">Opslaan</button>
+    </div>
+  </div>`;
+}
+
+function toggleEdit(id){ editingProductId = (editingProductId===id ? null : id); renderProdManage(); }
+
+async function saveProduct(id){
+  const p=products.find(x=>x.id===id); if(!p)return;
+  const body={
+    name:document.getElementById('e-name-'+id).value.trim(),
+    category:document.getElementById('e-cat-'+id).value.trim()||'Overige',
+    icon:document.getElementById('e-icon-'+id).value.trim()||'🍺',
+    price:parseFloat(document.getElementById('e-price-'+id).value),
+    vat_rate:parseFloat(document.getElementById('e-vat-'+id).value),
+    vat_type:p.vat_type, stock:p.stock, low_stock:p.low_stock, active:1,
+  };
+  if(!body.name||isNaN(body.price)){toast('Naam en prijs verplicht');return;}
+  try{
+    const updated=await API.products.update(id,body);
+    const i=products.findIndex(x=>x.id===id); if(i>=0)products[i]=updated;
+    editingProductId=null; renderProdManage(); toast('✅ Product opgeslagen');
+  }catch(e){toast('Fout: '+e.message);}
+}
+
+async function deleteProduct(id){
+  if(!confirm('Product verwijderen?'))return;
+  try{ await API.products.remove(id); products=products.filter(p=>p.id!==id); renderProdManage(); toast('Product verwijderd'); }
+  catch(e){toast('Fout: '+e.message);}
+}
+
+async function saveNewProduct(){
+  const name=document.getElementById('np-name').value.trim();
+  const category=document.getElementById('np-cat').value.trim()||'Overige';
+  const price=parseFloat(document.getElementById('np-price').value);
+  const icon=document.getElementById('np-icon').value.trim()||'🍺';
+  const vat_rate=parseFloat(document.getElementById('np-vat').value);
+  const stockRaw=document.getElementById('np-stock').value.trim();
+  const stock=stockRaw===''?-1:parseInt(stockRaw);
+  if(!name||isNaN(price)){toast('Vul naam en prijs in');return;}
+  const vat_type=vat_rate>=12?'food':'drinks';
+  try{
+    const p=await API.products.add({name,category,price,icon,vat_rate,vat_type,stock});
+    products.push(p);
+    document.getElementById('add-prod-form').classList.remove('show');
+    ['np-name','np-cat','np-price','np-icon','np-stock'].forEach(id=>document.getElementById(id).value='');
+    renderProdManage(); toast('✅ Product toegevoegd');
+  }catch(e){toast('Fout: '+e.message);}
 }
 
 function toast(msg){
