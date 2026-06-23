@@ -88,6 +88,7 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN phone TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN table_ref TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN sumup_tx_id TEXT`,
+  `ALTER TABLE orders ADD COLUMN mollie_payment_id TEXT`,
   `ALTER TABLE products ADD COLUMN sumup_id TEXT`,
   `ALTER TABLE products ADD COLUMN low_stock INTEGER NOT NULL DEFAULT 5`,
 ];
@@ -206,6 +207,36 @@ async function notifyOrderReady(order) {
   const msg = `${barName}: Bestelling #${order.order_number} is klaar! Haal op aan de bar. Smakelijk! ☀️`;
   try { await sendSMS(order.phone, msg); }
   catch (e) { console.error('SMS mislukt:', e.message); }
+}
+
+// ── Mollie Bancontact ────────────────────────────────────────────
+function getMollieClient() {
+  const key = getSetting('mollieKey');
+  if (!key) return null;
+  try {
+    const { createMollieClient } = require('@mollie/api-client');
+    return createMollieClient({ apiKey: key });
+  } catch { return null; }
+}
+
+async function createMolliePayment(order, redirectUrl) {
+  const mollie = getMollieClient();
+  if (!mollie) return null;
+  const barName = getSetting('barName') || 'Zomerbar';
+  const payment = await mollie.payments.create({
+    amount: { currency: 'EUR', value: order.amount.toFixed(2) },
+    description: `${barName} — Bestelling #${order.order_number}`,
+    redirectUrl: redirectUrl || `${getSetting('siteUrl') || ''}/bestel.html?order=${order.id}&mollie=return`,
+    method: 'bancontact',
+    metadata: { order_id: order.id, order_number: String(order.order_number) },
+  });
+  return payment;
+}
+
+async function checkMolliePayment(paymentId) {
+  const mollie = getMollieClient();
+  if (!mollie) return null;
+  return mollie.payments.get(paymentId);
 }
 function hashPassword(pw) {
   return crypto.createHash('sha256').update(pw).digest('hex');
@@ -380,7 +411,7 @@ app.get('/api/orders/:id', (req, res) => {
 
 // Create order + SumUp checkout
 app.post('/api/orders', async (req, res) => {
-  const { items, method, note, table_ref, phone } = req.body;
+  const { items, method, note, table_ref, phone, redirect_url } = req.body;
   if (!items?.length) return res.status(400).json({ error: 'Geen items' });
 
   // Validate stock
@@ -396,39 +427,41 @@ app.post('/api/orders', async (req, res) => {
   const id = generateOrderId();
   const orderNumber = nextOrderNumber();
   const amount = items.reduce((s, i) => s + i.price * i.qty, 0);
-  let sumupCheckoutId = null;
+  let molliePaymentId = null;
+  let mollieCheckoutUrl = null;
 
-  // Create SumUp checkout for card payments
-  if (method === 'sumup') {
-    try {
-      const checkout = await sumupRequest('POST', '/v0.1/checkouts', {
-        checkout_reference: id,
-        amount: parseFloat(amount.toFixed(2)),
-        currency: 'EUR',
-        description: `Bestelling #${orderNumber} — Zomerbar`,
-        redirect_url: null,
-      });
-      sumupCheckoutId = checkout.id;
-    } catch(e) {
-      console.error('SumUp checkout fout:', e.message);
-    }
-  }
-
+  // Cash = immediately paid, mollie = pending until webhook/return
   const status = method === 'cash' ? 'paid' : 'pending';
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,sumup_checkout_id,note,phone,table_ref)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, method||'sumup', sumupCheckoutId, note||'', phone||'', table_ref||'');
+
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref)
+    VALUES (?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, method||'cash', note||'', phone||'', table_ref||'');
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
 
-  // Deduct stock immediately for cash, wait for payment confirmation for card
+  // Deduct stock immediately for cash
   if (method === 'cash') {
-    deductStock(items.map((i,_) => ({...i, product_id: i.product_id})), id);
+    deductStock(items.map(i => ({...i})), id);
+  }
+
+  // Create Mollie Bancontact payment
+  if (method === 'mollie') {
+    try {
+      const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
+      const payment = await createMolliePayment(order, redirect_url);
+      if (payment) {
+        molliePaymentId = payment.id;
+        mollieCheckoutUrl = payment._links.checkout?.href || payment.checkoutUrl;
+        db.prepare('UPDATE orders SET mollie_payment_id=? WHERE id=?').run(molliePaymentId, id);
+      }
+    } catch(e) {
+      console.error('Mollie fout:', e.message);
+    }
   }
 
   const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
   broadcast('order_created', { order });
-  res.json({ order, sumupCheckoutId });
+  res.json({ order, mollieCheckoutUrl, molliePaymentId });
 });
 
 // SumUp payment webhook / poll
@@ -449,27 +482,48 @@ app.post('/api/orders/:id/confirm-payment', async (req, res) => {
   res.json(order);
 });
 
-// Poll SumUp checkout status
+// Poll SumUp checkout status (kept for compatibility)
 app.get('/api/orders/:id/payment-status', async (req, res) => {
   const o = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Niet gevonden' });
-  if (o.status !== 'pending' || !o.sumup_checkout_id) return res.json({ status: o.status });
+  if (o.status !== 'pending') return res.json({ status: o.status });
 
+  // Check Mollie payment
+  if (o.mollie_payment_id) {
+    try {
+      const payment = await checkMolliePayment(o.mollie_payment_id);
+      if (payment && payment.status === 'paid') {
+        db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
+        const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
+        deductStock(items, o.id);
+        const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
+        broadcast('order_updated', { order: updated });
+        return res.json({ status: 'paid', order: updated });
+      }
+      return res.json({ status: payment?.status || 'pending' });
+    } catch(e) { return res.json({ status: 'pending' }); }
+  }
+  res.json({ status: o.status });
+});
+
+// Mollie webhook — called by Mollie when payment status changes
+app.post('/api/mollie/webhook', async (req, res) => {
+  const { id: paymentId } = req.body;
+  res.status(200).send('OK'); // Always respond 200 first
+  if (!paymentId) return;
   try {
-    const checkout = await sumupRequest('GET', `/v0.1/checkouts/${o.sumup_checkout_id}`);
-    if (checkout.status === 'PAID') {
-      db.prepare("UPDATE orders SET status='paid', sumup_tx_id=?, updated_at=datetime('now') WHERE id=?")
-        .run(checkout.transaction_id || null, o.id);
+    const payment = await checkMolliePayment(paymentId);
+    if (!payment) return;
+    const o = db.prepare('SELECT * FROM orders WHERE mollie_payment_id=?').get(paymentId);
+    if (!o || o.status === 'paid') return;
+    if (payment.status === 'paid') {
+      db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
       const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
       deductStock(items, o.id);
       const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
       broadcast('order_updated', { order: updated });
-      return res.json({ status: 'paid', order: updated });
     }
-    res.json({ status: checkout.status?.toLowerCase() || 'pending' });
-  } catch(e) {
-    res.json({ status: o.status });
-  }
+  } catch(e) { console.error('Mollie webhook fout:', e.message); }
 });
 
 // Update order status (bar dashboard)

@@ -5,7 +5,6 @@ window.API = (() => {
   function on(e, fn) { (listeners[e] = listeners[e]||[]).push(fn); }
   function emit(e, d) { (listeners[e]||[]).forEach(fn=>fn(d)); (listeners['*']||[]).forEach(fn=>fn(e,d)); }
 
-  // WebSocket — verbindt op de achtergrond, blokkeert niets
   function connect() {
     try {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -18,7 +17,6 @@ window.API = (() => {
       reconnectTimer = setTimeout(connect, 3000);
     }
   }
-  // Start WS verbinding zonder te wachten
   setTimeout(connect, 100);
 
   async function req(method, url, body) {
@@ -60,13 +58,13 @@ window.API = (() => {
       syncSumup: ()       => req('POST',   '/api/products/sync-sumup'),
     },
     orders: {
-      list:           ()        => req('GET',   '/api/orders'),
-      get:            (id)      => req('GET',   `/api/orders/${id}`),
-      create:         (o)       => req('POST',  '/api/orders', o),
-      setStatus:      (id, s)   => req('PATCH', `/api/orders/${id}/status`, { status: s }),
-      confirmPayment: (id, tx)  => req('POST',  `/api/orders/${id}/confirm-payment`, { sumup_tx_id: tx }),
-      pollPayment:    (id)      => req('GET',   `/api/orders/${id}/payment-status`),
-      remove:         (id)      => req('DELETE',`/api/orders/${id}`),
+      list:           ()        => req('GET',    '/api/orders'),
+      get:            (id)      => req('GET',    `/api/orders/${id}`),
+      create:         (o)       => req('POST',   '/api/orders', o),
+      setStatus:      (id, s)   => req('PATCH',  `/api/orders/${id}/status`, { status: s }),
+      confirmPayment: (id, tx)  => req('POST',   `/api/orders/${id}/confirm-payment`, { sumup_tx_id: tx }),
+      pollPayment:    (id)      => req('GET',    `/api/orders/${id}/payment-status`),
+      remove:         (id)      => req('DELETE', `/api/orders/${id}`),
     },
     stats:        ()            => req('GET',  '/api/stats'),
     cashbook:     (from, to)    => req('GET',  `/api/cashbook?from=${from}&to=${to}`),
@@ -76,37 +74,6 @@ window.API = (() => {
     },
     settings: {
       get:  ()  => req('GET',  '/api/settings'),
-      save: (s) => req('POST', '/api/settings', s),
-    },
-    stock: { log: () => req('GET', '/api/stock/log') },
-  };
-})();
-
-    products: {
-      list: () => req('GET', '/api/products'),
-      add: (p) => req('POST', '/api/products', p),
-      update: (id, p) => req('PUT', `/api/products/${id}`, p),
-      setStock: (id, stock) => req('PATCH', `/api/products/${id}/stock`, { stock }),
-      remove: (id) => req('DELETE', `/api/products/${id}`),
-      syncSumup: () => req('POST', '/api/products/sync-sumup'),
-    },
-    orders: {
-      list: () => req('GET', '/api/orders'),
-      get: (id) => req('GET', `/api/orders/${id}`),
-      create: (o) => req('POST', '/api/orders', o),
-      setStatus: (id, status) => req('PATCH', `/api/orders/${id}/status`, { status }),
-      confirmPayment: (id, tx) => req('POST', `/api/orders/${id}/confirm-payment`, { sumup_tx_id: tx }),
-      pollPayment: (id) => req('GET', `/api/orders/${id}/payment-status`),
-      remove: (id) => req('DELETE', `/api/orders/${id}`),
-    },
-    stats: () => req('GET', '/api/stats'),
-    cashbook: (from, to) => req('GET', `/api/cashbook?from=${from}&to=${to}`),
-    invoice: {
-      preview: (year, month) => req('GET', `/api/invoice/preview?year=${year}&month=${month}`),
-      createMonthly: (year, month) => req('POST', '/api/invoice/monthly', { year, month }),
-    },
-    settings: {
-      get: () => req('GET', '/api/settings'),
       save: (s) => req('POST', '/api/settings', s),
     },
     stock: { log: () => req('GET', '/api/stock/log') },

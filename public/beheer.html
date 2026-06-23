@@ -144,7 +144,25 @@ select.inp{cursor:pointer;}
 <div id="screen-sumup" class="screen">
   <div class="wrap">
     <div class="sec">
-      <div class="sec-title">SumUp API</div>
+      <div class="sec-title">Mollie Bancontact</div>
+      <div class="card">
+        <div class="row">
+          <div><div class="row-label">API-sleutel</div><div class="row-sub">Live sleutel via my.mollie.com → Developers → API keys</div></div>
+          <input class="inp" id="s-mollie" type="password" placeholder="live_…">
+        </div>
+        <div class="row">
+          <div><div class="row-label">Website URL</div><div class="row-sub">Volledige URL van je bar (voor redirect na betaling)</div></div>
+          <input class="inp" id="s-site-url" placeholder="https://jouwbar.be">
+        </div>
+      </div>
+      <button class="btn btn-teal btn-full" onclick="saveMollie()">Opslaan</button>
+      <div style="margin-top:10px;background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--teal-d);line-height:1.6;">
+        <strong>Mollie webhook:</strong> Stel in via my.mollie.com → Developers → Webhooks:<br>
+        <code style="background:var(--card);padding:2px 6px;border-radius:4px;">https://JOUW-URL/api/mollie/webhook</code>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-title">SumUp (optioneel)</div>
       <div class="card">
         <div class="row"><div><div class="row-label">API-sleutel</div><div class="row-sub">sup_sk_… via me.sumup.com/settings/api-keys</div></div><input class="inp" id="s-sumup" type="password" placeholder="sup_sk_…"></div>
         <div class="row"><div class="row-label">Merchant ID</div><input class="inp" id="s-merchant" placeholder="MXXXXXXX"></div>
@@ -408,6 +426,8 @@ async function setStockManual(id) {
 // ── Settings helpers ─────────────────────────────────────────────
 function loadSettingsToForm() {
   const s = settings;
+  if(s.mollieKey)   document.getElementById('s-mollie').value=s.mollieKey;
+  if(s.siteUrl)     document.getElementById('s-site-url').value=s.siteUrl;
   if(s.sumupKey)    document.getElementById('s-sumup').value=s.sumupKey;
   if(s.merchant)    document.getElementById('s-merchant').value=s.merchant;
   if(s.twilioAccountSid) document.getElementById('s-twilio-sid').value=s.twilioAccountSid;
@@ -419,6 +439,14 @@ function loadSettingsToForm() {
   if(s.barVat)       document.getElementById('s-bar-vat').value=s.barVat;
   if(s.vatDrinks)    document.getElementById('s-vat-drinks').value=s.vatDrinks;
   if(s.vatFood)      document.getElementById('s-vat-food').value=s.vatFood;
+}
+
+async function saveMollie() {
+  await API.settings.save({
+    mollieKey: document.getElementById('s-mollie').value,
+    siteUrl: document.getElementById('s-site-url').value,
+  });
+  toast('✅ Mollie instellingen opgeslagen');
 }
 
 async function saveSumup() {

@@ -185,6 +185,40 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 </div>
 
 <button class="sound-btn" id="sound-btn" onclick="toggleSound()">🔔</button>
+
+<!-- Quick order FAB -->
+<button onclick="openQuickOrder()" style="position:fixed;bottom:72px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--teal);color:#fff;font-size:24px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:30;box-shadow:0 3px 10px rgba(0,0,0,.15);" title="Nieuwe bestelling">+</button>
+
+<!-- Quick order sheet -->
+<div id="quick-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;align-items:flex-end;justify-content:center;">
+  <div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;">
+    <div style="width:36px;height:4px;background:var(--bd);border-radius:2px;margin:0 auto 16px;"></div>
+    <div style="font-size:17px;font-weight:600;margin-bottom:4px;color:var(--tx);">Snelle bestelling</div>
+    <div style="font-size:13px;color:var(--mu);margin-bottom:14px;">Voeg een bestelling toe namens de klant</div>
+
+    <!-- Products quick grid -->
+    <div id="qo-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;"></div>
+
+    <!-- Cart summary -->
+    <div id="qo-cart" style="background:var(--bg);border-radius:var(--rm);padding:10px 12px;margin-bottom:10px;min-height:40px;font-size:13px;color:var(--mu);">Niets gekozen</div>
+
+    <input id="qo-note" type="text" placeholder="Opmerking (optioneel)" style="width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:10px;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div id="qo-pm-cash" class="method-btn" onclick="qoSelPay('cash')" style="padding:12px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);cursor:pointer;text-align:center;">
+        <div style="font-size:20px;margin-bottom:4px;">💶</div>
+        <div style="font-size:13px;font-weight:600;color:var(--sun-t);">Cash</div>
+      </div>
+      <div id="qo-pm-mollie" class="method-btn" onclick="qoSelPay('mollie')" style="padding:12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
+        <div style="font-size:20px;margin-bottom:4px;">🏦</div>
+        <div style="font-size:13px;font-weight:600;color:var(--tx);">Bancontact</div>
+      </div>
+    </div>
+
+    <button onclick="submitQuickOrder()" style="width:100%;padding:14px;font-size:15px;font-weight:600;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;margin-bottom:8px;" id="qo-submit-btn">Bestelling plaatsen</button>
+    <button onclick="closeQuickOrder()" style="width:100%;padding:11px;font-size:14px;background:none;border:none;color:var(--mu);cursor:pointer;">Annuleren</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script src="/api.js"></script>
@@ -321,6 +355,88 @@ function toast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── Quick order ──────────────────────────────────────────────────
+let qoCart = {}, qoPayMethod = 'cash';
+
+function openQuickOrder() {
+  qoCart = {}; qoPayMethod = 'cash';
+  renderQoGrid(); renderQoCart();
+  document.getElementById('qo-note').value = '';
+  document.getElementById('quick-overlay').style.display = 'flex';
+}
+
+function closeQuickOrder() {
+  document.getElementById('quick-overlay').style.display = 'none';
+}
+
+function renderQoGrid() {
+  document.getElementById('qo-grid').innerHTML = products.map(p => {
+    const qty = qoCart[p.id] || 0;
+    return `<div onclick="qoAddItem(${p.id})" style="background:${qty>0?'var(--sun-l)':'var(--bg)'};border:0.5px solid ${qty>0?'var(--sun)':'var(--bd)'};border-radius:var(--rm);padding:10px 6px;text-align:center;cursor:pointer;position:relative;transition:all .12s;">
+      ${qty>0?`<div style="position:absolute;top:4px;right:4px;background:var(--sun);color:var(--sun-t);font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;">${qty}</div>`:''}
+      <div style="font-size:20px;margin-bottom:4px;">${p.icon}</div>
+      <div style="font-size:11px;font-weight:500;color:var(--tx);line-height:1.2;">${p.name}</div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px;">€ ${p.price.toFixed(2).replace('.',',')}</div>
+    </div>`;
+  }).join('');
+}
+
+function qoAddItem(id) {
+  qoCart[id] = (qoCart[id] || 0) + 1;
+  renderQoGrid(); renderQoCart();
+}
+
+function renderQoCart() {
+  const entries = Object.entries(qoCart).filter(([,q]) => q > 0);
+  if (!entries.length) {
+    document.getElementById('qo-cart').textContent = 'Niets gekozen';
+    document.getElementById('qo-submit-btn').disabled = true;
+    return;
+  }
+  document.getElementById('qo-submit-btn').disabled = false;
+  const total = entries.reduce((s,[id,q]) => { const p=products.find(x=>x.id==id); return s+(p?p.price*q:0); },0);
+  document.getElementById('qo-cart').innerHTML = entries.map(([id,q]) => {
+    const p = products.find(x=>x.id==id); if(!p) return '';
+    return `<span style="margin-right:10px;">${p.icon} ${p.name} ×${q}</span>`;
+  }).join('') + `<strong style="float:right;color:var(--tx);">€ ${total.toFixed(2).replace('.',',')}</strong>`;
+}
+
+function qoSelPay(m) {
+  qoPayMethod = m;
+  const cash = document.getElementById('qo-pm-cash');
+  const mollie = document.getElementById('qo-pm-mollie');
+  if (m === 'cash') {
+    cash.style.border = '0.5px solid var(--sun)'; cash.style.background = 'var(--sun-l)';
+    mollie.style.border = '0.5px solid var(--bd)'; mollie.style.background = 'var(--bg)';
+  } else {
+    mollie.style.border = '0.5px solid var(--teal)'; mollie.style.background = 'var(--teal-l)';
+    cash.style.border = '0.5px solid var(--bd)'; cash.style.background = 'var(--bg)';
+  }
+}
+
+async function submitQuickOrder() {
+  const entries = Object.entries(qoCart).filter(([,q]) => q > 0);
+  if (!entries.length) return;
+  const items = entries.map(([id,qty]) => {
+    const p = products.find(x=>x.id==id);
+    return p ? { product_id:p.id, name:p.name, icon:p.icon, price:p.price, qty } : null;
+  }).filter(Boolean);
+  const btn = document.getElementById('qo-submit-btn');
+  btn.disabled = true; btn.textContent = 'Plaatsen…';
+  try {
+    await API.orders.create({
+      items, method: qoPayMethod,
+      note: document.getElementById('qo-note').value || '',
+      phone: '',
+    });
+    closeQuickOrder();
+    toast('✅ Bestelling toegevoegd');
+  } catch(e) {
+    toast('Fout: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Bestelling plaatsen';
+  }
 }
 
 // Init

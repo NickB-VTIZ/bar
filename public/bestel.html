@@ -81,13 +81,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .cancel-btn{width:100%;padding:11px;background:none;border:none;font-size:14px;color:var(--mu);cursor:pointer;}
 
 /* Status / confirmation screen */
-.status-screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:60;flex-direction:column;align-items:center;padding:40px 24px;}
+.status-screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:60;flex-direction:column;align-items:center;padding:32px 24px;overflow-y:auto;}
 .status-screen.show{display:flex;}
-.status-icon-big{font-size:64px;margin-bottom:16px;}
-.status-number{font-size:72px;font-weight:600;color:var(--sun-d);line-height:1;margin:8px 0;}
-.status-number-label{font-size:15px;color:var(--mu);margin-bottom:24px;}
+.status-icon-big{font-size:72px;margin-bottom:12px;}
+.status-number{font-size:96px;font-weight:700;color:var(--sun-d);line-height:1;margin:4px 0;}
+.status-number-label{font-size:16px;color:var(--mu);margin-bottom:12px;}
+.status-amount{font-size:28px;font-weight:600;color:var(--tx);margin-bottom:8px;}
+.status-amount-label{font-size:13px;color:var(--mu);margin-bottom:20px;}
 .status-title{font-size:22px;font-weight:600;margin-bottom:8px;text-align:center;}
-.status-sub{font-size:15px;color:var(--mu);text-align:center;line-height:1.6;margin-bottom:28px;}
+.status-sub{font-size:15px;color:var(--mu);text-align:center;line-height:1.6;margin-bottom:20px;}
 .status-card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 20px;width:100%;max-width:360px;margin-bottom:16px;}
 .status-step{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:14px;border-bottom:0.5px solid var(--bd);}
 .status-step:last-child{border-bottom:none;}
@@ -96,6 +98,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .step-dot.active{background:var(--sun);}
 .step-dot.waiting{background:var(--bd);}
 .new-order-btn{padding:13px 28px;font-size:14px;font-weight:600;background:var(--sun);color:var(--sun-t);border:none;border-radius:var(--r);cursor:pointer;}
+.cash-pay-btn{width:100%;max-width:360px;padding:18px;font-size:18px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--r);cursor:pointer;margin-bottom:14px;display:none;align-items:center;justify-content:center;gap:10px;}
+.cash-pay-btn.show{display:flex;}
 
 /* SumUp payment pending */
 .pay-pending{background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:16px;display:none;}
@@ -148,18 +152,18 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
     <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">* Verplicht — je ontvangt een SMS wanneer je bestelling klaar is</div>
     <div style="font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Betaalmethode</div>
     <div class="pay-methods">
-      <div class="pay-method sel" id="pm-sumup" onclick="selPay('sumup')">
-        <div class="pay-method-icon">💳</div>
-        <div class="pay-method-label">Kaart</div>
-        <div class="pay-method-sub">Via SumUp</div>
+      <div class="pay-method sel" id="pm-mollie" onclick="selPay('mollie')">
+        <div class="pay-method-icon">🏦</div>
+        <div class="pay-method-label">Bancontact</div>
+        <div class="pay-method-sub">Online betalen</div>
       </div>
       <div class="pay-method" id="pm-cash" onclick="selPay('cash')">
         <div class="pay-method-icon">💶</div>
         <div class="pay-method-label">Cash</div>
-        <div class="pay-method-sub">Aan de bar</div>
+        <div class="pay-method-sub">Betaal aan de bar</div>
       </div>
     </div>
-    <button class="order-btn" id="place-order-btn" onclick="placeOrder()">✅ Bestelling plaatsen</button>
+    <button class="order-btn" id="place-order-btn" onclick="placeOrder()">Bestelling plaatsen</button>
     <button class="cancel-btn" onclick="closeCart()">Annuleren</button>
   </div>
 </div>
@@ -170,14 +174,21 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
   <div style="font-size:14px;color:var(--mu);margin-bottom:4px;">Jouw bestelnummer</div>
   <div class="status-number" id="st-number">—</div>
   <div class="status-number-label">Toon dit nummer aan de bar</div>
+  <div class="status-amount" id="st-amount">€ 0,00</div>
+  <div class="status-amount-label" id="st-amount-label">Te betalen</div>
   <div class="status-title" id="st-title">Bestelling geplaatst</div>
   <div class="status-sub" id="st-sub">Even geduld</div>
 
   <div class="pay-pending" id="pay-pending">
-    <div class="pay-pending-title">💳 Betaal via SumUp</div>
-    <div class="pay-pending-sub">Klik hieronder om je betaling af te ronden</div>
-    <a class="pay-link" id="pay-link" href="#" target="_blank">Betalen →</a>
+    <div class="pay-pending-title">🏦 Betaal via Bancontact</div>
+    <div class="pay-pending-sub">Klik hieronder om je betaling te voltooien</div>
+    <a class="pay-link" id="pay-link" href="#" target="_blank">Betalen met Bancontact →</a>
   </div>
+
+  <!-- Cash betaalknop - tonen tot bestelling klaar is -->
+  <button class="cash-pay-btn" id="cash-pay-btn" onclick="confirmCashPay()">
+    💶 Betaal <span id="cash-pay-amount">€ 0,00</span> aan de bar
+  </button>
 
   <div class="status-card" id="st-steps">
     <div class="status-step"><div class="step-dot active" id="dot-paid"></div><span id="lbl-paid">Wachten op betaling…</span></div>
@@ -192,10 +203,25 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 
 <script src="/api.js"></script>
 <script>
-let products = [], cart = {}, activeCat = 'Alle', payMethod = 'sumup';
+let products = [], cart = {}, activeCat = 'Alle', payMethod = 'mollie';
 let currentOrderId = null, pollInterval = null;
 
+// Remember last phone number
+const savedPhone = localStorage.getItem('zb_phone') || '';
+if (savedPhone) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const ph = document.getElementById('order-phone');
+    if (ph) { ph.value = savedPhone; validatePhone(); }
+  });
+}
+
 async function init() {
+  // Restore saved phone number
+  const savedPhone = localStorage.getItem('zb_phone') || '';
+  if (savedPhone) {
+    const ph = document.getElementById('order-phone');
+    ph.value = savedPhone; validatePhone();
+  }
   document.getElementById('prod-grid').innerHTML = `
     <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--mu);">
       <div style="font-size:36px;margin-bottom:12px;">⏳</div>
@@ -319,7 +345,7 @@ function closeCart() { document.getElementById('cart-overlay').classList.remove(
 
 function selPay(m) {
   payMethod = m;
-  document.getElementById('pm-sumup').classList.toggle('sel', m==='sumup');
+  document.getElementById('pm-mollie').classList.toggle('sel', m==='mollie');
   document.getElementById('pm-cash').classList.toggle('sel', m==='cash');
 }
 
@@ -336,7 +362,6 @@ function validatePhone() {
 }
 
 async function placeOrder() {
-  // Validate phone
   const phone = document.getElementById('order-phone').value.trim();
   if (phone.length < 9) {
     document.getElementById('order-phone').style.borderColor = 'var(--coral)';
@@ -345,6 +370,9 @@ async function placeOrder() {
     document.getElementById('order-phone').scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
+  // Remember phone for next order
+  localStorage.setItem('zb_phone', phone);
+
   const btn = document.getElementById('place-order-btn');
   btn.disabled = true; btn.textContent = 'Bestelling plaatsen…';
   const items = Object.entries(cart).map(([id, qty]) => {
@@ -355,30 +383,32 @@ async function placeOrder() {
     const result = await API.orders.create({
       items, method: payMethod,
       note: document.getElementById('order-note').value || '',
-      phone: document.getElementById('order-phone').value || '',
+      phone,
+      redirect_url: window.location.origin + '/bestel.html',
     });
     currentOrderId = result.order.id;
     closeCart();
-    showStatusScreen(result.order, result.sumupCheckoutId);
+    showStatusScreen(result.order, result.mollieCheckoutUrl);
     cart = {};
     updateCartBar(); renderProds();
   } catch(e) {
     toast('Fout: ' + e.message);
-    btn.disabled = false; btn.textContent = '✅ Bestelling plaatsen';
+    btn.disabled = false; btn.textContent = 'Bestelling plaatsen';
   }
 }
 
-function showStatusScreen(order, checkoutId) {
+function showStatusScreen(order, mollieCheckoutUrl) {
+  const amtFmt = '€ ' + (order.amount || 0).toFixed(2).replace('.', ',');
   document.getElementById('st-number').textContent = order.order_number;
+  document.getElementById('st-amount').textContent = amtFmt;
+  document.getElementById('cash-pay-amount').textContent = amtFmt;
   document.getElementById('status-screen').classList.add('show');
   updateStatusScreen(order);
 
-  if (order.method === 'sumup' && checkoutId) {
+  if (order.method === 'mollie' && mollieCheckoutUrl) {
     const pending = document.getElementById('pay-pending');
     pending.classList.add('show');
-    // SumUp hosted checkout URL
-    document.getElementById('pay-link').href = `https://pay.sumup.com/b2c/checkout/${checkoutId}`;
-    // Start polling for payment
+    document.getElementById('pay-link').href = mollieCheckoutUrl;
     pollInterval = setInterval(async () => {
       try {
         const r = await API.orders.pollPayment(order.id);
@@ -392,24 +422,71 @@ function showStatusScreen(order, checkoutId) {
   }
 }
 
+function confirmCashPay() {
+  // Just a visual confirmation — hides the button and shows "betaald" state
+  document.getElementById('cash-pay-btn').classList.remove('show');
+  toast('Bedankt! Betaal aan de bar bij het afhalen. ☀️');
+}
+
 function updateStatusScreen(order) {
   const s = order.status;
-  const icon = s==='pending'?'⏳':s==='paid'?'✅':s==='preparing'?'👨‍🍳':s==='ready'?'🎉':'✅';
-  const title = s==='pending'?'Wachten op betaling':s==='paid'?'Betaald — we beginnen eraan!':s==='preparing'?'Wordt bereid':s==='ready'?'Klaar! Kom ophalen 🎉':'Bedankt!';
-  const sub = s==='pending'?'Rond je betaling af via de link hieronder.':s==='paid'?'Je bestelling is ontvangen en wordt zo bereid.':s==='preparing'?'Even geduld, we zijn bezig!':s==='ready'?`Toon bestelnummer ${order.order_number} aan de bar.`:'Geniet ervan! ☀️';
-  document.getElementById('st-icon').textContent = icon;
+  const isCash = order.method === 'cash';
+
+  const icon  = s==='pending'  ? '⏳'
+              : s==='paid'     ? (isCash ? '🧾' : '✅')
+              : s==='preparing'? '👨‍🍳'
+              : s==='ready'    ? '🎉'
+              : '👋';
+
+  const title = s==='pending'  ? 'Wachten op betaling'
+              : s==='paid'     ? (isCash ? 'Bestelling ontvangen!' : 'Betaald — we beginnen eraan!')
+              : s==='preparing'? 'Wordt bereid'
+              : s==='ready'    ? 'Klaar! Kom ophalen 🎉'
+              : 'Bedankt!';
+
+  const sub   = s==='pending'  ? 'Rond je Bancontact-betaling af via de knop hieronder.'
+              : s==='paid'     ? (isCash ? 'Betaal aan de bar bij het afhalen van je bestelling.' : 'Je bestelling is ontvangen en wordt zo bereid.')
+              : s==='preparing'? 'Even geduld, we zijn bezig!'
+              : s==='ready'    ? `Toon bestelnummer ${order.order_number} aan de bar.`
+              : 'Geniet ervan! ☀️';
+
+  document.getElementById('st-icon').textContent  = icon;
   document.getElementById('st-title').textContent = title;
-  document.getElementById('st-sub').textContent = sub;
-  // Steps
-  const paid = ['paid','preparing','ready','collected'].includes(s);
-  const prep = ['preparing','ready','collected'].includes(s);
+  document.getElementById('st-sub').textContent   = sub;
+
+  // Amount label
+  const amtLabel = document.getElementById('st-amount-label');
   const ready = ['ready','collected'].includes(s);
+  if (isCash && !ready) {
+    amtLabel.textContent = 'Te betalen aan de bar';
+  } else if (s === 'ready') {
+    amtLabel.textContent = 'Kom ophalen!';
+  } else {
+    amtLabel.textContent = 'Totaal';
+  }
+
+  // Cash pay button — show until order is ready
+  const cashBtn = document.getElementById('cash-pay-btn');
+  if (isCash && !['ready','collected','preparing'].includes(s)) {
+    cashBtn.classList.add('show');
+  } else {
+    cashBtn.classList.remove('show');
+  }
+
+  // Steps
+  const paid = isCash ? true : ['paid','preparing','ready','collected'].includes(s);
+  const prep = ['preparing','ready','collected'].includes(s);
+  const rdx  = ['ready','collected'].includes(s);
   setDot('dot-paid', paid ? 'done' : s==='pending' ? 'active' : 'waiting');
   setDot('dot-prep', prep ? 'done' : paid ? 'active' : 'waiting');
-  setDot('dot-ready', ready ? 'done' : prep ? 'active' : 'waiting');
-  document.getElementById('lbl-paid').textContent = paid ? '✓ Betaald' : 'Wachten op betaling…';
+  setDot('dot-ready', rdx ? 'done' : prep ? 'active' : 'waiting');
+  document.getElementById('lbl-paid').textContent = isCash
+    ? (rdx ? '✓ Klaar' : '💶 Betalen aan de bar')
+    : (paid ? '✓ Betaald' : 'Wachten op betaling…');
+
   if (s === 'ready') {
     document.getElementById('st-number').classList.add('pulsing');
+    cashBtn.classList.remove('show');
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('Zomerbar 🎉', { body: `Bestelling #${order.order_number} is klaar! Kom ophalen.` });
     }
@@ -428,10 +505,7 @@ function resetOrder() {
   document.getElementById('pay-pending').classList.remove('show');
   document.getElementById('st-number').classList.remove('pulsing');
   document.getElementById('order-note').value = '';
-  document.getElementById('order-phone').value = '';
-  document.getElementById('order-phone').style.borderColor = 'var(--coral)';
-  document.getElementById('phone-icon').textContent = '📱';
-  document.getElementById('phone-error').style.display = 'none';
+  // Phone stays filled in with saved value
 }
 
 function toast(msg) {
