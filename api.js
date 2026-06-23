@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zomerbar · Start</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sun:#EF9F27;--sun-d:#BA7517;--sun-l:#FAEEDA;--sun-t:#412402;
+  --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
+  --bg:#F7F6F2;--card:#fff;--bd:#E5E3DC;
+  --tx:#1A1917;--mu:#6B6A65;--r:12px;--rm:8px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
+.hero{background:var(--sun);padding:36px 24px;text-align:center;}
+.hero-icon{font-size:48px;margin-bottom:10px;}
+.hero-title{font-size:26px;font-weight:600;color:var(--sun-t);}
+.hero-sub{font-size:14px;color:#633806;margin-top:6px;}
+.wrap{max-width:680px;margin:0 auto;padding:24px 16px 48px;}
+.sec-title{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;}
+.app-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:24px;}
+.app-card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:18px 16px;text-decoration:none;color:inherit;transition:all .15s;display:flex;flex-direction:column;align-items:center;text-align:center;}
+.app-card:hover{border-color:var(--sun);background:var(--sun-l);}
+.app-icon{font-size:32px;margin-bottom:10px;}
+.app-name{font-size:14px;font-weight:600;margin-bottom:4px;}
+.app-desc{font-size:12px;color:var(--mu);}
+.app-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:6px;background:var(--teal-l);color:var(--teal-d);}
+
+.qr-box{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:18px;}
+.qr-info{font-size:13px;color:var(--mu);margin-bottom:14px;line-height:1.6;}
+.qr-url-row{background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:10px 14px;font-size:13px;color:var(--teal-d);word-break:break-all;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.copy-btn{font-size:12px;padding:5px 12px;background:var(--teal-l);color:var(--teal-d);border:0.5px solid var(--teal);border-radius:20px;cursor:pointer;white-space:nowrap;font-weight:500;}
+.qr-center{display:flex;justify-content:center;margin:16px 0;}
+.qr-caption{font-size:12px;color:var(--mu);text-align:center;}
+.print-btn{width:100%;padding:11px;font-size:13px;font-weight:600;background:var(--sun-l);color:var(--sun-t);border:0.5px solid var(--sun);border-radius:var(--rm);cursor:pointer;margin-top:12px;}
+
+.status-row{display:flex;align-items:center;gap:8px;background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:10px 14px;margin-bottom:24px;}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--mu);}
+.status-dot.ok{background:var(--teal);}
+.status-text{font-size:13px;font-weight:500;}
+
+@media print{body>*:not(.wrap){display:none!important}.wrap>*:not(.qr-print-section){display:none!important}}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="hero-icon">☀️</div>
+  <div class="hero-title">Zomerbar POS</div>
+  <div class="hero-sub">Beheer je bar — bestellingen, stock en betalingen</div>
+</div>
+
+<div class="wrap">
+  <div class="status-row">
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-text" id="status-text">Verbinding controleren…</div>
+  </div>
+
+  <div class="sec-title">Apps</div>
+  <div class="app-grid">
+    <a class="app-card" href="/bestel.html">
+      <div class="app-icon">📱</div>
+      <div class="app-name">Klantbestelpage</div>
+      <div class="app-desc">Klanten bestellen en betalen hier zelf</div>
+      <div class="app-badge">QR-code → klant</div>
+    </a>
+    <a class="app-card" href="/bar.html">
+      <div class="app-icon">🖥</div>
+      <div class="app-name">Bar-dashboard 🔒</div>
+      <div class="app-desc">Bestellingen, stock, boekhouding (login vereist)</div>
+      <div class="app-badge">Tablet achter de bar</div>
+    </a>
+  </div>
+
+  <div class="sec-title">QR-code voor tafels</div>
+  <div class="qr-box">
+    <div class="qr-info">
+      Leg deze QR-code op elke tafel. Klanten scannen hem, zien het menu, bestellen en betalen — alles op hun eigen gsm. De bestelling verschijnt automatisch op het bar-dashboard met een uniek bestelnummer.
+    </div>
+    <div class="qr-url-row">
+      <span id="bestel-url">—</span>
+      <button class="copy-btn" onclick="copyUrl()">Kopiëren</button>
+    </div>
+    <div class="qr-center" id="qr-code"></div>
+    <div class="qr-caption">Scan om te bestellen · Zomerbar</div>
+    <button class="print-btn" onclick="window.print()">🖨 QR-code afdrukken</button>
+  </div>
+</div>
+
+<script>
+const url = location.origin + '/bestel.html';
+document.getElementById('bestel-url').textContent = url;
+
+// Generate QR
+new QRCode(document.getElementById('qr-code'), {
+  text: url,
+  width: 200,
+  height: 200,
+  colorDark: '#1A1917',
+  colorLight: '#ffffff',
+  correctLevel: QRCode.CorrectLevel.M,
+});
+
+function copyUrl() {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✓ Gekopieerd';
+    setTimeout(() => btn.textContent = 'Kopiëren', 2000);
+  });
+}
+
+// Check server health
+fetch('/api/health').then(r => r.json()).then(() => {
+  document.getElementById('status-dot').classList.add('ok');
+  document.getElementById('status-text').textContent = 'Server online — systeem klaar voor gebruik';
+}).catch(() => {
+  document.getElementById('status-text').textContent = 'Server niet bereikbaar';
+});
+</script>
+</body>
+</html>
