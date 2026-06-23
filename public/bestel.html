@@ -390,6 +390,8 @@ async function placeOrder() {
     closeCart();
     showStatusScreen(result.order, result.mollieCheckoutUrl);
     cart = {};
+    // Reset knop voor volgende bestelling
+    btn.disabled = false; btn.textContent = 'Bestelling plaatsen';
     updateCartBar(); renderProds();
   } catch(e) {
     toast('Fout: ' + e.message);
