@@ -82,6 +82,23 @@ db.exec(`
   );
 `);
 
+// ── Database migraties ───────────────────────────────────────────
+// Voeg ontbrekende kolommen toe zonder de database te wissen
+const migrations = [
+  `ALTER TABLE orders ADD COLUMN phone TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN table_ref TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN sumup_tx_id TEXT`,
+  `ALTER TABLE products ADD COLUMN sumup_id TEXT`,
+  `ALTER TABLE products ADD COLUMN low_stock INTEGER NOT NULL DEFAULT 5`,
+];
+
+migrations.forEach(sql => {
+  try { db.exec(sql); } catch(e) {
+    // Kolom bestaat al — geen probleem
+    if (!e.message.includes('duplicate column')) { /* negeer */ }
+  }
+});
+
 // Seed default products if empty
 if (!db.prepare('SELECT id FROM products LIMIT 1').get()) {
   const ins = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,sort_order) VALUES (?,?,?,?,?,?,?)`);

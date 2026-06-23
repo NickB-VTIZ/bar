@@ -196,14 +196,16 @@ let products = [], cart = {}, activeCat = 'Alle', payMethod = 'sumup';
 let currentOrderId = null, pollInterval = null;
 
 async function init() {
-  // Show loading state
   document.getElementById('prod-grid').innerHTML = `
     <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--mu);">
       <div style="font-size:36px;margin-bottom:12px;">⏳</div>
       <div style="font-size:14px;">Menu laden…</div>
     </div>`;
   try {
-    products = await API.products.list();
+    const products_result = await fetch('/api/products');
+    if (!products_result.ok) throw new Error(`Server antwoordt met fout ${products_result.status}`);
+    products = await products_result.json();
+    if (!Array.isArray(products)) throw new Error('Onverwacht antwoord van server');
     if (!products.length) {
       document.getElementById('prod-grid').innerHTML = `
         <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--mu);">
@@ -218,7 +220,8 @@ async function init() {
       <div style="grid-column:1/-1;text-align:center;padding:40px 20px;">
         <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
         <div style="font-size:15px;font-weight:600;color:var(--coral-d);margin-bottom:8px;">Laden mislukt</div>
-        <div style="font-size:13px;color:var(--mu);margin-bottom:16px;">Controleer je verbinding en probeer opnieuw.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:4px;">${e.message}</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:16px;">Controleer je verbinding en probeer opnieuw.</div>
         <button onclick="init()" style="padding:10px 20px;background:var(--sun);color:var(--sun-t);border:none;border-radius:20px;font-size:14px;font-weight:600;cursor:pointer;">
           🔄 Opnieuw proberen
         </button>
