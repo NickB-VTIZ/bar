@@ -118,6 +118,27 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:11px 20px;border-radius:24px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;white-space:nowrap;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+.badge-cash-open{background:#FFF3CD;color:#7A4F00;}
+.is-cash-open{border-left:4px solid var(--sun);}
+
+/* Betaal modal */
+.pay-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;align-items:flex-end;justify-content:center;}
+.pay-modal-bg.show{display:flex;}
+.pay-modal{background:var(--card);border-radius:20px 20px 0 0;padding:22px;width:100%;max-width:480px;}
+.pay-modal-handle{width:36px;height:4px;background:var(--bd);border-radius:2px;margin:0 auto 16px;}
+.pay-modal-title{font-size:18px;font-weight:600;color:var(--tx);margin-bottom:2px;}
+.pay-modal-sub{font-size:13px;color:var(--mu);margin-bottom:4px;}
+.pay-modal-amt{font-size:48px;font-weight:700;color:var(--sun-d);text-align:center;margin:14px 0;}
+.pay-modal-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.pay-modal-method{padding:16px;border:0.5px solid var(--bd);border-radius:var(--r);background:var(--bg);cursor:pointer;text-align:center;transition:all .12s;}
+.pay-modal-method:active{transform:scale(.97);}
+.pay-modal-method.sel{border-color:var(--teal);background:var(--teal-l);}
+.pay-modal-method-icon{font-size:28px;margin-bottom:6px;}
+.pay-modal-method-label{font-size:14px;font-weight:600;color:var(--tx);}
+.pay-modal-method-sub{font-size:12px;color:var(--mu);margin-top:2px;}
+.pay-modal-confirm{width:100%;padding:15px;font-size:16px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--r);cursor:pointer;margin-bottom:10px;}
+.pay-modal-cancel{width:100%;padding:11px;font-size:14px;background:none;border:none;color:var(--mu);cursor:pointer;}
+
 @keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(12deg)}30%{transform:rotate(-10deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}75%{transform:rotate(4deg)}}
 .ring{animation:ring .6s ease;}
 @media(max-width:600px){.stat-row{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:1fr;padding-bottom:80px;}}
@@ -219,6 +240,30 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
     <button onclick="closeQuickOrder()" style="width:100%;padding:11px;font-size:14px;background:none;border:none;color:var(--mu);cursor:pointer;">Annuleren</button>
   </div>
 </div>
+<!-- Cash betaal modal -->
+<div class="pay-modal-bg" id="pay-modal-bg">
+  <div class="pay-modal">
+    <div class="pay-modal-handle"></div>
+    <div class="pay-modal-title">Betaling registreren</div>
+    <div class="pay-modal-sub" id="pay-modal-order">Bestelling #—</div>
+    <div class="pay-modal-amt" id="pay-modal-amt">€ 0,00</div>
+    <div class="pay-modal-methods">
+      <div class="pay-modal-method sel" id="pm-cash-modal" onclick="selPayModal('cash')">
+        <div class="pay-modal-method-icon">💶</div>
+        <div class="pay-modal-method-label">Cash</div>
+        <div class="pay-modal-method-sub">Contant ontvangen</div>
+      </div>
+      <div class="pay-modal-method" id="pm-sumup-modal" onclick="selPayModal('sumup')">
+        <div class="pay-modal-method-icon">💳</div>
+        <div class="pay-modal-method-label">SumUp</div>
+        <div class="pay-modal-method-sub">Kaartlezer</div>
+      </div>
+    </div>
+    <button class="pay-modal-confirm" id="pay-modal-confirm" onclick="confirmCashPayment()">✅ Betaling bevestigen</button>
+    <button class="pay-modal-cancel" onclick="closePayModal()">Annuleren</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="/api.js"></script>
@@ -301,36 +346,135 @@ function renderBoard(){
 }
 
 function cardHTML(o){
-  const cls=o.status==='paid'?'is-paid':o.status==='preparing'?'is-preparing':o.status==='ready'?'is-ready':o.status==='pending'?'is-pending':'';
-  const badgeMap={pending:'badge-pending Wachten op betaling',paid:'badge-paid Betaald',preparing:'badge-preparing Bezig',ready:'badge-ready Klaar!'};
-  const [badgeCls,badgeTxt]=(badgeMap[o.status]||'badge-pending Onbekend').split(' ');
-  const items=(o.items||[]).map(i=>`<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}</span></div>`).join('');
-  const actions=o.status==='paid'
-    ?`<div class="card-actions"><button class="act-btn btn-prep" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button><button class="act-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
-    :o.status==='preparing'
-    ?`<div class="card-actions"><button class="act-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button><button class="act-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
-    :o.status==='ready'
-    ?`<div class="card-actions"><button class="act-btn btn-collect" style="flex:2" onclick="setStatus('${o.id}','collected')">👋 Opgehaald</button><button class="act-btn btn-del" onclick="del('${o.id}')">✕</button></div>`
-    :o.status==='pending'
-    ?`<div class="card-actions"><button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button></div>`
-    :`<div class="card-actions"><button class="act-btn btn-del" style="flex:1" onclick="del('${o.id}')">🗑 Verwijderen</button></div>`;
-  return `<div class="card ${cls}">
+  const isCash = o.method === 'cash';
+  const isMollie = o.method === 'mollie';
+
+  // Badge & card class
+  let badgeCls, badgeTxt, cardCls;
+  if (o.status === 'pending') {
+    badgeCls = 'badge-pending'; badgeTxt = isMollie ? '⏳ Wacht op betaling' : '⏳ Wachten'; cardCls = 'is-pending';
+  } else if (o.status === 'paid' && isCash) {
+    // Cash is always in 'paid' state from the start but not yet physically paid
+    badgeCls = 'badge-cash-open'; badgeTxt = '💶 Cash — nog te betalen'; cardCls = 'is-cash-open';
+  } else if (o.status === 'paid') {
+    badgeCls = 'badge-paid'; badgeTxt = '✅ Betaald'; cardCls = 'is-paid';
+  } else if (o.status === 'preparing') {
+    badgeCls = 'badge-preparing'; badgeTxt = '👨‍🍳 Bezig'; cardCls = 'is-preparing';
+    if (isCash) { badgeTxt = '👨‍🍳 Bezig · 💶 cash'; }
+  } else if (o.status === 'ready') {
+    badgeCls = 'badge-ready'; badgeTxt = isCash ? '🎉 Klaar · betalen!' : '🎉 Klaar!'; cardCls = 'is-ready';
+  } else {
+    badgeCls = 'badge-done'; badgeTxt = 'Afgehandeld'; cardCls = '';
+  }
+
+  const items = (o.items||[]).map(i =>
+    `<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}</span></div>`
+  ).join('');
+
+  const amtFmt = `€ ${(o.amount||0).toFixed(2).replace('.',',')}`;
+
+  // Action buttons per status + method
+  let actions;
+  if (o.status === 'pending') {
+    actions = `<div class="card-actions">
+      <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button>
+    </div>`;
+  } else if (o.status === 'paid') {
+    // Cash: can start preparing without payment, paid online: normal flow
+    actions = `<div class="card-actions">
+      <button class="act-btn btn-prep" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button>
+      <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+    </div>`;
+  } else if (o.status === 'preparing') {
+    actions = `<div class="card-actions">
+      <button class="act-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
+      <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+    </div>`;
+  } else if (o.status === 'ready') {
+    if (isCash) {
+      // Cash: register payment first, then collected
+      actions = `<div class="card-actions" style="flex-direction:column;gap:0;">
+        <button class="act-btn" style="background:var(--teal);color:#fff;font-weight:700;font-size:13px;" onclick="openPayModal('${o.id}','${amtFmt}','${o.order_number}')">
+          💶 Betaling registreren — ${amtFmt}
+        </button>
+        <div style="display:flex;border-top:0.5px solid var(--bd);">
+          <button class="act-btn btn-collect" style="flex:2;font-size:12px" onclick="setStatus('${o.id}','collected')">👋 Zonder betaling opgehaald</button>
+          <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+        </div>
+      </div>`;
+    } else {
+      actions = `<div class="card-actions">
+        <button class="act-btn btn-collect" style="flex:2" onclick="setStatus('${o.id}','collected')">👋 Opgehaald</button>
+        <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+      </div>`;
+    }
+  } else {
+    actions = `<div class="card-actions">
+      <button class="act-btn btn-del" style="flex:1" onclick="del('${o.id}')">🗑 Verwijderen</button>
+    </div>`;
+  }
+
+  return `<div class="card ${cardCls}">
     <div class="card-head">
-      <div><div class="order-num">#${o.order_number}</div><div class="order-meta">${timeAgo(o.created_at)} geleden · € ${(o.amount||0).toFixed(2).replace('.',',')}</div></div>
+      <div>
+        <div class="order-num">#${o.order_number}</div>
+        <div class="order-meta">${timeAgo(o.created_at)} geleden · ${amtFmt}</div>
+      </div>
       <span class="badge ${badgeCls}">${badgeTxt}</span>
     </div>
     <div class="card-items">${items}</div>
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
-    <div class="card-method">${o.method==='sumup'?'💳 Kaart':'💶 Cash'}${o.phone?' · 📱 '+o.phone:' · geen SMS'}</div>
+    <div class="card-method">${isCash?'💶 Cash':isMollie?'🏦 Bancontact':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
     ${actions}
   </div>`;
 }
 
 async function setStatus(id,status){
   await API.orders.setStatus(id,status);
-  if(status==='ready') toast(`✅ #${orders[id]?.order_number} is klaar!`);
+  if(status==='ready') toast(`✅ #${orders[id]?.order_number} is klaar! SMS verstuurd.`);
 }
 async function del(id){ await API.orders.remove(id); delete orders[id]; renderBoard(); }
+
+// ── Cash betaal modal ────────────────────────────────────────────
+let payModalOrderId = null, payModalMethod = 'cash';
+
+function openPayModal(orderId, amtFmt, orderNum) {
+  payModalOrderId = orderId;
+  payModalMethod = 'cash';
+  document.getElementById('pay-modal-amt').textContent = amtFmt;
+  document.getElementById('pay-modal-order').textContent = `Bestelling #${orderNum}`;
+  document.getElementById('pm-cash-modal').classList.add('sel');
+  document.getElementById('pm-sumup-modal').classList.remove('sel');
+  document.getElementById('pay-modal-bg').classList.add('show');
+}
+
+function closePayModal() {
+  document.getElementById('pay-modal-bg').classList.remove('show');
+  payModalOrderId = null;
+}
+
+function selPayModal(m) {
+  payModalMethod = m;
+  document.getElementById('pm-cash-modal').classList.toggle('sel', m==='cash');
+  document.getElementById('pm-sumup-modal').classList.toggle('sel', m==='sumup');
+  document.getElementById('pay-modal-confirm').textContent =
+    m === 'sumup' ? '💳 Betaald via SumUp' : '✅ Cash ontvangen';
+}
+
+async function confirmCashPayment() {
+  if (!payModalOrderId) return;
+  const btn = document.getElementById('pay-modal-confirm');
+  btn.disabled = true; btn.textContent = 'Verwerken…';
+  try {
+    // Mark as collected (done)
+    await API.orders.setStatus(payModalOrderId, 'collected');
+    toast(`✅ Betaling geregistreerd — ${payModalMethod === 'sumup' ? 'SumUp kaart' : 'cash'}`);
+    closePayModal();
+  } catch(e) {
+    toast('Fout: ' + e.message);
+    btn.disabled = false;
+  }
+}
 
 async function loadStats(){
   try{

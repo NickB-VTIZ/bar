@@ -98,8 +98,6 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .step-dot.active{background:var(--sun);}
 .step-dot.waiting{background:var(--bd);}
 .new-order-btn{padding:13px 28px;font-size:14px;font-weight:600;background:var(--sun);color:var(--sun-t);border:none;border-radius:var(--r);cursor:pointer;}
-.cash-pay-btn{width:100%;max-width:360px;padding:18px;font-size:18px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--r);cursor:pointer;margin-bottom:14px;display:none;align-items:center;justify-content:center;gap:10px;}
-.cash-pay-btn.show{display:flex;}
 
 /* SumUp payment pending */
 .pay-pending{background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:16px;display:none;}
@@ -185,10 +183,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
     <a class="pay-link" id="pay-link" href="#" target="_blank">Betalen met Bancontact →</a>
   </div>
 
-  <!-- Cash betaalknop - tonen tot bestelling klaar is -->
-  <button class="cash-pay-btn" id="cash-pay-btn" onclick="confirmCashPay()">
-    💶 Betaal <span id="cash-pay-amount">€ 0,00</span> aan de bar
-  </button>
+  <!-- Cash betaalinfo - geen knop, enkel melding -->
+  <div id="cash-info-bar" style="display:none;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:14px 18px;text-align:center;margin-bottom:16px;width:100%;max-width:360px;">
+    <div style="font-size:15px;font-weight:600;color:var(--sun-t);margin-bottom:4px;">💶 Betaal aan de bar</div>
+    <div style="font-size:28px;font-weight:700;color:var(--sun-d);margin:6px 0;" id="cash-info-amt">€ 0,00</div>
+    <div style="font-size:13px;color:var(--sun-d);">Betaal bij het afhalen aan de bar</div>
+  </div>
 
   <div class="status-card" id="st-steps">
     <div class="status-step"><div class="step-dot active" id="dot-paid"></div><span id="lbl-paid">Wachten op betaling…</span></div>
@@ -401,7 +401,7 @@ function showStatusScreen(order, mollieCheckoutUrl) {
   const amtFmt = '€ ' + (order.amount || 0).toFixed(2).replace('.', ',');
   document.getElementById('st-number').textContent = order.order_number;
   document.getElementById('st-amount').textContent = amtFmt;
-  document.getElementById('cash-pay-amount').textContent = amtFmt;
+  document.getElementById('cash-info-amt').textContent = amtFmt;
   document.getElementById('status-screen').classList.add('show');
   updateStatusScreen(order);
 
@@ -422,11 +422,6 @@ function showStatusScreen(order, mollieCheckoutUrl) {
   }
 }
 
-function confirmCashPay() {
-  // Just a visual confirmation — hides the button and shows "betaald" state
-  document.getElementById('cash-pay-btn').classList.remove('show');
-  toast('Bedankt! Betaal aan de bar bij het afhalen. ☀️');
-}
 
 function updateStatusScreen(order) {
   const s = order.status;
@@ -465,12 +460,12 @@ function updateStatusScreen(order) {
     amtLabel.textContent = 'Totaal';
   }
 
-  // Cash pay button — show until order is ready
-  const cashBtn = document.getElementById('cash-pay-btn');
-  if (isCash && !['ready','collected','preparing'].includes(s)) {
-    cashBtn.classList.add('show');
+  // Cash info bar — show while waiting for pickup
+  const cashInfo = document.getElementById('cash-info-bar');
+  if (isCash && !['collected'].includes(s)) {
+    cashInfo.style.display = 'block';
   } else {
-    cashBtn.classList.remove('show');
+    cashInfo.style.display = 'none';
   }
 
   // Steps
@@ -486,7 +481,6 @@ function updateStatusScreen(order) {
 
   if (s === 'ready') {
     document.getElementById('st-number').classList.add('pulsing');
-    cashBtn.classList.remove('show');
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('Zomerbar 🎉', { body: `Bestelling #${order.order_number} is klaar! Kom ophalen.` });
     }
