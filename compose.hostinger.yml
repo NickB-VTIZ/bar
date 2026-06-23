@@ -3,6 +3,8 @@ services:
     image: ghcr.io/nickb-vtiz/bar:latest
     container_name: zomerbar-pos
     restart: unless-stopped
+    expose:
+      - "3000"
     volumes:
       - zomerbar_data:/data
     environment:
@@ -10,24 +12,12 @@ services:
       - DB_PATH=/data/zomerbar.db
       - NODE_ENV=production
       - ADMIN_PASSWORD=zomerbar2025
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.zomerbar.rule=Host(`nbotech.cloud`)"
       - "traefik.http.routers.zomerbar.entrypoints=websecure"
       - "traefik.http.routers.zomerbar.tls.certresolver=letsencrypt"
       - "traefik.http.services.zomerbar.loadbalancer.server.port=3000"
-    networks:
-      - traefik-proxy
-
-networks:
-  traefik-proxy:
-    external: true
 
 volumes:
   zomerbar_data:
