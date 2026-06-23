@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zomerbar · Kasdagboek</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sun:#EF9F27;--sun-d:#BA7517;--sun-l:#FAEEDA;--sun-t:#412402;
+  --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
+  --coral:#D85A30;--coral-l:#FAECE7;--coral-d:#993C1D;
+  --bg:#F7F6F2;--card:#fff;--bd:#E5E3DC;
+  --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
+  --r:12px;--rm:8px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
+header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+.logo{font-size:16px;font-weight:600;color:var(--sun-t);}
+.logo-sub{font-size:11px;color:#633806;}
+.back-link{font-size:13px;color:var(--sun-t);text-decoration:none;font-weight:500;display:flex;align-items:center;gap:4px;}
+
+.nav{display:flex;background:var(--card);border-bottom:0.5px solid var(--bd);}
+.nav-btn{flex:1;padding:11px;font-size:13px;font-weight:500;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;}
+.nav-btn.on{color:var(--sun-d);border-bottom-color:var(--sun);}
+.screen{display:none;}.screen.on{display:block;}
+
+.wrap{max-width:760px;margin:0 auto;padding:16px;}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+.controls label{font-size:13px;color:var(--mu);font-weight:500;}
+.controls input,.controls select{font-size:13px;padding:8px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);}
+.btn{padding:9px 16px;font-size:13px;font-weight:600;border:none;border-radius:var(--rm);cursor:pointer;}
+.btn-primary{background:var(--sun);color:var(--sun-t);}
+.btn-teal{background:var(--teal);color:#fff;}
+.btn-ghost{background:var(--card);border:0.5px solid var(--bd);color:var(--tx);}
+
+/* Cashbook */
+.cb-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+.cb-stat{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:14px 16px;}
+.cb-stat-n{font-size:22px;font-weight:600;}
+.cb-stat-l{font-size:12px;color:var(--mu);margin-top:2px;}
+.cb-stat.cash .cb-stat-n{color:var(--sun-d);}
+.cb-stat.card .cb-stat-n{color:var(--teal-d);}
+
+.day-block{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);margin-bottom:14px;overflow:hidden;}
+.day-head{padding:12px 16px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;background:var(--sun-l);}
+.day-date{font-size:15px;font-weight:600;color:var(--sun-t);}
+.day-total{font-size:15px;font-weight:600;color:var(--sun-t);}
+.day-body{padding:0;}
+table{width:100%;border-collapse:collapse;}
+th{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:8px 16px;border-bottom:0.5px solid var(--bd);}
+td{font-size:13px;padding:8px 16px;border-bottom:0.5px solid var(--bd);}
+tr:last-child td{border-bottom:none;}
+.txt-right{text-align:right;}
+.vat-table{margin:0;background:var(--bg);}
+.vat-table th{background:var(--bg);}
+.tot-row td{font-weight:600;background:var(--sun-l);}
+.method-tag{font-size:11px;padding:2px 7px;border-radius:8px;}
+.tag-cash{background:var(--sun-l);color:var(--sun-t);}
+.tag-card{background:var(--teal-l);color:var(--teal-d);}
+
+.section-label{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px;}
+
+/* Invoice */
+.inv-card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:16px;}
+.inv-preview-title{font-size:16px;font-weight:600;margin-bottom:4px;}
+.inv-preview-sub{font-size:13px;color:var(--mu);margin-bottom:16px;}
+.inv-line{display:flex;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--bd);font-size:14px;}
+.inv-line:last-of-type{border-bottom:none;}
+.inv-line-label{color:var(--tx);}
+.inv-line-sub{font-size:12px;color:var(--mu);}
+.inv-line-amt{font-weight:600;text-align:right;}
+.inv-total{display:flex;justify-content:space-between;padding:14px 0 0;border-top:1px solid var(--bd);margin-top:8px;font-size:17px;font-weight:600;}
+.inv-warn{background:var(--coral-l);border:0.5px solid var(--coral);border-radius:var(--rm);padding:12px 14px;font-size:13px;color:var(--coral-d);margin-bottom:14px;}
+.inv-ok{background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--rm);padding:12px 14px;font-size:13px;color:var(--teal-d);margin-bottom:14px;}
+
+.empty{text-align:center;padding:50px 20px;color:var(--mu);}
+.empty-icon{font-size:44px;opacity:.25;margin-bottom:10px;}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:12px 22px;border-radius:24px;opacity:0;transition:all .25s;z-index:200;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@media print{
+  header,.nav,.controls,.no-print{display:none!important;}
+  body{background:#fff;}
+  .wrap{max-width:100%;padding:0;}
+  .day-block,.inv-card{break-inside:avoid;border:1px solid #ccc;box-shadow:none;}
+  .print-header{display:block!important;}
+}
+.print-header{display:none;text-align:center;padding:20px 0;border-bottom:2px solid var(--tx);margin-bottom:20px;}
+.print-header h1{font-size:22px;font-weight:600;}
+.print-header p{font-size:13px;color:var(--mu);margin-top:4px;}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="logo">☀️ Kasdagboek</div><div class="logo-sub">Boekhouding & facturatie</div></div>
+  <a class="back-link" href="/bar.html">← Terug naar bar</a>
+</header>
+
+<div class="nav">
+  <button class="nav-btn on" onclick="showScreen('cashbook',this)">📒 Kasdagboek</button>
+  <button class="nav-btn" onclick="showScreen('invoice',this);initInvoice()">🧾 Maandfactuur</button>
+</div>
+
+<!-- Kasdagboek -->
+<div id="screen-cashbook" class="screen on">
+  <div class="wrap">
+    <div class="controls no-print">
+      <label>Van</label>
+      <input type="date" id="cb-from">
+      <label>Tot</label>
+      <input type="date" id="cb-to">
+      <button class="btn btn-primary" onclick="loadCashbook()">Tonen</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
+    </div>
+
+    <div class="print-header">
+      <h1>☀️ Zomerbar — Kasdagboek</h1>
+      <p id="print-period"></p>
+    </div>
+
+    <div id="cb-content">
+      <div class="empty"><div class="empty-icon">📒</div><div>Kies een periode en klik "Tonen"</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Maandfactuur -->
+<div id="screen-invoice" class="screen">
+  <div class="wrap">
+    <div class="controls no-print">
+      <label>Maand</label>
+      <select id="inv-month"></select>
+      <select id="inv-year"></select>
+      <button class="btn btn-primary" onclick="loadInvoicePreview()">Voorbeeld</button>
+    </div>
+    <div id="inv-content">
+      <div class="empty"><div class="empty-icon">🧾</div><div>Kies een maand voor een voorbeeld van de factuur</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/api.js"></script>
+<script>
+// ── Auth guard ──
+(async () => {
+  if (!API.getToken()) { window.location.href = '/login.html?next=/boekhouding.html'; return; }
+  try { const c = await API.auth.check(); if (!c.valid) { window.location.href = '/login.html?next=/boekhouding.html'; return; } }
+  catch(_) { window.location.href = '/login.html?next=/boekhouding.html'; return; }
+})();
+</script>
+<script>
+const monthNames=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const fmt=n=>'€ '+(n||0).toFixed(2).replace('.',',');
+const fmtDate=s=>new Date(s).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+function showScreen(name,btn){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('screen-'+name).classList.add('on');
+  if(btn)btn.classList.add('on');
+}
+
+// Default dates: current month
+const today=new Date();
+const firstDay=new Date(today.getFullYear(),today.getMonth(),1).toISOString().slice(0,10);
+document.getElementById('cb-from').value=firstDay;
+document.getElementById('cb-to').value=today.toISOString().slice(0,10);
+
+async function loadCashbook(){
+  const from=document.getElementById('cb-from').value;
+  const to=document.getElementById('cb-to').value;
+  if(!from||!to){toast('Kies een periode');return;}
+  document.getElementById('print-period').textContent=`Periode: ${new Date(from).toLocaleDateString('nl-BE')} t/m ${new Date(to).toLocaleDateString('nl-BE')}`;
+  try{
+    const data=await API.cashbook(from,to);
+    renderCashbook(data);
+  }catch(e){toast('Fout: '+e.message);}
+}
+
+function renderCashbook(data){
+  if(!data.days.length){
+    document.getElementById('cb-content').innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>Geen betaalde bestellingen in deze periode</div></div>';
+    return;
+  }
+  const t=data.totals;
+  let html=`<div class="cb-summary">
+    <div class="cb-stat"><div class="cb-stat-n">${fmt(t.total)}</div><div class="cb-stat-l">Totaal ontvangsten</div></div>
+    <div class="cb-stat cash"><div class="cb-stat-n">${fmt(t.cash)}</div><div class="cb-stat-l">💶 Cash</div></div>
+    <div class="cb-stat card"><div class="cb-stat-n">${fmt(t.card)}</div><div class="cb-stat-l">💳 Kaart (SumUp)</div></div>
+  </div>`;
+
+  // Per day
+  data.days.forEach(d=>{
+    html+=`<div class="day-block">
+      <div class="day-head"><div class="day-date">${fmtDate(d.date)}</div><div class="day-total">${fmt(d.total)}</div></div>
+      <table>
+        <thead><tr><th>Bestelling</th><th>Methode</th><th class="txt-right">Bedrag</th></tr></thead>
+        <tbody>
+        ${d.orders.map(o=>`<tr>
+          <td>#${o.order_number} <span style="color:var(--mu)">· ${new Date(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}</span></td>
+          <td><span class="method-tag ${o.method==='cash'?'tag-cash':'tag-card'}">${o.method==='cash'?'Cash':'Kaart'}</span></td>
+          <td class="txt-right">${fmt(o.amount)}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+      <table class="vat-table">
+        <thead><tr><th>BTW-tarief</th><th class="txt-right">Excl. BTW</th><th class="txt-right">BTW</th><th class="txt-right">Incl. BTW</th></tr></thead>
+        <tbody>
+        ${d.vat.sort((a,b)=>a.rate-b.rate).map(v=>`<tr>
+          <td>${v.rate}%</td><td class="txt-right">${fmt(v.excl)}</td><td class="txt-right">${fmt(v.vat)}</td><td class="txt-right">${fmt(v.incl)}</td>
+        </tr>`).join('')}
+        <tr class="tot-row"><td>Dagtotaal</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.excl,0))}</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.vat,0))}</td><td class="txt-right">${fmt(d.total)}</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+  });
+
+  // Period VAT totals
+  html+=`<div class="section-label">BTW-overzicht hele periode</div>
+  <div class="day-block"><table class="vat-table">
+    <thead><tr><th>BTW-tarief</th><th class="txt-right">Excl. BTW</th><th class="txt-right">BTW</th><th class="txt-right">Incl. BTW</th></tr></thead>
+    <tbody>
+    ${t.vat.sort((a,b)=>a.rate-b.rate).map(v=>`<tr><td>${v.rate}%</td><td class="txt-right">${fmt(v.excl)}</td><td class="txt-right">${fmt(v.vat)}</td><td class="txt-right">${fmt(v.incl)}</td></tr>`).join('')}
+    <tr class="tot-row"><td>Totaal</td><td class="txt-right">${fmt(t.vat.reduce((s,v)=>s+v.excl,0))}</td><td class="txt-right">${fmt(t.vat.reduce((s,v)=>s+v.vat,0))}</td><td class="txt-right">${fmt(t.total)}</td></tr>
+    </tbody>
+  </table></div>`;
+
+  document.getElementById('cb-content').innerHTML=html;
+}
+
+// Invoice
+function initInvoice(){
+  const ms=document.getElementById('inv-month');
+  const ys=document.getElementById('inv-year');
+  if(ms.children.length)return;
+  monthNames.forEach((m,i)=>{
+    const o=document.createElement('option');o.value=i+1;o.textContent=m.charAt(0).toUpperCase()+m.slice(1);
+    if(i===today.getMonth())o.selected=true;ms.appendChild(o);
+  });
+  const yr=today.getFullYear();
+  for(let y=yr;y>=yr-2;y--){const o=document.createElement('option');o.value=y;o.textContent=y;ys.appendChild(o);}
+}
+
+async function loadInvoicePreview(){
+  const year=document.getElementById('inv-year').value;
+  const month=document.getElementById('inv-month').value;
+  try{
+    const p=await API.invoice.preview(year,month);
+    renderInvoicePreview(p);
+  }catch(e){toast('Fout: '+e.message);}
+}
+
+function renderInvoicePreview(p){
+  if(!p.order_count){
+    document.getElementById('inv-content').innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>Geen ontvangsten in '+monthNames[p.month-1]+' '+p.year+'</div></div>';
+    return;
+  }
+  const existing=p.already_created;
+  let html=`<div class="inv-card">
+    <div class="inv-preview-title">Factuur dagontvangsten</div>
+    <div class="inv-preview-sub">${monthNames[p.month-1].charAt(0).toUpperCase()+monthNames[p.month-1].slice(1)} ${p.year} · ${p.order_count} bestellingen · Cash ${fmt(p.cash)} + Kaart ${fmt(p.card)}</div>`;
+
+  if(existing){
+    html+=`<div class="inv-ok">✓ Deze factuur is al aangemaakt in Billit op ${new Date(existing.createdAt).toLocaleDateString('nl-BE')} (${fmt(existing.amount)})</div>`;
+  }
+
+  html+=`<div style="margin:8px 0 16px;">
+    ${p.vat.sort((a,b)=>a.rate-b.rate).map(v=>`<div class="inv-line">
+      <div><div class="inv-line-label">Dagontvangsten ${v.rate}% BTW</div><div class="inv-line-sub">Excl. ${fmt(v.excl)} + BTW ${fmt(v.vat)}</div></div>
+      <div class="inv-line-amt">${fmt(v.incl)}</div>
+    </div>`).join('')}
+    <div class="inv-total"><span>Totaal incl. BTW</span><span>${fmt(p.total)}</span></div>
+  </div>`;
+
+  html+=`<button class="btn btn-teal no-print" style="width:100%;padding:13px;" onclick="createInvoice(${p.year},${p.month})">
+    ${existing?'🔄 Opnieuw aanmaken in Billit':'🧾 Factuur aanmaken in Billit'}
+  </button>
+  <button class="btn btn-ghost no-print" style="width:100%;padding:11px;margin-top:8px;" onclick="window.print()">🖨 Afdrukken</button>
+  </div>`;
+
+  document.getElementById('inv-content').innerHTML=html;
+}
+
+async function createInvoice(year,month){
+  if(!confirm(`Factuur voor ${monthNames[month-1]} ${year} aanmaken in Billit?`))return;
+  toast('Factuur aanmaken in Billit…');
+  try{
+    const r=await API.invoice.createMonthly(year,month);
+    toast('✅ Factuur aangemaakt — '+r.orderNumber);
+    loadInvoicePreview();
+  }catch(e){
+    toast('Billit fout: '+e.message);
+  }
+}
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+loadCashbook();
+</script>
+</body>
+</html>

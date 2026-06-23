@@ -754,4 +754,4 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'bestel.html'));
 });
 
-server.listen(PORT, () => console.log(`☀️  Zomerbar v2 op http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`☀️  Zomerbar v4.0.0 op http://localhost:${PORT}`));
