@@ -140,7 +140,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
     <div id="cart-rows"></div>
     <div class="cart-total"><span>Totaal</span><span id="cart-total-amt">€ 0,00</span></div>
     <input class="note-input" id="order-note" placeholder="Opmerking (bv. geen ijs)">
-    <input class="note-input" id="order-phone" type="tel" placeholder="GSM-nummer voor SMS-melding (optioneel)" style="margin-top:0;">
+    <div style="position:relative;">
+      <input class="note-input" id="order-phone" type="tel" placeholder="GSM-nummer voor SMS-melding *" style="margin-top:0;border-color:var(--coral);padding-right:36px;" oninput="validatePhone()">
+      <span id="phone-icon" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:16px;">📱</span>
+    </div>
+    <div id="phone-error" style="font-size:12px;color:var(--coral-d);margin:-6px 0 6px;display:none;">⚠️ Vul je gsm-nummer in zodat we je kunnen verwittigen.</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">* Verplicht — je ontvangt een SMS wanneer je bestelling klaar is</div>
     <div style="font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Betaalmethode</div>
     <div class="pay-methods">
       <div class="pay-method sel" id="pm-sumup" onclick="selPay('sumup')">
@@ -191,8 +196,34 @@ let products = [], cart = {}, activeCat = 'Alle', payMethod = 'sumup';
 let currentOrderId = null, pollInterval = null;
 
 async function init() {
-  products = await API.products.list();
-  renderCats(); renderProds();
+  // Show loading state
+  document.getElementById('prod-grid').innerHTML = `
+    <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--mu);">
+      <div style="font-size:36px;margin-bottom:12px;">⏳</div>
+      <div style="font-size:14px;">Menu laden…</div>
+    </div>`;
+  try {
+    products = await API.products.list();
+    if (!products.length) {
+      document.getElementById('prod-grid').innerHTML = `
+        <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--mu);">
+          <div style="font-size:36px;margin-bottom:12px;">🍺</div>
+          <div style="font-size:14px;">Geen producten beschikbaar</div>
+        </div>`;
+      return;
+    }
+    renderCats(); renderProds();
+  } catch(e) {
+    document.getElementById('prod-grid').innerHTML = `
+      <div style="grid-column:1/-1;text-align:center;padding:40px 20px;">
+        <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
+        <div style="font-size:15px;font-weight:600;color:var(--coral-d);margin-bottom:8px;">Laden mislukt</div>
+        <div style="font-size:13px;color:var(--mu);margin-bottom:16px;">Controleer je verbinding en probeer opnieuw.</div>
+        <button onclick="init()" style="padding:10px 20px;background:var(--sun);color:var(--sun-t);border:none;border-radius:20px;font-size:14px;font-weight:600;cursor:pointer;">
+          🔄 Opnieuw proberen
+        </button>
+      </div>`;
+  }
 }
 
 // WS: live status updates for current order
@@ -289,7 +320,28 @@ function selPay(m) {
   document.getElementById('pm-cash').classList.toggle('sel', m==='cash');
 }
 
+function validatePhone() {
+  const phone = document.getElementById('order-phone').value.trim();
+  const inp = document.getElementById('order-phone');
+  const err = document.getElementById('phone-error');
+  const icon = document.getElementById('phone-icon');
+  const valid = phone.length >= 9;
+  inp.style.borderColor = phone.length === 0 ? 'var(--coral)' : valid ? 'var(--teal)' : 'var(--coral)';
+  err.style.display = !valid && phone.length > 0 ? 'block' : 'none';
+  icon.textContent = valid ? '✅' : '📱';
+  return valid;
+}
+
 async function placeOrder() {
+  // Validate phone
+  const phone = document.getElementById('order-phone').value.trim();
+  if (phone.length < 9) {
+    document.getElementById('order-phone').style.borderColor = 'var(--coral)';
+    document.getElementById('phone-error').style.display = 'block';
+    document.getElementById('order-phone').focus();
+    document.getElementById('order-phone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   const btn = document.getElementById('place-order-btn');
   btn.disabled = true; btn.textContent = 'Bestelling plaatsen…';
   const items = Object.entries(cart).map(([id, qty]) => {
@@ -374,6 +426,9 @@ function resetOrder() {
   document.getElementById('st-number').classList.remove('pulsing');
   document.getElementById('order-note').value = '';
   document.getElementById('order-phone').value = '';
+  document.getElementById('order-phone').style.borderColor = 'var(--coral)';
+  document.getElementById('phone-icon').textContent = '📱';
+  document.getElementById('phone-error').style.display = 'none';
 }
 
 function toast(msg) {
