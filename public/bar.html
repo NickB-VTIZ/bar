@@ -294,7 +294,14 @@ API.on('order_created', d => {
   sb.classList.add('ring'); setTimeout(()=>sb.classList.remove('ring'),600);
   toast(`🆕 Bestelling #${d.order.order_number}`);
 });
-API.on('order_updated', d => { orders[d.order.id]=d.order; renderBoard(); loadStats(); });
+API.on('order_updated', d => {
+  if(d.order.status==='collected'||d.order.status==='archived'){
+    delete orders[d.order.id];
+  } else {
+    orders[d.order.id]=d.order;
+  }
+  renderBoard(); loadStats();
+});
 API.on('order_deleted', d => { delete orders[d.id]; renderBoard(); });
 API.on('product_updated', d => { const i=products.findIndex(p=>p.id===d.product.id); if(i>=0)products[i]=d.product; });
 API.on('low_stock', d => showStockAlert(d.products));
@@ -334,7 +341,9 @@ function timeAgo(ts){
 
 function renderBoard(){
   const priority={paid:0,preparing:1,ready:2,pending:3};
-  const list=Object.values(orders).sort((a,b)=>(priority[a.status]??9)-(priority[b.status]??9)||new Date(a.created_at)-new Date(b.created_at));
+  const list=Object.values(orders)
+    .filter(o=>o.status!=='collected'&&o.status!=='archived')
+    .sort((a,b)=>(priority[a.status]??9)-(priority[b.status]??9)||new Date(a.created_at)-new Date(b.created_at));
   document.getElementById('s-open').textContent=list.filter(o=>o.status==='paid').length;
   document.getElementById('s-prep').textContent=list.filter(o=>o.status==='preparing').length;
   document.getElementById('s-ready').textContent=list.filter(o=>o.status==='ready').length;
