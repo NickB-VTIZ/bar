@@ -342,6 +342,64 @@ app.get('/api/products', (req, res) => {
   res.json(db.prepare('SELECT * FROM products WHERE active=1 ORDER BY sort_order,name').all());
 });
 
+// ── SumUp CSV import ─────────────────────────────────────────────
+// Parseert een SumUp items-export CSV en voegt producten toe
+app.post('/api/products/import-sumup', requireAuth, (req, res) => {
+  const { rows } = req.body; // array of parsed CSV row objects from frontend
+  if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'Geen rijen ontvangen' });
+
+  // Emoji per categorie (Nederlandse SumUp categorieën)
+  const catEmoji = {
+    'bier': '🍺', 'alcoholvrij': '🍺', 'frisdrank': '🥤', 'wijn': '🍷',
+    'coctails': '🍹', 'cocktails': '🍹', 'mocktails': '🍹',
+    'warme dranken': '☕', 'homemade': '🧃', 'food': '🍿',
+  };
+
+  const maxOrd0 = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
+  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+  const findBySumup = db.prepare('SELECT id FROM products WHERE sumup_id=?');
+  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=? WHERE sumup_id=?`);
+
+  let added = 0, updated = 0, failed = 0;
+  const errors = [];
+  let ord = maxOrd0;
+
+  for (const row of rows) {
+    try {
+      const name = (row.name || '').trim();
+      const price = parseFloat(row.price);
+      if (!name || isNaN(price)) { failed++; continue; }
+      const cost_price = row.cost_price ? parseFloat(row.cost_price) : 0;
+      let vat_rate = row.tax_rate != null && row.tax_rate !== '' ? parseFloat(row.tax_rate) : 6;
+      if (isNaN(vat_rate)) vat_rate = 6;
+      const category = (row.category || 'Overige').trim();
+      const vat_type = vat_rate >= 12 ? 'food' : 'drinks';
+      const catKey = category.toLowerCase();
+      const icon = catEmoji[catKey] || '🍺';
+      const sumup_id = row.item_id || null;
+      // Track inventory? quantity
+      let stock = -1;
+      if (row.track_inventory && String(row.track_inventory).toLowerCase() === 'yes') {
+        stock = row.quantity != null ? parseInt(row.quantity) : 0;
+        if (isNaN(stock)) stock = 0;
+      }
+
+      const existing = sumup_id ? findBySumup.get(sumup_id) : null;
+      if (existing) {
+        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, sumup_id);
+        updated++;
+      } else {
+        ord++;
+        insert.run(name, category, price, icon, vat_type, stock, 5, isNaN(cost_price)?0:cost_price, vat_rate, sumup_id, ord);
+        added++;
+      }
+    } catch(e) { failed++; errors.push(`${row.name}: ${e.message}`); }
+  }
+
+  const allProducts = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY sort_order,name').all();
+  res.json({ ok: true, added, updated, failed, errors: errors.slice(0,10), products: allProducts });
+});
+
 app.post('/api/products', requireAuth, (req, res) => {
   const { name, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });

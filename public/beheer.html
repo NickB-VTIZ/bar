@@ -181,32 +181,37 @@ select.inp{cursor:pointer;}
       </div>
     </div>
     <div class="sec">
-      <div class="sec-title">Producten importeren (SumUp of eigen lijst)</div>
+      <div class="sec-title">SumUp producten importeren</div>
+      <div class="card">
+        <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+          <div class="row-label">Upload je SumUp items-export (CSV)</div>
+          <div style="font-size:12px;color:var(--mu);line-height:1.6;">
+            In de SumUp app of op my.sumup.com: <strong>Artikelen → Exporteren</strong>. Upload het CSV-bestand hier — naam, prijs, aankoopprijs, BTW-tarief, categorie en voorraad worden automatisch ingelezen. Bestaande producten (zelfde SumUp-ID) worden bijgewerkt.
+          </div>
+          <input type="file" id="sumup-csv" accept=".csv" style="width:100%;font-size:13px;padding:10px;border:0.5px dashed var(--sun);border-radius:var(--rm);background:var(--sun-l);color:var(--sun-t);cursor:pointer;">
+        </div>
+      </div>
+      <button class="btn btn-sun btn-full" onclick="importSumupCsv()">📥 Importeren uit SumUp CSV</button>
+      <div id="sumup-result" style="margin-top:10px;font-size:13px;display:none;"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Of: handmatig plakken</div>
       <div class="card">
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:8px;">
-          <div class="row-label">Plak je productlijst of SumUp CSV-export</div>
           <div style="font-size:12px;color:var(--mu);line-height:1.6;">
-            Eén product per regel. Velden gescheiden door komma:<br>
-            <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;display:inline-block;margin:4px 0;">Naam, Categorie, Verkoopprijs, Aankoopprijs, BTW%, Emoji, Voorraad</code><br>
-            Enkel naam en verkoopprijs zijn verplicht — de rest is optioneel.<br>
-            <strong>Voorbeeld:</strong><br>
-            <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;display:inline-block;margin-top:4px;">Pils, Bieren, 2.50, 0.80, 6, 🍺, 50</code>
+            Eén product per regel:<br>
+            <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;display:inline-block;margin:4px 0;">Naam, Categorie, Verkoopprijs, Aankoopprijs, BTW%, Emoji, Voorraad</code>
           </div>
-          <textarea id="bulk-import" rows="8" placeholder="Pils, Bieren, 2.50, 0.80, 6, 🍺, 50
-Tripel, Bieren, 3.50, 1.20, 6, 🍺, 30
-Frietjes, Eten, 3.50, 0.90, 12, 🍟, 25" style="width:100%;font-size:13px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);font-family:monospace;resize:vertical;"></textarea>
+          <textarea id="bulk-import" rows="5" placeholder="Pils, Bieren, 2.50, 0.80, 6, 🍺, 50" style="width:100%;font-size:13px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);font-family:monospace;resize:vertical;"></textarea>
           <div style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--mu);">
             <input type="checkbox" id="bulk-has-header" style="width:auto;"> 
             <label for="bulk-has-header" style="cursor:pointer;">Eerste regel is een kolomtitel (overslaan)</label>
           </div>
         </div>
       </div>
-      <button class="btn btn-sun btn-full" onclick="bulkImport()">📥 Producten importeren</button>
+      <button class="btn btn-ghost btn-full" onclick="bulkImport()">📥 Plakimport</button>
       <div id="bulk-result" style="margin-top:10px;font-size:13px;display:none;"></div>
-
-      <div style="margin-top:14px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--sun-t);line-height:1.6;">
-        <strong>SumUp export:</strong> Open de SumUp app → Artikelen → ⋯ → Exporteren. Open de CSV in Excel, kopieer de kolommen in de juiste volgorde en plak hierboven. Aankoopprijs ontbreekt vaak in SumUp — vul die handmatig aan voor correcte marges.
-      </div>
     </div>
   </div>
 </div>
@@ -577,6 +582,95 @@ async function saveMollie() {
     siteUrl: document.getElementById('s-site-url').value,
   });
   toast('✅ Mollie instellingen opgeslagen');
+}
+
+// ── SumUp CSV import ──
+function parseCSV(text) {
+  // Proper CSV parser handling quoted fields with commas and newlines
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i+1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { field += c; }
+    } else {
+      if (c === '"') { inQuotes = true; }
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else { field += c; }
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+async function importSumupCsv() {
+  const fileInput = document.getElementById('sumup-csv');
+  const el = document.getElementById('sumup-result');
+  if (!fileInput.files.length) { toast('Kies eerst een CSV-bestand'); return; }
+  const file = fileInput.files[0];
+  const text = await file.text();
+  const rows = parseCSV(text);
+  if (rows.length < 2) { toast('CSV lijkt leeg'); return; }
+
+  // Map header columns by name
+  const header = rows[0].map(h => h.trim());
+  const col = (names) => {
+    for (const n of names) {
+      const idx = header.findIndex(h => h.toLowerCase() === n.toLowerCase());
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+  const iName = col(['Item name']);
+  const iPrice = col(['Price']);
+  const iCost = col(['Cost price']);
+  const iTax = col(['Tax rate (%)']);
+  const iCat = col(['Category']);
+  const iTrack = col(['Track inventory? (Yes/No)']);
+  const iQty = col(['Quantity']);
+  const iId = col(['Item id (Do not change)']);
+
+  if (iName < 0 || iPrice < 0) { toast('Geen geldige SumUp CSV (kolom Item name/Price ontbreekt)'); return; }
+
+  const parsed = [];
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    if (!cells || !cells[iName] || !cells[iName].trim()) continue;
+    parsed.push({
+      name: cells[iName],
+      price: cells[iPrice],
+      cost_price: iCost >= 0 ? cells[iCost] : '',
+      tax_rate: iTax >= 0 ? cells[iTax] : '',
+      category: iCat >= 0 ? cells[iCat] : 'Overige',
+      track_inventory: iTrack >= 0 ? cells[iTrack] : 'No',
+      quantity: iQty >= 0 ? cells[iQty] : '',
+      item_id: iId >= 0 ? cells[iId] : '',
+    });
+  }
+
+  if (!parsed.length) { toast('Geen producten gevonden in CSV'); return; }
+
+  el.style.display = 'block';
+  el.style.color = 'var(--mu)';
+  el.textContent = `${parsed.length} producten verwerken…`;
+
+  try {
+    const result = await API.products.importSumup(parsed);
+    products = result.products || products;
+    renderProducts();
+    el.style.color = result.failed ? 'var(--coral-d)' : 'var(--teal-d)';
+    el.innerHTML = `✅ ${result.added} toegevoegd, 🔄 ${result.updated} bijgewerkt${result.failed ? `, ❌ ${result.failed} mislukt` : ''}`;
+    fileInput.value = '';
+    toast(`✅ ${result.added + result.updated} producten geïmporteerd`);
+  } catch(e) {
+    el.style.color = 'var(--coral-d)';
+    el.textContent = '❌ ' + e.message;
+    toast('Fout: ' + e.message);
+  }
 }
 
 async function bulkImport() {
