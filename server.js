@@ -91,6 +91,8 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN mollie_payment_id TEXT`,
   `ALTER TABLE products ADD COLUMN sumup_id TEXT`,
   `ALTER TABLE products ADD COLUMN low_stock INTEGER NOT NULL DEFAULT 5`,
+  `ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0`,
+  `ALTER TABLE products ADD COLUMN vat_rate REAL DEFAULT 0`,
 ];
 
 migrations.forEach(sql => {
@@ -341,20 +343,38 @@ app.get('/api/products', (req, res) => {
 });
 
 app.post('/api/products', requireAuth, (req, res) => {
-  const { name, category, price, icon, vat_type, stock, low_stock } = req.body;
+  const { name, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
-  const r = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,sort_order) VALUES (?,?,?,?,?,?,?,?)`)
-    .run(name, category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, maxOrd+1);
+  // Determine vat_rate: explicit, or from vat_type default
+  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
+  const vatFood = parseFloat(getSetting('vatFood') || '12');
+  const finalVatRate = vat_rate != null ? parseFloat(vat_rate) : (vat_type === 'food' ? vatFood : vatDrinks);
+  const r = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, maxOrd+1);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
 });
 
 app.put('/api/products/:id', requireAuth, (req, res) => {
-  const { name, category, price, icon, vat_type, stock, low_stock, active } = req.body;
-  db.prepare(`UPDATE products SET name=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=? WHERE id=?`)
-    .run(name, category, parseFloat(price), icon, vat_type, stock??-1, low_stock??5, active??1, req.params.id);
+  const existing = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Product niet gevonden' });
+  const { name, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate } = req.body;
+  db.prepare(`UPDATE products SET name=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=? WHERE id=?`)
+    .run(
+      name ?? existing.name,
+      category ?? existing.category,
+      price != null ? parseFloat(price) : existing.price,
+      icon ?? existing.icon,
+      vat_type ?? existing.vat_type,
+      stock != null ? stock : existing.stock,
+      low_stock != null ? low_stock : existing.low_stock,
+      active != null ? active : existing.active,
+      cost_price != null ? parseFloat(cost_price) : existing.cost_price,
+      vat_rate != null ? parseFloat(vat_rate) : existing.vat_rate,
+      req.params.id
+    );
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -691,6 +711,112 @@ async function billitRequest(method, apiPath, body) {
   if (!r.ok) throw new Error((data && data.errors) ? JSON.stringify(data.errors) : (data.Description || 'Billit fout ' + r.status));
   return data;
 }
+
+// ── Dagontvangsten naar Billit ───────────────────────────────────
+// Stuurt de ontvangsten van één dag als een DailyRevenue document naar Billit
+app.post('/api/billit/daily-receipt', requireAuth, async (req, res) => {
+  const { date } = req.body; // YYYY-MM-DD
+  const day = date || new Date().toISOString().slice(0,10);
+
+  const orders = db.prepare(`
+    SELECT o.id, o.amount, o.method FROM orders o
+    WHERE DATE(o.created_at) = ?
+      AND o.status NOT IN ('cancelled','archived','pending')
+  `).all(day);
+
+  if (!orders.length) return res.status(400).json({ error: 'Geen ontvangsten op deze dag' });
+
+  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
+  const vatFood = parseFloat(getSetting('vatFood') || '12');
+
+  // Aggregate incl-amounts per VAT rate, split by payment method
+  const byVat = {};
+  let cash = 0, card = 0;
+  orders.forEach(o => {
+    if (o.method === 'cash') cash += o.amount; else card += o.amount;
+    const items = db.prepare('SELECT oi.*, p.vat_type, p.vat_rate FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
+    items.forEach(it => {
+      const rate = it.vat_rate != null && it.vat_rate > 0 ? it.vat_rate : (it.vat_type === 'food' ? vatFood : vatDrinks);
+      const lineTotal = it.price * it.qty;
+      if (!byVat[rate]) byVat[rate] = 0;
+      byVat[rate] += lineTotal;
+    });
+  });
+
+  // Build order lines per VAT rate (excl amounts — Billit calculates VAT)
+  const orderLines = Object.entries(byVat).map(([rate, incl]) => {
+    const r = parseFloat(rate);
+    const excl = incl / (1 + r/100);
+    return {
+      Quantity: 1,
+      UnitPriceExcl: parseFloat(excl.toFixed(2)),
+      Description: `Dagontvangsten ${day} — ${r}% BTW`,
+      VATPercentage: r,
+    };
+  });
+
+  const total = Object.values(byVat).reduce((a,b)=>a+b,0);
+  const barName = getSetting('barName') || 'Zomerbar';
+  const docNumber = `ZB-DR-${day.replace(/-/g,'')}`;
+
+  // DailyRevenue document — automatically marked paid in Billit
+  const body = {
+    OrderType: 'DailyRevenue',
+    OrderDirection: 'Income',
+    OrderNumber: docNumber,
+    OrderDate: day,
+    Currency: 'EUR',
+    OrderTitle: `Dagontvangsten ${barName} ${day}`,
+    OrderLines: orderLines,
+    Paid: true,
+    PaidDate: day,
+  };
+
+  try {
+    const result = await billitRequest('POST', '/v1/orders', body);
+    const orderId = result.OrderID || result.orderID || result;
+    db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)')
+      .run(`daily_receipt_${day}`, JSON.stringify({ orderId, createdAt: new Date().toISOString(), total, cash, card }));
+    res.json({ ok: true, orderId, docNumber, total, cash, card, lines: orderLines });
+  } catch(e) {
+    res.status(400).json({ error: e.message, lines: orderLines });
+  }
+});
+
+// Preview daily receipt without sending
+app.get('/api/billit/daily-receipt/preview', requireAuth, (req, res) => {
+  const day = req.query.date || new Date().toISOString().slice(0,10);
+  const orders = db.prepare(`
+    SELECT o.id, o.amount, o.method FROM orders o
+    WHERE DATE(o.created_at) = ?
+      AND o.status NOT IN ('cancelled','archived','pending')
+  `).all(day);
+
+  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
+  const vatFood = parseFloat(getSetting('vatFood') || '12');
+  const byVat = {};
+  let cash = 0, card = 0;
+  orders.forEach(o => {
+    if (o.method === 'cash') cash += o.amount; else card += o.amount;
+    const items = db.prepare('SELECT oi.*, p.vat_type, p.vat_rate FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
+    items.forEach(it => {
+      const rate = it.vat_rate != null && it.vat_rate > 0 ? it.vat_rate : (it.vat_type === 'food' ? vatFood : vatDrinks);
+      const lineTotal = it.price * it.qty;
+      if (!byVat[rate]) byVat[rate] = { rate, incl: 0, excl: 0, vat: 0 };
+      byVat[rate].incl += lineTotal;
+    });
+  });
+  Object.values(byVat).forEach(v => { v.excl = v.incl/(1+v.rate/100); v.vat = v.incl - v.excl; });
+
+  const existing = getSetting(`daily_receipt_${day}`);
+  res.json({
+    date: day,
+    order_count: orders.length,
+    cash, card, total: cash + card,
+    vat: Object.values(byVat),
+    already_sent: existing || null,
+  });
+});
 
 app.post('/api/invoice/monthly', requireAuth, async (req, res) => {
   const { year, month } = req.body; // month: 1-12
