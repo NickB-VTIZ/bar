@@ -122,10 +122,11 @@ select.inp{cursor:pointer;}
         <div class="add-form-grid">
           <div><label>BTW-tarief</label>
             <select id="np-vatrate" onchange="calcMargin()">
-              <option value="6">6% (dranken)</option>
-              <option value="12">12% (maaltijden)</option>
-              <option value="21">21% (alcohol)</option>
-              <option value="0">0% (vrijgesteld)</option>
+              <option value="0">0%</option>
+              <option value="6" selected>6%</option>
+              <option value="12">12%</option>
+              <option value="21">21%</option>
+              <option value="-1">Zonder btw</option>
             </select>
           </div>
           <div><label>Beginstock</label><input id="np-stock" type="number" min="-1" placeholder="-1 = onbeperkt"></div>
@@ -379,8 +380,10 @@ function renderProducts() {
     html += `<div style="padding:8px 14px;font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;border-bottom:0.5px solid var(--bd);background:var(--bg)">${cat}</div>`;
     prods.forEach(p => {
       const stockLbl = p.stock<0?'∞':p.stock<=p.low_stock?`<span style="color:var(--coral-d)">${p.stock} ⚠</span>`:p.stock;
-      const vatR = p.vat_rate || (p.vat_type==='food'?12:6);
-      const excl = p.price / (1 + vatR/100);
+      const noVat = p.vat_rate === -1;
+      const vatR = noVat ? null : (p.vat_rate != null && p.vat_rate >= 0 ? p.vat_rate : (p.vat_type==='food'?12:6));
+      const vatLbl = noVat ? 'geen btw' : `${vatR}% BTW`;
+      const excl = noVat ? p.price : p.price / (1 + vatR/100);
       const margin = p.cost_price ? (excl - p.cost_price) : null;
       const marginPct = (margin != null && excl > 0) ? (margin/excl*100) : null;
       const marginLbl = marginPct != null
@@ -388,7 +391,7 @@ function renderProducts() {
         : '';
       html += `<div class="prod-row">
         <span class="prod-icon">${p.icon}</span>
-        <div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-meta">Stock: ${stockLbl} · ${vatR}% BTW${marginLbl}</div></div>
+        <div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-meta">Stock: ${stockLbl} · ${vatLbl}${marginLbl}</div></div>
         <span class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</span>
         <button class="icon-btn" onclick="editProduct(${p.id})" title="Bewerken">✏️</button>
         <button class="icon-btn" onclick="deleteProduct(${p.id})" title="Verwijderen">🗑</button>
@@ -409,13 +412,13 @@ function renderMarginSummary() {
   // Average margin %
   let totalMarginPct = 0, count = 0, stockValue = 0;
   products.forEach(p => {
-    const vatR = p.vat_rate || (p.vat_type==='food'?12:6);
-    const excl = p.price / (1 + vatR/100);
+    const noVat = p.vat_rate === -1;
+    const vatR = noVat ? 0 : (p.vat_rate != null && p.vat_rate >= 0 ? p.vat_rate : (p.vat_type==='food'?12:6));
+    const excl = noVat ? p.price : p.price / (1 + vatR/100);
     if (p.cost_price > 0 && excl > 0) {
       totalMarginPct += ((excl - p.cost_price) / excl * 100);
       count++;
     }
-    // Inventory value at cost
     if (p.stock > 0 && p.cost_price > 0) stockValue += p.stock * p.cost_price;
   });
   const avgMargin = count ? (totalMarginPct / count) : 0;
@@ -445,7 +448,7 @@ function editProduct(id) {
   document.getElementById('np-cat').value = p.category;
   document.getElementById('np-price').value = p.price;
   document.getElementById('np-cost').value = p.cost_price || '';
-  document.getElementById('np-vatrate').value = p.vat_rate || (p.vat_type === 'food' ? 12 : 6);
+  document.getElementById('np-vatrate').value = p.vat_rate != null ? p.vat_rate : (p.vat_type === 'food' ? 12 : 6);
   document.getElementById('np-icon').value = p.icon;
   document.getElementById('np-stock').value = p.stock;
   document.getElementById('np-vat').value = p.vat_type;
@@ -458,19 +461,20 @@ function editProduct(id) {
 function calcMargin() {
   const price = parseFloat(document.getElementById('np-price').value) || 0;
   const cost = parseFloat(document.getElementById('np-cost').value) || 0;
-  const vatRate = parseFloat(document.getElementById('np-vatrate').value) || 0;
+  let vatRate = parseFloat(document.getElementById('np-vatrate').value);
+  const noVat = vatRate === -1;
+  if (noVat) vatRate = 0;
   const disp = document.getElementById('margin-display');
   if (!price) { disp.style.display = 'none'; return; }
   const excl = price / (1 + vatRate/100);
   const vatAmt = price - excl;
-  const margin = excl - cost;          // brutomarge op basis van excl. BTW prijs
+  const margin = excl - cost;
   const marginPct = excl > 0 ? (margin / excl * 100) : 0;
   document.getElementById('m-excl').textContent = '€ ' + excl.toFixed(2).replace('.', ',');
-  document.getElementById('m-vat').textContent = '€ ' + vatAmt.toFixed(2).replace('.', ',');
+  document.getElementById('m-vat').textContent = noVat ? 'zonder btw' : '€ ' + vatAmt.toFixed(2).replace('.', ',');
   document.getElementById('m-margin').textContent = '€ ' + margin.toFixed(2).replace('.', ',');
   document.getElementById('m-pct').textContent = marginPct.toFixed(1).replace('.', ',') + '%';
   disp.style.display = 'block';
-  // Sync vat_type from vat_rate for backwards compat
   document.getElementById('np-vat').value = vatRate >= 12 ? 'food' : 'drinks';
 }
 
@@ -479,7 +483,7 @@ async function saveProduct() {
   const category = document.getElementById('np-cat').value.trim();
   const price = parseFloat(document.getElementById('np-price').value);
   const cost_price = parseFloat(document.getElementById('np-cost').value) || 0;
-  const vat_rate = parseFloat(document.getElementById('np-vatrate').value) || 0;
+  const vat_rate = parseFloat(document.getElementById('np-vatrate').value);
   const icon = document.getElementById('np-icon').value.trim() || '🍺';
   const stock = parseInt(document.getElementById('np-stock').value ?? -1);
   const vat_type = vat_rate >= 12 ? 'food' : 'drinks';
@@ -593,7 +597,10 @@ async function bulkImport() {
     const price = parseFloat((priceStr||'').replace(',', '.'));
     if (!name || isNaN(price)) { failed++; errors.push(`"${line}" — ongeldige naam/prijs`); continue; }
     const cost_price = costStr ? parseFloat(costStr.replace(',', '.')) : 0;
-    const vat_rate = vatStr ? parseFloat(vatStr.replace(',', '.').replace('%','')) : 6;
+    let vat_rate;
+    const vatClean = (vatStr||'').toLowerCase().trim();
+    if (vatClean.includes('geen') || vatClean.includes('zonder')) vat_rate = -1;
+    else vat_rate = vatStr ? parseFloat(vatStr.replace(',', '.').replace('%','')) : 6;
     const stock = stockStr ? parseInt(stockStr) : -1;
     const vat_type = vat_rate >= 12 ? 'food' : 'drinks';
     try {

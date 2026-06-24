@@ -133,11 +133,14 @@ tr:last-child td{border-bottom:none;}
   <div class="wrap">
     <div class="controls no-print">
       <label>Dag</label>
-      <input type="date" id="daily-date">
-      <button class="btn btn-primary" onclick="loadDailyPreview()">Voorbeeld</button>
+      <input type="date" id="daily-date" onchange="loadDailyOverview()">
+      <button class="btn btn-primary" onclick="loadDailyOverview()">Tonen</button>
+    </div>
+    <div class="print-header">
+      <h1>☀️ Zomerbar — Dagontvangsten</h1>
     </div>
     <div id="daily-content">
-      <div class="empty"><div class="empty-icon">📅</div><div>Kies een dag om de ontvangsten naar Billit te sturen</div></div>
+      <div class="empty"><div class="empty-icon">📅</div><div>Kies een dag voor het dagontvangsten-overzicht</div></div>
     </div>
   </div>
 </div>
@@ -249,60 +252,65 @@ function renderCashbook(data){
 }
 
 // Invoice
-// ── Dagontvangsten ──
+// ── Dagontvangsten (Billit-categorieën overzicht) ──
 function initDaily(){
   const d = document.getElementById('daily-date');
   if (!d.value) d.value = new Date().toISOString().slice(0,10);
+  loadDailyOverview();
 }
 
-async function loadDailyPreview(){
+async function loadDailyOverview(){
   const date = document.getElementById('daily-date').value;
   if(!date){toast('Kies een dag');return;}
   try{
-    const p = await API.dailyReceipt.preview(date);
-    renderDailyPreview(p);
+    const o = await API.dailyReceipt.overview(date);
+    renderDailyOverview(o);
   }catch(e){toast('Fout: '+e.message);}
 }
 
-function renderDailyPreview(p){
-  if(!p.order_count){
-    document.getElementById('daily-content').innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>Geen ontvangsten op '+new Date(p.date).toLocaleDateString('nl-BE')+'</div></div>';
+function renderDailyOverview(o){
+  if(!o.order_count){
+    document.getElementById('daily-content').innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>Geen ontvangsten op '+new Date(o.date).toLocaleDateString('nl-BE')+'</div></div>';
     return;
   }
-  const existing = p.already_sent;
-  let html=`<div class="inv-card">
-    <div class="inv-preview-title">Dagontvangsten naar Billit</div>
-    <div class="inv-preview-sub">${new Date(p.date).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} · ${p.order_count} bestellingen · Cash ${fmt(p.cash)} + Kaart ${fmt(p.card)}</div>`;
+  const c = o.categories;
+  const rows = [
+    { label: 'Categorie 0% (incl. btw)', val: c['0'] },
+    { label: 'Categorie 6% (incl. btw)', val: c['6'] },
+    { label: 'Categorie 12% (incl. btw)', val: c['12'] },
+    { label: 'Categorie 21% (incl. btw)', val: c['21'] },
+    { label: 'Categorie zonder btw', val: c['geen'] },
+  ];
 
-  if(existing){
-    html+=`<div class="inv-ok">✓ Al verstuurd naar Billit op ${new Date(existing.createdAt).toLocaleDateString('nl-BE')} (${fmt(existing.total)})</div>`;
-  }
+  let html = `<div class="inv-card">
+    <div class="inv-preview-title">Dagontvangsten — ${new Date(o.date).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+    <div class="inv-preview-sub">${o.order_count} bestellingen · 💶 Cash ${fmt(o.cash)} · 💳 Kaart ${fmt(o.card)}</div>
 
-  html+=`<div style="margin:8px 0 16px;">
-    ${p.vat.sort((a,b)=>a.rate-b.rate).map(v=>`<div class="inv-line">
-      <div><div class="inv-line-label">Ontvangsten ${v.rate}% BTW</div><div class="inv-line-sub">Excl. ${fmt(v.excl)} + BTW ${fmt(v.vat)}</div></div>
-      <div class="inv-line-amt">${fmt(v.incl)}</div>
-    </div>`).join('')}
-    <div class="inv-total"><span>Totaal incl. BTW</span><span>${fmt(p.total)}</span></div>
+    <div style="background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);padding:10px 12px;font-size:12px;color:var(--sun-t);margin:12px 0;line-height:1.5;">
+      💡 Tik onderstaande bedragen over in Billit → Dagontvangstenboek → Toevoegen. De categorieën komen exact overeen.
+    </div>
+
+    <div style="margin:12px 0;">`;
+
+  rows.forEach(r => {
+    const isZero = !r.val;
+    html += `<div class="inv-line" style="${isZero?'opacity:.4;':''}">
+      <div class="inv-line-label">${r.label}</div>
+      <div class="inv-line-amt" style="font-size:17px;cursor:pointer;" onclick="copyAmount(${(r.val||0).toFixed(2)})" title="Klik om te kopiëren">${fmt(r.val)}</div>
+    </div>`;
+  });
+
+  html += `<div class="inv-total"><span>Totaal incl. btw</span><span>${fmt(o.total)}</span></div>
+    </div>
+    <button class="btn btn-ghost no-print" style="width:100%;padding:11px;" onclick="window.print()">🖨 Afdrukken</button>
   </div>`;
 
-  html+=`<button class="btn btn-teal no-print" style="width:100%;padding:13px;" onclick="sendDaily('${p.date}')">
-    ${existing?'🔄 Opnieuw versturen naar Billit':'📅 Versturen naar dagontvangstenboek'}
-  </button></div>`;
-
-  document.getElementById('daily-content').innerHTML=html;
+  document.getElementById('daily-content').innerHTML = html;
 }
 
-async function sendDaily(date){
-  if(!confirm(`Dagontvangsten van ${new Date(date).toLocaleDateString('nl-BE')} naar Billit sturen?`))return;
-  toast('Versturen naar Billit…');
-  try{
-    const r = await API.dailyReceipt.send(date);
-    toast('✅ Verstuurd — '+r.docNumber);
-    loadDailyPreview();
-  }catch(e){
-    toast('Billit fout: '+e.message);
-  }
+function copyAmount(val){
+  const txt = val.toFixed(2).replace('.', ',');
+  navigator.clipboard.writeText(txt).then(()=>toast('📋 '+txt+' gekopieerd')).catch(()=>{});
 }
 
 function initInvoice(){

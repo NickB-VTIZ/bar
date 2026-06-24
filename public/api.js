@@ -73,6 +73,7 @@ window.API = (() => {
       createMonthly: (y, m)    => req('POST', '/api/invoice/monthly', { year: y, month: m }),
     },
     dailyReceipt: {
+      overview: (date) => req('GET',  `/api/billit/daily-overview?date=${date}`),
       preview: (date) => req('GET',  `/api/billit/daily-receipt/preview?date=${date}`),
       send:    (date) => req('POST', '/api/billit/daily-receipt', { date }),
     },

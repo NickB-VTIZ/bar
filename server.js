@@ -714,6 +714,46 @@ async function billitRequest(method, apiPath, body) {
 
 // ── Dagontvangsten naar Billit ───────────────────────────────────
 // Stuurt de ontvangsten van één dag als een DailyRevenue document naar Billit
+// ── Dagontvangsten overzicht (Billit-categorieën) ────────────────
+// Toont per dag de ontvangsten gegroepeerd in Billit's BTW-categorieën
+// zodat de barhouder ze manueel in Billit kan overtikken. Geen API-sync.
+app.get('/api/billit/daily-overview', requireAuth, (req, res) => {
+  const day = req.query.date || new Date().toISOString().slice(0,10);
+  const orders = db.prepare(`
+    SELECT o.id, o.amount, o.method FROM orders o
+    WHERE DATE(o.created_at) = ?
+      AND o.status NOT IN ('cancelled','archived','pending')
+  `).all(day);
+
+  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
+  const vatFood = parseFloat(getSetting('vatFood') || '12');
+
+  // Billit categories: 0, 6, 12, 21, and "zonder btw" (-1)
+  const cats = { '0': 0, '6': 0, '12': 0, '21': 0, 'geen': 0 };
+  let cash = 0, card = 0;
+
+  orders.forEach(o => {
+    if (o.method === 'cash') cash += o.amount; else card += o.amount;
+    const items = db.prepare('SELECT oi.*, p.vat_type, p.vat_rate FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
+    items.forEach(it => {
+      const lineTotal = it.price * it.qty;
+      let rate;
+      if (it.vat_rate === -1) { cats['geen'] += lineTotal; return; }
+      rate = it.vat_rate != null && it.vat_rate >= 0 ? it.vat_rate : (it.vat_type === 'food' ? vatFood : vatDrinks);
+      const key = String(Math.round(rate));
+      if (cats[key] != null) cats[key] += lineTotal;
+      else cats['6'] += lineTotal; // fallback
+    });
+  });
+
+  res.json({
+    date: day,
+    order_count: orders.length,
+    cash, card, total: cash + card,
+    categories: cats, // incl. BTW bedragen per categorie
+  });
+});
+
 app.post('/api/billit/daily-receipt', requireAuth, async (req, res) => {
   const { date } = req.body; // YYYY-MM-DD
   const day = date || new Date().toISOString().slice(0,10);
@@ -757,16 +797,29 @@ app.post('/api/billit/daily-receipt', requireAuth, async (req, res) => {
 
   const total = Object.values(byVat).reduce((a,b)=>a+b,0);
   const barName = getSetting('barName') || 'Zomerbar';
+  const barVat = getSetting('barVat') || '';
   const docNumber = `ZB-DR-${day.replace(/-/g,'')}`;
 
-  // DailyRevenue document — automatically marked paid in Billit
+  // Dagontvangsten als Invoice met OrderDirection Income, vaste klant, automatisch betaald
   const body = {
-    OrderType: 'DailyRevenue',
+    OrderType: 'Invoice',
     OrderDirection: 'Income',
     OrderNumber: docNumber,
     OrderDate: day,
+    ExpiryDate: day,
     Currency: 'EUR',
     OrderTitle: `Dagontvangsten ${barName} ${day}`,
+    Customer: {
+      Name: 'Dagontvangsten',
+      PartyType: 'Customer',
+      Addresses: [{
+        AddressType: 'InvoiceAddress',
+        Name: 'Dagontvangsten',
+        Street: 'Diverse klanten',
+        City: 'Aan de bar',
+        CountryCode: 'BE',
+      }],
+    },
     OrderLines: orderLines,
     Paid: true,
     PaidDate: day,
@@ -876,9 +929,15 @@ app.post('/api/invoice/monthly', requireAuth, async (req, res) => {
     Currency: 'EUR',
     OrderTitle: `Maandelijkse dagontvangsten ${monthNames[month-1]} ${year}`,
     Customer: {
-      Name: barName,
-      VATNumber: barVat || undefined,
+      Name: 'Dagontvangsten',
       PartyType: 'Customer',
+      Addresses: [{
+        AddressType: 'InvoiceAddress',
+        Name: 'Dagontvangsten',
+        Street: 'Diverse klanten',
+        City: 'Aan de bar',
+        CountryCode: 'BE',
+      }],
     },
     OrderLines: orderLines,
     Paid: true,
