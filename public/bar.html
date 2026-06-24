@@ -357,6 +357,8 @@ function renderBoard(){
 function cardHTML(o){
   const isCash = o.method === 'cash';
   const isMollie = o.method === 'mollie';
+  const isSumupOnline = o.method === 'sumup';
+  const isOnline = isMollie || isSumupOnline;
 
   // Badge & card class
   let badgeCls, badgeTxt, cardCls;
@@ -433,7 +435,7 @@ function cardHTML(o){
     </div>
     <div class="card-items">${items}</div>
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
-    <div class="card-method">${isCash?'💶 Cash':isMollie?'🏦 Bancontact':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
+    <div class="card-method">${isCash?'💶 Cash':isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
     ${actions}
   </div>`;
 }

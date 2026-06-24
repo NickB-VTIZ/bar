@@ -150,10 +150,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
     <div style="font-size:12px;color:var(--mu);margin-bottom:10px;">* Verplicht — je ontvangt een SMS wanneer je bestelling klaar is</div>
     <div style="font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Betaalmethode</div>
     <div class="pay-methods">
-      <div class="pay-method sel" id="pm-mollie" onclick="selPay('mollie')">
+      <div class="pay-method sel" id="pm-online" onclick="selPay('online')">
         <div class="pay-method-icon">🏦</div>
-        <div class="pay-method-label">Bancontact</div>
-        <div class="pay-method-sub">Online betalen</div>
+        <div class="pay-method-label" id="pm-online-label">Online betalen</div>
+        <div class="pay-method-sub" id="pm-online-sub">Bancontact, kaart</div>
       </div>
       <div class="pay-method" id="pm-cash" onclick="selPay('cash')">
         <div class="pay-method-icon">💶</div>
@@ -203,8 +203,19 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 
 <script src="/api.js"></script>
 <script>
-let products = [], cart = {}, activeCat = 'Alle', payMethod = 'mollie';
+let products = [], cart = {}, activeCat = 'Alle', payMethod = 'online';
+let payProvider = 'mollie'; // resolved from server settings
 let currentOrderId = null, pollInterval = null;
+
+// Load payment provider config
+(async () => {
+  try {
+    const s = await fetch('/api/settings/public').then(r=>r.json());
+    payProvider = s.payProvider || 'mollie';
+    const sub = document.getElementById('pm-online-sub');
+    if (sub) sub.textContent = payProvider === 'sumup' ? 'Kaart, Bancontact, wallets' : 'Bancontact';
+  } catch(_) {}
+})();
 
 // Remember last phone number
 const savedPhone = localStorage.getItem('zb_phone') || '';
@@ -281,7 +292,9 @@ function renderProds() {
       : '';
     return `<div class="prod ${qty>0?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock?'':'addItem('+p.id+')'}">
       <div class="prod-qty-badge">${qty}</div>
-      <div class="prod-icon">${p.icon}</div>
+      ${p.image_url
+        ? `<div class="prod-img" style="width:100%;height:80px;border-radius:8px;background:#f0efe9 url('${p.image_url}') center/cover no-repeat;margin-bottom:6px;"></div>`
+        : `<div class="prod-icon">${p.icon}</div>`}
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
       ${stockLabel}
@@ -345,7 +358,7 @@ function closeCart() { document.getElementById('cart-overlay').classList.remove(
 
 function selPay(m) {
   payMethod = m;
-  document.getElementById('pm-mollie').classList.toggle('sel', m==='mollie');
+  document.getElementById('pm-online').classList.toggle('sel', m==='online');
   document.getElementById('pm-cash').classList.toggle('sel', m==='cash');
 }
 
@@ -380,15 +393,18 @@ async function placeOrder() {
     return p ? { product_id: p.id, name: p.name, icon: p.icon, price: p.price, qty } : null;
   }).filter(Boolean);
   try {
+    // 'online' maps to the configured provider (mollie or sumup)
+    const actualMethod = payMethod === 'online' ? payProvider : payMethod;
     const result = await API.orders.create({
-      items, method: payMethod,
+      items, method: actualMethod,
       note: document.getElementById('order-note').value || '',
       phone,
       redirect_url: window.location.origin + '/bestel.html',
     });
     currentOrderId = result.order.id;
     closeCart();
-    showStatusScreen(result.order, result.mollieCheckoutUrl);
+    const checkoutUrl = result.mollieCheckoutUrl || result.sumupCheckoutUrl;
+    showStatusScreen(result.order, checkoutUrl);
     cart = {};
     // Reset knop voor volgende bestelling
     btn.disabled = false; btn.textContent = 'Bestelling plaatsen';
@@ -399,7 +415,7 @@ async function placeOrder() {
   }
 }
 
-function showStatusScreen(order, mollieCheckoutUrl) {
+function showStatusScreen(order, checkoutUrl) {
   const amtFmt = '€ ' + (order.amount || 0).toFixed(2).replace('.', ',');
   document.getElementById('st-number').textContent = order.order_number;
   document.getElementById('st-amount').textContent = amtFmt;
@@ -407,10 +423,11 @@ function showStatusScreen(order, mollieCheckoutUrl) {
   document.getElementById('status-screen').classList.add('show');
   updateStatusScreen(order);
 
-  if (order.method === 'mollie' && mollieCheckoutUrl) {
+  const isOnline = order.method === 'mollie' || order.method === 'sumup';
+  if (isOnline && checkoutUrl) {
     const pending = document.getElementById('pay-pending');
     pending.classList.add('show');
-    document.getElementById('pay-link').href = mollieCheckoutUrl;
+    document.getElementById('pay-link').href = checkoutUrl;
     pollInterval = setInterval(async () => {
       try {
         const r = await API.orders.pollPayment(order.id);

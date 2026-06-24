@@ -93,6 +93,7 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN low_stock INTEGER NOT NULL DEFAULT 5`,
   `ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0`,
   `ALTER TABLE products ADD COLUMN vat_rate REAL DEFAULT 0`,
+  `ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''`,
 ];
 
 migrations.forEach(sql => {
@@ -240,6 +241,42 @@ async function checkMolliePayment(paymentId) {
   if (!mollie) return null;
   return mollie.payments.get(paymentId);
 }
+
+// ── SumUp Online (Hosted Checkout) ───────────────────────────────
+async function sumupRequest(method, apiPath, body) {
+  const apiKey = getSetting('sumupApiKey');
+  if (!apiKey) throw new Error('Geen SumUp API-sleutel ingesteld');
+  const r = await fetch('https://api.sumup.com' + apiPath, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await r.text();
+  let data; try { data = JSON.parse(text); } catch { data = text; }
+  if (!r.ok) throw new Error((data && data.message) ? data.message : ('SumUp fout ' + r.status));
+  return data;
+}
+
+async function createSumupCheckout(order, redirectUrl) {
+  const merchantCode = getSetting('sumupMerchantCode');
+  if (!merchantCode) throw new Error('Geen SumUp merchant code ingesteld');
+  const barName = getSetting('barName') || 'Zomerbar';
+  const checkout = await sumupRequest('POST', '/v0.1/checkouts', {
+    checkout_reference: order.id,
+    amount: parseFloat(order.amount.toFixed(2)),
+    currency: 'EUR',
+    merchant_code: merchantCode,
+    description: `${barName} — Bestelling #${order.order_number}`,
+    hosted_checkout: { enabled: true },
+    redirect_url: redirectUrl || `${getSetting('siteUrl') || ''}/bestel.html`,
+    return_url: `${getSetting('siteUrl') || ''}/api/sumup/webhook`,
+  });
+  return checkout;
+}
+
+async function checkSumupCheckout(checkoutId) {
+  return sumupRequest('GET', `/v0.1/checkouts/${checkoutId}`);
+}
 function hashPassword(pw) {
   return crypto.createHash('sha256').update(pw).digest('hex');
 }
@@ -344,6 +381,34 @@ app.get('/api/products', (req, res) => {
 
 // ── SumUp CSV import ─────────────────────────────────────────────
 // Parseert een SumUp items-export CSV en voegt producten toe
+// ── Export producten naar SumUp CSV-formaat ──────────────────────
+app.get('/api/products/export-sumup', requireAuth, (req, res) => {
+  const products = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY category,name').all();
+  // SumUp import header (vereenvoudigd maar compatibel)
+  const header = ['Item name','Description','Price','Cost price','Tax rate (%)','Category','Track inventory? (Yes/No)','Quantity','Item id (Do not change)'];
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [header.join(',')];
+  products.forEach(p => {
+    const vatR = p.vat_rate === -1 ? 0 : (p.vat_rate != null && p.vat_rate >= 0 ? p.vat_rate : (p.vat_type === 'food' ? 12 : 6));
+    const tracks = p.stock >= 0 ? 'Yes' : 'No';
+    const qty = p.stock >= 0 ? p.stock : 0;
+    lines.push([
+      esc(p.name), '', p.price.toFixed(2),
+      p.cost_price ? p.cost_price.toFixed(2) : '',
+      vatR.toFixed(2), esc(p.category),
+      tracks, qty, esc(p.sumup_id || ''),
+    ].join(','));
+  });
+  const csv = lines.join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="zomerbar-producten-sumup.csv"');
+  res.send(csv);
+});
+
 app.post('/api/products/import-sumup', requireAuth, (req, res) => {
   const { rows } = req.body; // array of parsed CSV row objects from frontend
   if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'Geen rijen ontvangen' });
@@ -356,9 +421,9 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
   };
 
   const maxOrd0 = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
-  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,image_url,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
   const findBySumup = db.prepare('SELECT id FROM products WHERE sumup_id=?');
-  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=? WHERE sumup_id=?`);
+  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=?,image_url=?,stock=? WHERE sumup_id=?`);
 
   let added = 0, updated = 0, failed = 0;
   const errors = [];
@@ -377,6 +442,7 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
       const catKey = category.toLowerCase();
       const icon = catEmoji[catKey] || '🍺';
       const sumup_id = row.item_id || null;
+      const image_url = (row.image_url || '').trim();
       // Track inventory? quantity
       let stock = -1;
       if (row.track_inventory && String(row.track_inventory).toLowerCase() === 'yes') {
@@ -386,11 +452,15 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
 
       const existing = sumup_id ? findBySumup.get(sumup_id) : null;
       if (existing) {
-        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, sumup_id);
+        // Keep existing stock if SumUp doesn't track it (stock = -1)
+        const existingRow = db.prepare('SELECT stock, image_url FROM products WHERE sumup_id=?').get(sumup_id);
+        const finalStock = stock === -1 ? existingRow.stock : stock;
+        const finalImage = image_url || existingRow.image_url || '';
+        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, finalImage, finalStock, sumup_id);
         updated++;
       } else {
         ord++;
-        insert.run(name, category, price, icon, vat_type, stock, 5, isNaN(cost_price)?0:cost_price, vat_rate, sumup_id, ord);
+        insert.run(name, category, price, icon, vat_type, stock, 5, isNaN(cost_price)?0:cost_price, vat_rate, sumup_id, image_url, ord);
         added++;
       }
     } catch(e) { failed++; errors.push(`${row.name}: ${e.message}`); }
@@ -537,9 +607,25 @@ app.post('/api/orders', async (req, res) => {
     }
   }
 
+  // Create SumUp Hosted Checkout
+  let sumupCheckoutUrl = null, sumupCheckoutId = null;
+  if (method === 'sumup') {
+    try {
+      const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
+      const checkout = await createSumupCheckout(order, redirect_url);
+      if (checkout) {
+        sumupCheckoutId = checkout.id;
+        sumupCheckoutUrl = checkout.hosted_checkout_url;
+        db.prepare('UPDATE orders SET sumup_checkout_id=? WHERE id=?').run(sumupCheckoutId, id);
+      }
+    } catch(e) {
+      console.error('SumUp fout:', e.message);
+    }
+  }
+
   const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
   broadcast('order_created', { order });
-  res.json({ order, mollieCheckoutUrl, molliePaymentId });
+  res.json({ order, mollieCheckoutUrl, molliePaymentId, sumupCheckoutUrl, sumupCheckoutId });
 });
 
 // SumUp payment webhook / poll
@@ -581,7 +667,44 @@ app.get('/api/orders/:id/payment-status', async (req, res) => {
       return res.json({ status: payment?.status || 'pending' });
     } catch(e) { return res.json({ status: 'pending' }); }
   }
+
+  // Check SumUp checkout
+  if (o.sumup_checkout_id) {
+    try {
+      const checkout = await checkSumupCheckout(o.sumup_checkout_id);
+      if (checkout && checkout.status === 'PAID') {
+        db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
+        const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
+        deductStock(items, o.id);
+        const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
+        broadcast('order_updated', { order: updated });
+        return res.json({ status: 'paid', order: updated });
+      }
+      return res.json({ status: (checkout?.status || 'pending').toLowerCase() });
+    } catch(e) { return res.json({ status: 'pending' }); }
+  }
   res.json({ status: o.status });
+});
+
+// SumUp webhook — called by SumUp when checkout status changes
+app.post('/api/sumup/webhook', async (req, res) => {
+  res.status(200).send('OK');
+  try {
+    const checkoutId = req.body.id || req.body.checkout_id || req.body.event_id;
+    const ref = req.body.checkout_reference;
+    let o = null;
+    if (ref) o = db.prepare('SELECT * FROM orders WHERE id=?').get(ref);
+    if (!o && checkoutId) o = db.prepare('SELECT * FROM orders WHERE sumup_checkout_id=?').get(checkoutId);
+    if (!o || o.status === 'paid') return;
+    const checkout = await checkSumupCheckout(o.sumup_checkout_id);
+    if (checkout && checkout.status === 'PAID') {
+      db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
+      const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
+      deductStock(items, o.id);
+      const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
+      broadcast('order_updated', { order: updated });
+    }
+  } catch(e) { console.error('SumUp webhook fout:', e.message); }
 });
 
 // Mollie webhook — called by Mollie when payment status changes
@@ -657,7 +780,9 @@ app.get('/api/settings', requireAuth, (req, res) => {
 app.get('/api/settings/public', (req, res) => {
   res.json({
     barName: getSetting('barName') || 'Zomerbar',
-    hasSumup: !!getSetting('sumupKey'),
+    payProvider: getSetting('payProvider') || 'mollie',
+    hasMollie: !!getSetting('mollieKey'),
+    hasSumup: !!getSetting('sumupApiKey'),
   });
 });
 
