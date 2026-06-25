@@ -41,6 +41,7 @@ window.API = (() => {
 
   return {
     on,
+    request: req,
     setToken(t) { adminToken = t; if (t) localStorage.setItem('zb_admin_token', t); else localStorage.removeItem('zb_admin_token'); },
     getToken() { return adminToken; },
     auth: {

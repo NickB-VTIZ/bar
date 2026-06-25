@@ -200,6 +200,8 @@ select.inp{cursor:pointer;}
         </div>
       </div>
       <button class="btn btn-teal btn-full" onclick="saveSumupOnline()">Opslaan</button>
+      <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="checkSumupMethods()">🔍 Welke betaalmethodes zijn actief?</button>
+      <div id="sumup-methods-result" style="margin-top:10px;font-size:13px;display:none;"></div>
       <div style="margin-top:10px;background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--teal-d);line-height:1.6;">
         <strong>SumUp webhook:</strong> wordt automatisch gebruikt op <code style="background:var(--card);padding:2px 6px;border-radius:4px;">https://JOUW-URL/api/sumup/webhook</code>. Zorg dat je Website URL hierboven ingevuld staat.
       </div>
@@ -626,6 +628,27 @@ async function saveSumupOnline() {
     payProvider: document.getElementById('s-pay-provider').value,
   });
   toast('✅ SumUp online instellingen opgeslagen');
+}
+
+async function checkSumupMethods() {
+  const el = document.getElementById('sumup-methods-result');
+  el.style.display = 'block';
+  el.style.color = 'var(--mu)';
+  el.textContent = 'Betaalmethodes ophalen…';
+  try {
+    const r = await API.request('GET', '/api/sumup/payment-methods?amount=4.00');
+    const methods = r.methods?.available_payment_methods || r.methods || [];
+    const ids = Array.isArray(methods) ? methods.map(m => m.id || m) : Object.keys(methods);
+    const hasBancontact = ids.some(id => String(id).toLowerCase() === 'bancontact');
+    el.style.color = hasBancontact ? 'var(--teal-d)' : 'var(--coral-d)';
+    el.innerHTML = `
+      <div style="margin-bottom:6px;">${hasBancontact ? '✅ Bancontact is actief!' : '⚠️ Bancontact NIET gevonden'}</div>
+      <div style="font-size:12px;color:var(--mu);">Beschikbaar: ${ids.join(', ') || 'geen'}</div>
+      ${!hasBancontact ? '<div style="font-size:12px;color:var(--coral-d);margin-top:6px;">Activeer Bancontact via me.sumup.com of contacteer SumUp-support.</div>' : ''}`;
+  } catch(e) {
+    el.style.color = 'var(--coral-d)';
+    el.textContent = '❌ ' + e.message;
+  }
 }
 
 // ── SumUp CSV import ──

@@ -269,6 +269,7 @@ async function createSumupCheckout(order, redirectUrl) {
   const merchantCode = getSetting('sumupMerchantCode');
   if (!merchantCode) throw new Error('Geen SumUp merchant code ingesteld');
   const barName = getSetting('barName') || 'Zomerbar';
+  const siteUrl = getSetting('siteUrl') || '';
   const checkout = await sumupRequest('POST', '/v0.1/checkouts', {
     checkout_reference: order.id,
     amount: parseFloat(order.amount.toFixed(2)),
@@ -276,10 +277,27 @@ async function createSumupCheckout(order, redirectUrl) {
     merchant_code: merchantCode,
     description: `${barName} — Bestelling #${order.order_number}`,
     hosted_checkout: { enabled: true },
-    redirect_url: redirectUrl || `${getSetting('siteUrl') || ''}/bestel.html`,
-    return_url: `${getSetting('siteUrl') || ''}/api/sumup/webhook`,
+    redirect_url: redirectUrl || `${siteUrl}/?order=${order.id}`,
   });
   return checkout;
+}
+
+// Diagnostiek: welke betaalmethodes biedt SumUp aan voor dit account?
+async function getSumupPaymentMethods(amount = 1.0) {
+  const merchantCode = getSetting('sumupMerchantCode');
+  if (!merchantCode) throw new Error('Geen SumUp merchant code ingesteld');
+  // Maak tijdelijke checkout
+  const checkout = await sumupRequest('POST', '/v0.1/checkouts', {
+    checkout_reference: 'pm-probe-' + Date.now(),
+    amount: parseFloat(amount.toFixed(2)),
+    currency: 'EUR',
+    merchant_code: merchantCode,
+    description: 'Payment method probe',
+  });
+  const methods = await sumupRequest('GET', `/v0.1/checkouts/${checkout.id}/payment-methods`);
+  // Ruim de probe op
+  try { await sumupRequest('DELETE', `/v0.1/checkouts/${checkout.id}`); } catch(_) {}
+  return { checkoutId: checkout.id, methods };
 }
 
 async function checkSumupCheckout(checkoutId) {
@@ -415,6 +433,16 @@ app.get('/api/products/export-sumup', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="zomerbar-producten-sumup.csv"');
   res.send(csv);
+});
+
+// Diagnostiek: toont welke SumUp betaalmethodes beschikbaar zijn
+app.get('/api/sumup/payment-methods', requireAuth, async (req, res) => {
+  try {
+    const result = await getSumupPaymentMethods(parseFloat(req.query.amount) || 1.0);
+    res.json(result);
+  } catch(e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 app.post('/api/products/import-sumup', requireAuth, (req, res) => {
