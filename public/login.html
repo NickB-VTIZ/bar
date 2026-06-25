@@ -42,7 +42,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;displa
 <script src="/api.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
-const next = params.get('next') || '/bar.html';
+const next = params.get('next') || '/bar';
 
 document.getElementById('password').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();

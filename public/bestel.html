@@ -43,6 +43,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .prod.in-cart{border-color:var(--sun);background:#FFFBF3;}
 .prod.out{opacity:.45;cursor:not-allowed;}
 .prod-icon{font-size:28px;margin-bottom:8px;}
+.prod-img{width:100%;height:90px;margin-bottom:8px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.prod-img img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;}
 .prod-name{font-size:14px;font-weight:500;line-height:1.3;}
 .prod-price{font-size:13px;color:var(--mu);margin-top:3px;}
 .prod-stock{font-size:11px;margin-top:3px;}
@@ -293,7 +295,7 @@ function renderProds() {
     return `<div class="prod ${qty>0?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock?'':'addItem('+p.id+')'}">
       <div class="prod-qty-badge">${qty}</div>
       ${p.image_url
-        ? `<div class="prod-img" style="width:100%;height:80px;border-radius:8px;background:#f0efe9 url('${p.image_url}') center/cover no-repeat;margin-bottom:6px;"></div>`
+        ? `<div class="prod-img"><img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=&quot;prod-icon&quot;>${p.icon}</div>'"></div>`
         : `<div class="prod-icon">${p.icon}</div>`}
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
@@ -404,7 +406,7 @@ async function placeOrder() {
     currentOrderId = result.order.id;
     closeCart();
     const checkoutUrl = result.mollieCheckoutUrl || result.sumupCheckoutUrl;
-    showStatusScreen(result.order, checkoutUrl);
+    showStatusScreen(result.order, checkoutUrl, result.paymentError);
     cart = {};
     // Reset knop voor volgende bestelling
     btn.disabled = false; btn.textContent = 'Bestelling plaatsen';
@@ -415,7 +417,7 @@ async function placeOrder() {
   }
 }
 
-function showStatusScreen(order, checkoutUrl) {
+function showStatusScreen(order, checkoutUrl, paymentError) {
   const amtFmt = '€ ' + (order.amount || 0).toFixed(2).replace('.', ',');
   document.getElementById('st-number').textContent = order.order_number;
   document.getElementById('st-amount').textContent = amtFmt;
@@ -424,6 +426,21 @@ function showStatusScreen(order, checkoutUrl) {
   updateStatusScreen(order);
 
   const isOnline = order.method === 'mollie' || order.method === 'sumup';
+
+  // Payment setup failed — show error instead of endless "waiting"
+  if (isOnline && !checkoutUrl) {
+    const pending = document.getElementById('pay-pending');
+    pending.classList.add('show');
+    pending.innerHTML = `
+      <div class="pay-pending-title" style="color:#c0392b;">⚠️ Online betalen lukt niet</div>
+      <div style="font-size:13px;color:var(--mu);margin:8px 0 14px;line-height:1.5;">
+        ${paymentError || 'De betaling kon niet worden gestart.'}<br>
+        Je bestelnummer is geregistreerd — betaal aan de bar of probeer opnieuw.
+      </div>
+      <button class="pay-link" onclick="location.reload()" style="border:none;cursor:pointer;width:100%;">Opnieuw proberen →</button>`;
+    return;
+  }
+
   if (isOnline && checkoutUrl) {
     const pending = document.getElementById('pay-pending');
     pending.classList.add('show');

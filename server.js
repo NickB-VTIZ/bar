@@ -137,7 +137,7 @@ const wss = new WebSocket.Server({ server });
 const clients = new Set();
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 wss.on('connection', ws => {
   clients.add(ws);
@@ -226,13 +226,21 @@ async function createMolliePayment(order, redirectUrl) {
   const mollie = getMollieClient();
   if (!mollie) return null;
   const barName = getSetting('barName') || 'Zomerbar';
-  const payment = await mollie.payments.create({
+  const siteUrl = getSetting('siteUrl') || '';
+  const payload = {
     amount: { currency: 'EUR', value: order.amount.toFixed(2) },
     description: `${barName} — Bestelling #${order.order_number}`,
-    redirectUrl: redirectUrl || `${getSetting('siteUrl') || ''}/bestel.html?order=${order.id}&mollie=return`,
-    method: 'bancontact',
+    redirectUrl: redirectUrl || `${siteUrl}/bestel.html?order=${order.id}`,
     metadata: { order_id: order.id, order_number: String(order.order_number) },
-  });
+  };
+  // Only add webhook if we have a public https URL (Mollie rejects localhost)
+  if (siteUrl && siteUrl.startsWith('https://')) {
+    payload.webhookUrl = `${siteUrl}/api/mollie/webhook`;
+  }
+  // Prefer Bancontact, but only set it if explicitly — otherwise Mollie shows all enabled methods
+  const forceMethod = getSetting('mollieMethod');
+  if (forceMethod) payload.method = forceMethod;
+  const payment = await mollie.payments.create(payload);
   return payment;
 }
 
@@ -593,6 +601,7 @@ app.post('/api/orders', async (req, res) => {
   }
 
   // Create Mollie Bancontact payment
+  let paymentError = null;
   if (method === 'mollie') {
     try {
       const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
@@ -601,9 +610,12 @@ app.post('/api/orders', async (req, res) => {
         molliePaymentId = payment.id;
         mollieCheckoutUrl = payment._links.checkout?.href || payment.checkoutUrl;
         db.prepare('UPDATE orders SET mollie_payment_id=? WHERE id=?').run(molliePaymentId, id);
+      } else {
+        paymentError = 'Mollie is niet geconfigureerd (geen API-sleutel ingesteld in Beheer)';
       }
     } catch(e) {
       console.error('Mollie fout:', e.message);
+      paymentError = 'Mollie: ' + e.message;
     }
   }
 
@@ -613,19 +625,22 @@ app.post('/api/orders', async (req, res) => {
     try {
       const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
       const checkout = await createSumupCheckout(order, redirect_url);
-      if (checkout) {
+      if (checkout && checkout.hosted_checkout_url) {
         sumupCheckoutId = checkout.id;
         sumupCheckoutUrl = checkout.hosted_checkout_url;
         db.prepare('UPDATE orders SET sumup_checkout_id=? WHERE id=?').run(sumupCheckoutId, id);
+      } else {
+        paymentError = 'SumUp checkout kon niet worden aangemaakt (controleer API-sleutel en merchant code)';
       }
     } catch(e) {
       console.error('SumUp fout:', e.message);
+      paymentError = 'SumUp: ' + e.message;
     }
   }
 
   const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
   broadcast('order_created', { order });
-  res.json({ order, mollieCheckoutUrl, molliePaymentId, sumupCheckoutUrl, sumupCheckoutId });
+  res.json({ order, mollieCheckoutUrl, molliePaymentId, sumupCheckoutUrl, sumupCheckoutId, paymentError });
 });
 
 // SumUp payment webhook / poll
@@ -1185,7 +1200,26 @@ app.get('/api/invoice/preview', requireAuth, (req, res) => {
 // Health
 app.get('/api/health', (req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
-// SPA fallback
+// ── Page routing ─────────────────────────────────────────────────
+const sendPage = (res, name) => res.sendFile(path.join(__dirname, 'public', name));
+
+// Landingspagina = klant bestelpagina
+app.get('/', (req, res) => sendPage(res, 'bestel.html'));
+app.get('/bestel', (req, res) => sendPage(res, 'bestel.html'));
+
+// Bar-sectie (personeel) achter /bar
+app.get('/bar', (req, res) => sendPage(res, 'bar.html'));
+app.get('/bar/start', (req, res) => sendPage(res, 'index.html'));
+app.get('/bar/beheer', (req, res) => sendPage(res, 'beheer.html'));
+app.get('/bar/boekhouding', (req, res) => sendPage(res, 'boekhouding.html'));
+app.get('/bar/login', (req, res) => sendPage(res, 'login.html'));
+
+// Oude directe paden → redirect naar /bar-versie (backwards compat)
+app.get('/beheer', (req, res) => res.redirect('/bar/beheer'));
+app.get('/boekhouding', (req, res) => res.redirect('/bar/boekhouding'));
+app.get('/login', (req, res) => res.redirect('/bar/login'));
+
+// SPA fallback — alles wat niet bestaat → bestelpagina
 app.get('*', (req, res) => {
   const file = req.path.slice(1) + '.html';
   const full = path.join(__dirname, 'public', file);
@@ -1193,4 +1227,4 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'bestel.html'));
 });
 
-server.listen(PORT, () => console.log(`☀️  Zomerbar v4.0.0 op http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`☀️  Zomerbar v5.2.0 op http://localhost:${PORT}`));

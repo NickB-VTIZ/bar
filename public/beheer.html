@@ -89,7 +89,7 @@ select.inp{cursor:pointer;}
 <body>
 <header>
   <div><div class="logo">⚙️ Beheer</div><div class="logo-sub">Zomerbar adminpaneel</div></div>
-  <a class="back-link" href="/bar.html">← Bar-dashboard</a>
+  <a class="back-link" href="/bar">← Bar-dashboard</a>
 </header>
 
 <div class="nav">
@@ -387,9 +387,9 @@ select.inp{cursor:pointer;}
 <script>
 // ── Auth guard ──
 (async () => {
-  if (!API.getToken()) { window.location.href = '/login.html?next=/beheer.html'; return; }
-  try { const c = await API.auth.check(); if (!c.valid) window.location.href = '/login.html?next=/beheer.html'; }
-  catch(_) { window.location.href = '/login.html?next=/beheer.html'; }
+  if (!API.getToken()) { window.location.href = '/bar/login?next=/bar/beheer'; return; }
+  try { const c = await API.auth.check(); if (!c.valid) window.location.href = '/bar/login?next=/bar/beheer'; }
+  catch(_) { window.location.href = '/bar/login?next=/bar/beheer'; }
 })();
 </script>
 <script>
@@ -838,7 +838,7 @@ async function logout() {
   if (!confirm('Uitloggen?')) return;
   try { await API.auth.logout(); } catch(_) {}
   API.setToken(null);
-  window.location.href = '/login.html';
+  window.location.href = '/bar/login';
 }
 
 function toast(msg) {

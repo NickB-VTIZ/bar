@@ -60,13 +60,13 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 
   <div class="sec-title">Apps</div>
   <div class="app-grid">
-    <a class="app-card" href="/bestel.html">
+    <a class="app-card" href="/">
       <div class="app-icon">📱</div>
       <div class="app-name">Klantbestelpage</div>
       <div class="app-desc">Klanten bestellen en betalen hier zelf</div>
       <div class="app-badge">QR-code → klant</div>
     </a>
-    <a class="app-card" href="/bar.html">
+    <a class="app-card" href="/bar">
       <div class="app-icon">🖥</div>
       <div class="app-name">Bar-dashboard 🔒</div>
       <div class="app-desc">Bestellingen, stock, boekhouding (login vereist)</div>
@@ -89,8 +89,17 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
   </div>
 </div>
 
+<script src="/api.js"></script>
 <script>
-const url = location.origin + '/bestel.html';
+// Auth guard — start page hoort bij de bar-sectie
+(async () => {
+  if (!API.getToken()) { window.location.href = '/bar/login?next=/bar/start'; return; }
+  try { const c = await API.auth.check(); if (!c.valid) { window.location.href = '/bar/login?next=/bar/start'; return; } }
+  catch(_) { window.location.href = '/bar/login?next=/bar/start'; return; }
+})();
+</script>
+<script>
+const url = location.origin + '/';
 document.getElementById('bestel-url').textContent = url;
 
 // Generate QR

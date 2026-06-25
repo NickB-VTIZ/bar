@@ -175,28 +175,35 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 <!-- Quick links -->
 <div id="screen-links" class="screen">
   <div style="padding:16px;display:grid;gap:10px;">
-    <a href="/beheer.html" style="text-decoration:none;">
+    <a href="/bar/beheer" style="text-decoration:none;">
       <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 18px;display:flex;align-items:center;gap:14px;">
         <span style="font-size:28px;">⚙️</span>
         <div><div style="font-size:15px;font-weight:600;color:var(--tx)">Beheer</div><div style="font-size:13px;color:var(--mu);margin-top:2px">Producten, SumUp sync, SMS, instellingen</div></div>
         <span style="margin-left:auto;font-size:18px;color:var(--mu)">→</span>
       </div>
     </a>
-    <a href="/boekhouding.html" style="text-decoration:none;">
+    <a href="/bar/boekhouding" style="text-decoration:none;">
       <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 18px;display:flex;align-items:center;gap:14px;">
         <span style="font-size:28px;">📒</span>
         <div><div style="font-size:15px;font-weight:600;color:var(--tx)">Boekhouding</div><div style="font-size:13px;color:var(--mu);margin-top:2px">Kasdagboek, BTW-overzicht, Billit facturen</div></div>
         <span style="margin-left:auto;font-size:18px;color:var(--mu)">→</span>
       </div>
     </a>
-    <a href="/bestel.html" target="_blank" style="text-decoration:none;">
+    <a href="/" target="_blank" style="text-decoration:none;">
       <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 18px;display:flex;align-items:center;gap:14px;">
         <span style="font-size:28px;">📱</span>
         <div><div style="font-size:15px;font-weight:600;color:var(--tx)">Klantbestelpagina</div><div style="font-size:13px;color:var(--mu);margin-top:2px">Open de pagina die klanten zien</div></div>
         <span style="margin-left:auto;font-size:18px;color:var(--mu)">↗</span>
       </div>
     </a>
-    <a href="/login.html" style="text-decoration:none;" onclick="API.setToken(null)">
+    <a href="/bar/start" style="text-decoration:none;">
+      <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 18px;display:flex;align-items:center;gap:14px;">
+        <span style="font-size:28px;">🔳</span>
+        <div><div style="font-size:15px;font-weight:600;color:var(--tx)">QR-code &amp; start</div><div style="font-size:13px;color:var(--mu);margin-top:2px">QR-code om af te drukken voor de tafels</div></div>
+        <span style="margin-left:auto;font-size:18px;color:var(--mu)">→</span>
+      </div>
+    </a>
+    <a href="/bar/login" style="text-decoration:none;" onclick="API.setToken(null)">
       <div style="background:var(--coral-l);border:0.5px solid var(--coral);border-radius:var(--r);padding:14px 18px;display:flex;align-items:center;gap:14px;">
         <span style="font-size:24px;">🚪</span>
         <div style="font-size:14px;font-weight:600;color:var(--coral-d)">Uitloggen</div>
@@ -270,9 +277,9 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 <script>
 // ── Auth guard ──
 (async () => {
-  if (!API.getToken()) { window.location.href = '/login.html?next=/bar.html'; return; }
-  try { const c = await API.auth.check(); if (!c.valid) { window.location.href = '/login.html?next=/bar.html'; return; } }
-  catch(_) { window.location.href = '/login.html?next=/bar.html'; return; }
+  if (!API.getToken()) { window.location.href = '/bar/login?next=/bar'; return; }
+  try { const c = await API.auth.check(); if (!c.valid) { window.location.href = '/bar/login?next=/bar'; return; } }
+  catch(_) { window.location.href = '/bar/login?next=/bar'; return; }
 })();
 </script>
 <script>

@@ -96,7 +96,7 @@ tr:last-child td{border-bottom:none;}
 <body>
 <header>
   <div><div class="logo">☀️ Kasdagboek</div><div class="logo-sub">Boekhouding & facturatie</div></div>
-  <a class="back-link" href="/bar.html">← Terug naar bar</a>
+  <a class="back-link" href="/bar">← Terug naar bar</a>
 </header>
 
 <div class="nav">
@@ -166,9 +166,9 @@ tr:last-child td{border-bottom:none;}
 <script>
 // ── Auth guard ──
 (async () => {
-  if (!API.getToken()) { window.location.href = '/login.html?next=/boekhouding.html'; return; }
-  try { const c = await API.auth.check(); if (!c.valid) { window.location.href = '/login.html?next=/boekhouding.html'; return; } }
-  catch(_) { window.location.href = '/login.html?next=/boekhouding.html'; return; }
+  if (!API.getToken()) { window.location.href = '/bar/login?next=/bar/boekhouding'; return; }
+  try { const c = await API.auth.check(); if (!c.valid) { window.location.href = '/bar/login?next=/bar/boekhouding'; return; } }
+  catch(_) { window.location.href = '/bar/login?next=/bar/boekhouding'; return; }
 })();
 </script>
 <script>

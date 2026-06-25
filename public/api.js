@@ -31,7 +31,7 @@ window.API = (() => {
       localStorage.removeItem('zb_admin_token');
       adminToken = null;
       if (!location.pathname.includes('login')) {
-        window.location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
+        window.location.href = '/bar/login?next=' + encodeURIComponent(location.pathname);
       }
       throw new Error('Niet ingelogd');
     }
