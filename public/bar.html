@@ -375,8 +375,12 @@ function cardHTML(o){
   if (o.status === 'pending') {
     badgeCls = 'badge-pending'; badgeTxt = isMollie ? '⏳ Wacht op betaling' : '⏳ Wachten'; cardCls = 'is-pending';
   } else if (o.status === 'paid' && isCash) {
-    // Cash is always in 'paid' state from the start but not yet physically paid
-    badgeCls = 'badge-cash-open'; badgeTxt = '💶 Cash — nog te betalen'; cardCls = 'is-cash-open';
+    // Cash: toon of fysiek betaald is
+    if (o.cash_paid) {
+      badgeCls = 'badge-paid'; badgeTxt = '✅ Cash betaald'; cardCls = 'is-paid';
+    } else {
+      badgeCls = 'badge-cash-open'; badgeTxt = '💶 Cash — nog te betalen'; cardCls = 'is-cash-open';
+    }
   } else if (o.status === 'paid') {
     badgeCls = 'badge-paid'; badgeTxt = '✅ Betaald'; cardCls = 'is-paid';
   } else if (o.status === 'preparing') {
@@ -413,19 +417,42 @@ function cardHTML(o){
       </div>`;
     }
   } else if (o.status === 'paid') {
-    // Cash: can start preparing without payment, paid online: normal flow
-    actions = `<div class="card-actions">
-      <button class="act-btn btn-prep" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button>
-      <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
-    </div>`;
+    // Cash: nog te betalen → knop om betaling te registreren + bereiden
+    if (isCash && !o.cash_paid) {
+      actions = `<div class="card-actions" style="flex-direction:column;gap:0;">
+        <button class="act-btn" style="background:var(--teal);color:#fff;font-weight:700;font-size:13px;" onclick="openPayModal('${o.id}','${amtFmt}','${o.order_number}')">
+          💶 Betaling registreren — ${amtFmt}
+        </button>
+        <div style="display:flex;border-top:0.5px solid var(--bd);">
+          <button class="act-btn btn-prep" style="flex:2;font-size:12px" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button>
+          <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+        </div>
+      </div>`;
+    } else {
+      // Online betaald of cash al betaald: normale flow
+      actions = `<div class="card-actions">
+        <button class="act-btn btn-prep" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button>
+        <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+      </div>`;
+    }
   } else if (o.status === 'preparing') {
-    actions = `<div class="card-actions">
-      <button class="act-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
-      <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
-    </div>`;
+    if (isCash && !o.cash_paid) {
+      actions = `<div class="card-actions" style="flex-direction:column;gap:0;">
+        <button class="act-btn btn-ready" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
+        <div style="display:flex;border-top:0.5px solid var(--bd);">
+          <button class="act-btn" style="flex:2;background:var(--teal);color:#fff;font-size:12px;font-weight:600;" onclick="openPayModal('${o.id}','${amtFmt}','${o.order_number}')">💶 Cash ontvangen</button>
+          <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+        </div>
+      </div>`;
+    } else {
+      actions = `<div class="card-actions">
+        <button class="act-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
+        <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+      </div>`;
+    }
   } else if (o.status === 'ready') {
-    if (isCash) {
-      // Cash: register payment first, then collected
+    if (isCash && !o.cash_paid) {
+      // Cash nog niet betaald: registreer betaling, dan opgehaald
       actions = `<div class="card-actions" style="flex-direction:column;gap:0;">
         <button class="act-btn" style="background:var(--teal);color:#fff;font-weight:700;font-size:13px;" onclick="openPayModal('${o.id}','${amtFmt}','${o.order_number}')">
           💶 Betaling registreren — ${amtFmt}
@@ -457,7 +484,7 @@ function cardHTML(o){
     </div>
     <div class="card-items">${items}</div>
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
-    <div class="card-method">${isCash?'💶 Cash':isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
+    <div class="card-method">${isCash?(o.cash_paid?'💶 Cash ✅':'💶 Cash'):isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
     ${actions}
   </div>`;
 }
@@ -520,15 +547,20 @@ function selPayModal(m) {
 async function confirmCashPayment() {
   if (!payModalOrderId) return;
   const btn = document.getElementById('pay-modal-confirm');
+  const o = orders[payModalOrderId];
   btn.disabled = true; btn.textContent = 'Verwerken…';
   try {
-    // Mark as collected (done)
-    await API.orders.setStatus(payModalOrderId, 'collected');
+    // Registreer de betaling (zet cash_paid + methode)
+    await API.orders.registerPayment(payModalOrderId, payModalMethod);
+    // Als de bestelling al klaar is om op te halen → meteen afronden
+    if (o && o.status === 'ready') {
+      await API.orders.setStatus(payModalOrderId, 'collected');
+    }
     toast(`✅ Betaling geregistreerd — ${payModalMethod === 'sumup' ? 'SumUp kaart' : 'cash'}`);
     closePayModal();
   } catch(e) {
     toast('Fout: ' + e.message);
-    btn.disabled = false;
+    btn.disabled = false; btn.textContent = '✅ Betaling bevestigen';
   }
 }
 

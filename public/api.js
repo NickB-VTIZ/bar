@@ -66,6 +66,7 @@ window.API = (() => {
       get:            (id)      => req('GET',    `/api/orders/${id}`),
       create:         (o)       => req('POST',   '/api/orders', o),
       setStatus:      (id, s)   => req('PATCH',  `/api/orders/${id}/status`, { status: s }),
+      registerPayment:(id, m)   => req('PATCH',  `/api/orders/${id}/register-payment`, { method: m }),
       confirmPayment: (id, tx)  => req('POST',   `/api/orders/${id}/confirm-payment`, { sumup_tx_id: tx }),
       pollPayment:    (id)      => req('GET',    `/api/orders/${id}/payment-status`),
       remove:         (id)      => req('DELETE', `/api/orders/${id}`),

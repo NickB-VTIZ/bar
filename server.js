@@ -104,6 +104,7 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN gift REAL DEFAULT 0`,
+  `ALTER TABLE orders ADD COLUMN cash_paid INTEGER DEFAULT 0`,
 ];
 
 migrations.forEach(sql => {
@@ -893,6 +894,18 @@ app.patch('/api/orders/:id/status', requireAuth, (req, res) => {
   broadcast('order_updated', { order });
   // Send SMS when order is ready
   if (status === 'ready') notifyOrderReady(order);
+  res.json(order);
+});
+
+// Registreer cash/kaart-betaling aan de bar (zonder status te wijzigen)
+app.patch('/api/orders/:id/register-payment', requireAuth, (req, res) => {
+  const { method } = req.body; // 'cash' of 'sumup'
+  const o = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Bestelling niet gevonden' });
+  db.prepare("UPDATE orders SET cash_paid=1, method=?, updated_at=datetime('now') WHERE id=?")
+    .run(method === 'sumup' ? 'sumup' : 'cash', req.params.id);
+  const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id));
+  broadcast('order_updated', { order });
   res.json(order);
 });
 
