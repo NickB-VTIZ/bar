@@ -288,7 +288,7 @@ async function createSumupCheckout(order, redirectUrl) {
   if (!merchantCode) throw new Error('Geen SumUp merchant code ingesteld');
   const barName = getSetting('barName') || 'Zomerbar';
   const siteUrl = getSetting('siteUrl') || '';
-  const checkout = await sumupRequest('POST', '/v0.1/checkouts', {
+  const payload = {
     checkout_reference: order.id,
     amount: parseFloat(order.amount.toFixed(2)),
     currency: 'EUR',
@@ -296,7 +296,12 @@ async function createSumupCheckout(order, redirectUrl) {
     description: `${barName} — Bestelling #${order.order_number}`,
     hosted_checkout: { enabled: true },
     redirect_url: redirectUrl || `${siteUrl}/?order=${order.id}`,
-  });
+  };
+  // Webhook voor automatische bevestiging (enkel bij geldige https-URL)
+  if (siteUrl && siteUrl.startsWith('https://')) {
+    payload.return_url = `${siteUrl}/api/sumup/webhook`;
+  }
+  const checkout = await sumupRequest('POST', '/v0.1/checkouts', payload);
   return checkout;
 }
 

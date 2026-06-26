@@ -703,9 +703,11 @@ async function checkSumupMethods() {
     const hasBancontact = ids.some(id => String(id).toLowerCase() === 'bancontact');
     el.style.color = hasBancontact ? 'var(--teal-d)' : 'var(--coral-d)';
     el.innerHTML = `
-      <div style="margin-bottom:6px;">${hasBancontact ? '✅ Bancontact is actief!' : '⚠️ Bancontact NIET gevonden'}</div>
-      <div style="font-size:12px;color:var(--mu);">Beschikbaar: ${ids.join(', ') || 'geen'}</div>
-      ${!hasBancontact ? '<div style="font-size:12px;color:var(--coral-d);margin-top:6px;">Activeer Bancontact via me.sumup.com of contacteer SumUp-support.</div>' : ''}`;
+      <div style="margin-bottom:6px;font-weight:600;">${hasBancontact ? '✅ Bancontact is actief — klanten kunnen ermee betalen!' : '⚠️ Bancontact staat nog niet aan'}</div>
+      <div style="font-size:12px;color:var(--mu);">Beschikbaar voor dit account: ${ids.join(', ') || 'geen'}</div>
+      ${!hasBancontact ? `<div style="font-size:12px;color:var(--coral-d);margin-top:8px;line-height:1.5;">
+        Bancontact is een "alternatieve betaalmethode" (APM) die SumUp eerst handmatig moet activeren voor je account. Vraag dit aan via het SumUp contactformulier (developer.sumup.com → Support) met de vermelding dat je <strong>Bancontact als APM</strong> wil voor merchant ${document.getElementById('s-sumup-merchant').value || 'M…'}. Zodra het aanstaat, verschijnt het hier automatisch.
+      </div>` : '<div style="font-size:12px;color:var(--teal-d);margin-top:6px;">Zet de betaalmethode hierboven op "SumUp" en de klant ziet Bancontact op de betaalpagina.</div>'}`;
   } catch(e) {
     el.style.color = 'var(--coral-d)';
     el.textContent = '❌ ' + e.message;
