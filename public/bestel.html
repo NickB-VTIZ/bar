@@ -46,6 +46,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .prod-img{width:100%;height:90px;margin-bottom:8px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .prod-img img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;}
 .prod-name{font-size:14px;font-weight:500;line-height:1.3;}
+.prod-desc{font-size:11px;color:var(--mu);line-height:1.35;margin-top:3px;}
 .prod-price{font-size:13px;color:var(--mu);margin-top:3px;}
 .prod-stock{font-size:11px;margin-top:3px;}
 .stock-low{color:var(--coral-d);}
@@ -66,6 +67,13 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .qbtn{width:28px;height:28px;border-radius:50%;border:0.5px solid var(--bd);background:var(--bg);cursor:pointer;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;color:var(--tx);}
 .cr-price{font-size:13px;color:var(--mu);min-width:48px;text-align:right;}
 .cart-total{display:flex;justify-content:space-between;font-size:16px;font-weight:600;padding:14px 0 0;border-top:0.5px solid var(--bd);margin-top:8px;}
+.bee-gift{background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:12px 14px;margin-top:12px;}
+.bee-gift-head{margin-bottom:10px;}
+.bee-gift-title{font-size:14px;font-weight:600;color:var(--sun-t);display:block;}
+.bee-gift-sub{font-size:12px;color:var(--mu);}
+.bee-gift-opts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.bee-opt{padding:9px 4px;font-size:13px;font-weight:600;border:0.5px solid var(--sun);border-radius:12px;background:var(--card);color:var(--sun-t);cursor:pointer;transition:all .12s;}
+.bee-opt.sel{background:var(--sun);color:#fff;}
 
 .note-input{width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin:12px 0;}
 
@@ -142,6 +150,24 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
     <div class="sheet-handle"></div>
     <div class="sheet-title">Jouw bestelling</div>
     <div id="cart-rows"></div>
+
+    <!-- Gift voor de bijen -->
+    <div class="bee-gift">
+      <div class="bee-gift-head">
+        <span class="bee-gift-title">🐝 Steun de bijen</span>
+        <span class="bee-gift-sub">Een vrije gift gaat naar onze bijenwerking</span>
+      </div>
+      <div class="bee-gift-opts">
+        <button type="button" class="bee-opt" data-gift="0.50" onclick="setGift(0.50,this)">€ 0,50</button>
+        <button type="button" class="bee-opt" data-gift="1" onclick="setGift(1,this)">€ 1</button>
+        <button type="button" class="bee-opt" data-gift="2" onclick="setGift(2,this)">€ 2</button>
+        <button type="button" class="bee-opt" data-gift="custom" onclick="setGiftCustom(this)">Anders</button>
+      </div>
+      <div id="bee-custom-wrap" style="display:none;margin-top:8px;">
+        <input id="bee-custom" type="number" min="0" step="0.50" placeholder="Eigen bedrag (€)" class="note-input" style="margin:0;" oninput="setGiftFromInput()">
+      </div>
+    </div>
+
     <div class="cart-total"><span>Totaal</span><span id="cart-total-amt">€ 0,00</span></div>
     <input class="note-input" id="order-note" placeholder="Opmerking (bv. geen ijs)">
     <div style="position:relative;">
@@ -182,7 +208,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
   <div class="pay-pending" id="pay-pending">
     <div class="pay-pending-title">🏦 Betaal via Bancontact</div>
     <div class="pay-pending-sub">Klik hieronder om je betaling te voltooien</div>
-    <a class="pay-link" id="pay-link" href="#" target="_blank">Betalen met Bancontact →</a>
+    <a class="pay-link" id="pay-link" href="#">Betalen met Bancontact →</a>
   </div>
 
   <!-- Cash betaalinfo - geen knop, enkel melding -->
@@ -207,6 +233,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 <script>
 let products = [], cart = {}, activeCat = 'Alle', payMethod = 'online';
 let payProvider = 'mollie'; // resolved from server settings
+let justReturned = false; // true wanneer klant terugkeert van betaalpagina
+let giftAmount = 0; // vrije gift voor de bijen
 let currentOrderId = null, pollInterval = null;
 
 // Load payment provider config
@@ -254,6 +282,25 @@ async function init() {
       return;
     }
     renderCats(); renderProds();
+
+    // Klant keert terug van betaalpagina (?order=X) → toon statusscherm opnieuw
+    const params = new URLSearchParams(location.search);
+    const returnOrderId = params.get('order');
+    if (returnOrderId) {
+      try {
+        const order = await fetch(`/api/orders/${returnOrderId}`).then(r => r.ok ? r.json() : null);
+        if (order) {
+          currentOrderId = order.id;
+          justReturned = true;
+          // Controleer meteen de betaalstatus
+          const st = await API.orders.pollPayment(order.id).catch(() => null);
+          const finalOrder = (st && st.order) ? st.order : order;
+          showStatusScreen(finalOrder, null);
+          // Verwijder query param uit URL
+          history.replaceState({}, '', '/');
+        }
+      } catch(_) {}
+    }
   } catch(e) {
     document.getElementById('prod-grid').innerHTML = `
       <div style="grid-column:1/-1;text-align:center;padding:40px 20px;">
@@ -292,12 +339,14 @@ function renderProds() {
       ? (outOfStock ? '<div class="prod-stock stock-low">Uitverkocht</div>'
         : lowStock ? `<div class="prod-stock stock-low">Nog ${p.stock}</div>` : '')
       : '';
+    const showDesc = p.description && p.description.trim();
     return `<div class="prod ${qty>0?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock?'':'addItem('+p.id+')'}">
       <div class="prod-qty-badge">${qty}</div>
       ${p.image_url
         ? `<div class="prod-img"><img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=&quot;prod-icon&quot;>${p.icon}</div>'"></div>`
         : `<div class="prod-icon">${p.icon}</div>`}
       <div class="prod-name">${p.name}</div>
+      ${showDesc ? `<div class="prod-desc">${p.description}</div>` : ''}
       <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
       ${stockLabel}
     </div>`;
@@ -319,16 +368,51 @@ function changeQty(id, d) {
   updateCartBar(); renderProds(); renderCartRows();
 }
 
-function getTotal() {
+function getProductsTotal() {
   return Object.entries(cart).reduce((s, [id, qty]) => {
     const p = products.find(x => x.id == id);
     return s + (p ? p.price * qty : 0);
   }, 0);
 }
+function getTotal() {
+  return getProductsTotal() + giftAmount;
+}
 function getCount() { return Object.values(cart).reduce((a,b)=>a+b, 0); }
 
+// ── Gift voor de bijen ──
+function setGift(amount, btn) {
+  giftAmount = amount;
+  document.querySelectorAll('.bee-opt').forEach(b => b.classList.remove('sel'));
+  if (btn) btn.classList.add('sel');
+  document.getElementById('bee-custom-wrap').style.display = 'none';
+  refreshCartTotal();
+}
+function setGiftCustom(btn) {
+  document.querySelectorAll('.bee-opt').forEach(b => b.classList.remove('sel'));
+  if (btn) btn.classList.add('sel');
+  const wrap = document.getElementById('bee-custom-wrap');
+  wrap.style.display = 'block';
+  document.getElementById('bee-custom').focus();
+  setGiftFromInput();
+}
+function setGiftFromInput() {
+  const v = parseFloat(document.getElementById('bee-custom').value);
+  giftAmount = isNaN(v) || v < 0 ? 0 : v;
+  refreshCartTotal();
+}
+function refreshCartTotal() {
+  const prod = getProductsTotal();
+  const total = prod + giftAmount;
+  const totalEl = document.getElementById('cart-total-amt');
+  if (giftAmount > 0) {
+    totalEl.innerHTML = `€ ${total.toFixed(2).replace('.',',')}<br><span style="font-size:11px;font-weight:400;color:var(--mu)">incl. 🐝 € ${giftAmount.toFixed(2).replace('.',',')} gift</span>`;
+  } else {
+    totalEl.textContent = '€ ' + total.toFixed(2).replace('.',',');
+  }
+}
+
 function updateCartBar() {
-  const count = getCount(), total = getTotal();
+  const count = getCount(), total = getProductsTotal();
   const btn = document.getElementById('cart-open-btn');
   btn.disabled = count === 0;
   document.getElementById('cart-bar-info').textContent = count > 0
@@ -352,7 +436,7 @@ function renderCartRows() {
       <span class="cr-price">€ ${(p.price*qty).toFixed(2).replace('.',',')}</span>
     </div>`;
   }).join('');
-  document.getElementById('cart-total-amt').textContent = '€ ' + getTotal().toFixed(2).replace('.',',');
+  refreshCartTotal();
 }
 
 function openCart() { renderCartRows(); document.getElementById('cart-overlay').classList.add('show'); }
@@ -401,13 +485,17 @@ async function placeOrder() {
       items, method: actualMethod,
       note: document.getElementById('order-note').value || '',
       phone,
-      redirect_url: window.location.origin + '/bestel.html',
+      gift: giftAmount,
+      redirect_url: window.location.origin + '/',
     });
     currentOrderId = result.order.id;
     closeCart();
     const checkoutUrl = result.mollieCheckoutUrl || result.sumupCheckoutUrl;
     showStatusScreen(result.order, checkoutUrl, result.paymentError);
     cart = {};
+    giftAmount = 0;
+    document.querySelectorAll('.bee-opt').forEach(b => b.classList.remove('sel'));
+    const bcw = document.getElementById('bee-custom-wrap'); if (bcw) bcw.style.display = 'none';
     // Reset knop voor volgende bestelling
     btn.disabled = false; btn.textContent = 'Bestelling plaatsen';
     updateCartBar(); renderProds();
@@ -445,6 +533,12 @@ function showStatusScreen(order, checkoutUrl, paymentError) {
     const pending = document.getElementById('pay-pending');
     pending.classList.add('show');
     document.getElementById('pay-link').href = checkoutUrl;
+    // Stuur de klant meteen door naar de betaalpagina (zelfde tab)
+    // tenzij we net terugkeren van een betaling (dan checkoutUrl niet meegegeven)
+    if (!justReturned) {
+      window.location.href = checkoutUrl;
+      return;
+    }
     pollInterval = setInterval(async () => {
       try {
         const r = await API.orders.pollPayment(order.id);

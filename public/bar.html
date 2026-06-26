@@ -387,16 +387,28 @@ function cardHTML(o){
 
   const items = (o.items||[]).map(i =>
     `<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}</span></div>`
-  ).join('');
+  ).join('') + (o.gift > 0
+    ? `<div class="item-row" style="color:var(--sun-d);"><span class="item-icon">🐝</span><span class="item-qty"></span><span>Gift voor de bijen · € ${o.gift.toFixed(2).replace('.',',')}</span></div>`
+    : '');
 
   const amtFmt = `€ ${(o.amount||0).toFixed(2).replace('.',',')}`;
 
   // Action buttons per status + method
   let actions;
   if (o.status === 'pending') {
-    actions = `<div class="card-actions">
-      <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button>
-    </div>`;
+    if (isOnline) {
+      actions = `<div class="card-actions" style="flex-direction:column;gap:0;">
+        <button class="act-btn" style="background:var(--teal);color:#fff;font-weight:600;font-size:13px;" onclick="checkPay('${o.id}')">🔄 Controleer betaling</button>
+        <div style="display:flex;border-top:0.5px solid var(--bd);">
+          <button class="act-btn btn-prep" style="flex:1;font-size:12px" onclick="markPaid('${o.id}')">✅ Toch betaald</button>
+          <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button>
+        </div>
+      </div>`;
+    } else {
+      actions = `<div class="card-actions">
+        <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button>
+      </div>`;
+    }
   } else if (o.status === 'paid') {
     // Cash: can start preparing without payment, paid online: normal flow
     actions = `<div class="card-actions">
@@ -452,6 +464,29 @@ async function setStatus(id,status){
   if(status==='ready') toast(`✅ #${orders[id]?.order_number} is klaar! SMS verstuurd.`);
 }
 async function del(id){ await API.orders.remove(id); delete orders[id]; renderBoard(); }
+
+// Controleer online betaling bij Mollie/SumUp
+async function checkPay(id){
+  toast('Betaling controleren…');
+  try {
+    const r = await API.orders.pollPayment(id);
+    if (r.status === 'paid') {
+      toast('✅ Betaling bevestigd!');
+      if (r.order) { orders[id] = r.order; renderBoard(); }
+    } else {
+      toast('⏳ Nog geen betaling ontvangen (status: ' + r.status + ')');
+    }
+  } catch(e) { toast('Fout: ' + e.message); }
+}
+
+// Handmatig op betaald zetten (bv. betaling kwam wel binnen bij Mollie)
+async function markPaid(id){
+  if (!confirm('Deze bestelling handmatig als betaald markeren?')) return;
+  try {
+    await API.orders.setStatus(id, 'paid');
+    toast('✅ Gemarkeerd als betaald');
+  } catch(e) { toast('Fout: ' + e.message); }
+}
 
 // ── Cash betaal modal ────────────────────────────────────────────
 let payModalOrderId = null, payModalMethod = 'cash';

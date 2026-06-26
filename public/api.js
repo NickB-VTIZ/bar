@@ -58,6 +58,8 @@ window.API = (() => {
       remove:    (id)     => req('DELETE', `/api/products/${id}`),
       syncSumup: ()       => req('POST',   '/api/products/sync-sumup'),
       importSumup: (rows) => req('POST',   '/api/products/import-sumup', { rows }),
+      importSumupSalesPreview: (rows) => req('POST', '/api/products/import-sumup-sales/preview', { rows }),
+      importSumupSales: (rows) => req('POST', '/api/products/import-sumup-sales', { rows }),
     },
     orders: {
       list:           ()        => req('GET',    '/api/orders'),

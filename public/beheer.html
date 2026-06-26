@@ -230,6 +230,21 @@ select.inp{cursor:pointer;}
     </div>
 
     <div class="sec">
+      <div class="sec-title">SumUp verkopen → voorraad aftrekken</div>
+      <div class="card">
+        <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+          <div class="row-label">Upload je SumUp verkooprapport (CSV)</div>
+          <div style="font-size:12px;color:var(--mu);line-height:1.6;">
+            Verkopen die je rechtstreeks via de SumUp-terminal aan de bar doet, kan je hier aftrekken van je zomerbar-voorraad. Exporteer in SumUp je <strong>verkopen per artikel</strong> (Sales / Items sold report) en upload het hier. Het systeem herkent al verwerkte transacties automatisch, zodat je niet dubbel aftrekt.
+          </div>
+          <input type="file" id="sumup-sales-csv" accept=".csv" style="width:100%;font-size:13px;padding:10px;border:0.5px dashed var(--teal);border-radius:var(--rm);background:var(--teal-l);color:var(--teal-d);cursor:pointer;">
+        </div>
+      </div>
+      <button class="btn btn-teal btn-full" onclick="previewSumupSales()">🔍 Voorbeeld bekijken</button>
+      <div id="sumup-sales-result" style="margin-top:10px;font-size:13px;display:none;"></div>
+    </div>
+
+    <div class="sec">
       <div class="sec-title">Of: handmatig plakken</div>
       <div class="card">
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:8px;">
@@ -288,17 +303,23 @@ select.inp{cursor:pointer;}
       </div>
     </div>
     <div class="sec">
-      <div class="sec-title">Wanneer wordt er een SMS verstuurd?</div>
+      <div class="sec-title">SMS-bericht aanpassen</div>
       <div class="card">
-        <div class="row" style="flex-direction:column;align-items:flex-start;">
-          <div style="font-size:13px;color:var(--mu);line-height:1.7;">
-            Wanneer de barman een bestelling markeert als <strong>"Klaar ✅"</strong> op het bar-dashboard, ontvangt de klant automatisch een SMS op het nummer dat hij invulde bij de bestelling:<br><br>
-            <div style="background:var(--bg);border-radius:var(--rm);padding:10px 12px;font-style:italic;color:var(--tx);border:0.5px solid var(--bd);">
-              "Zomerbar: Bestelling #12 is klaar! Haal op aan de bar. Smakelijk! ☀️"
-            </div><br>
-            Vult de klant geen gsm-nummer in, dan wordt er geen SMS verstuurd maar werkt alles verder normaal.
+        <div class="row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+          <div class="row-label">Tekst die de klant ontvangt als de bestelling klaar is</div>
+          <textarea id="s-sms-template" rows="3" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);resize:vertical;font-family:inherit;" placeholder="{bar}: Bestelling #{nummer} is klaar! Haal op aan de bar. Smakelijk! ☀️"></textarea>
+          <div style="font-size:12px;color:var(--mu);line-height:1.6;">
+            Gebruik deze plaatshouders, ze worden automatisch ingevuld:<br>
+            <code style="background:var(--bg);padding:2px 6px;border-radius:4px;">{bar}</code> = naam van je bar &nbsp;·&nbsp;
+            <code style="background:var(--bg);padding:2px 6px;border-radius:4px;">{nummer}</code> = bestelnummer &nbsp;·&nbsp;
+            <code style="background:var(--bg);padding:2px 6px;border-radius:4px;">{totaal}</code> = bedrag
           </div>
+          <div id="sms-preview" style="width:100%;background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--rm);padding:10px 12px;font-size:13px;font-style:italic;color:var(--teal-d);"></div>
         </div>
+      </div>
+      <button class="btn btn-teal btn-full" onclick="saveSmsTemplate()">SMS-bericht opslaan</button>
+      <div style="margin-top:10px;font-size:12px;color:var(--mu);line-height:1.6;">
+        De SMS gaat automatisch naar de klant zodra de barman de bestelling op <strong>"Klaar ✅"</strong> zet. Vult de klant geen gsm-nummer in, dan wordt er niets verstuurd.
       </div>
     </div>
   </div>
@@ -611,6 +632,29 @@ function loadSettingsToForm() {
   if(s.barVat)       document.getElementById('s-bar-vat').value=s.barVat;
   if(s.vatDrinks)    document.getElementById('s-vat-drinks').value=s.vatDrinks;
   if(s.vatFood)      document.getElementById('s-vat-food').value=s.vatFood;
+  // SMS template
+  const tpl = document.getElementById('s-sms-template');
+  if (tpl) {
+    tpl.value = s.smsTemplate || '{bar}: Bestelling #{nummer} is klaar! Haal op aan de bar. Smakelijk! ☀️';
+    tpl.addEventListener('input', updateSmsPreview);
+    updateSmsPreview();
+  }
+}
+
+function updateSmsPreview() {
+  const tpl = document.getElementById('s-sms-template').value || '';
+  const barName = (settings.barName) || 'Zomerbar';
+  const preview = tpl
+    .replace(/\{bar\}/g, barName)
+    .replace(/\{nummer\}/g, '12')
+    .replace(/\{totaal\}/g, '€ 7,50');
+  document.getElementById('sms-preview').textContent = preview ? '"' + preview + '"' : '(leeg)';
+}
+
+async function saveSmsTemplate() {
+  await API.settings.save({ smsTemplate: document.getElementById('s-sms-template').value });
+  settings.smsTemplate = document.getElementById('s-sms-template').value;
+  toast('✅ SMS-bericht opgeslagen');
 }
 
 async function saveMollie() {
@@ -720,6 +764,7 @@ async function importSumupCsv() {
   const iQty = col(['Quantity']);
   const iId = col(['Item id (Do not change)']);
   const iImg = col(['Image 1']);
+  const iDesc = col(['Description']);
 
   if (iName < 0 || iPrice < 0) { toast('Geen geldige SumUp CSV (kolom Item name/Price ontbreekt)'); return; }
 
@@ -737,6 +782,7 @@ async function importSumupCsv() {
       quantity: iQty >= 0 ? cells[iQty] : '',
       item_id: iId >= 0 ? cells[iId] : '',
       image_url: iImg >= 0 ? cells[iImg] : '',
+      description: iDesc >= 0 ? cells[iDesc] : '',
     });
   }
 
@@ -754,6 +800,115 @@ async function importSumupCsv() {
     el.innerHTML = `✅ ${result.added} toegevoegd, 🔄 ${result.updated} bijgewerkt${result.failed ? `, ❌ ${result.failed} mislukt` : ''}`;
     fileInput.value = '';
     toast(`✅ ${result.added + result.updated} producten geïmporteerd`);
+  } catch(e) {
+    el.style.color = 'var(--coral-d)';
+    el.textContent = '❌ ' + e.message;
+    toast('Fout: ' + e.message);
+  }
+}
+
+// ── SumUp verkopen → voorraad aftrekken ──
+let pendingSalesRows = null;
+
+async function previewSumupSales() {
+  const fileInput = document.getElementById('sumup-sales-csv');
+  const el = document.getElementById('sumup-sales-result');
+  if (!fileInput.files.length) { toast('Kies eerst een CSV-bestand'); return; }
+  const text = await fileInput.files[0].text();
+  const rows = parseCSV(text);
+  if (rows.length < 2) { toast('CSV lijkt leeg'); return; }
+
+  const header = rows[0].map(h => h.trim());
+  const col = (names) => {
+    for (const n of names) {
+      const idx = header.findIndex(h => h.toLowerCase() === n.toLowerCase());
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+  // Flexibel: probeer verschillende mogelijke kolomnamen uit SumUp-rapporten
+  const iName = col(['Item name','Product','Description','Artikel','Naam','Item']);
+  const iQty  = col(['Quantity','Qty','Aantal','Quantity sold','Items sold','Number sold']);
+  const iId   = col(['Item id (Do not change)','Item id','Product id']);
+  const iTx   = col(['Transaction ID','Transaction code','Transactie','Receipt number','Payment ID']);
+  const iDate = col(['Date','Datum','Date and time','Time']);
+  const iAmt  = col(['Amount','Bedrag','Total','Price']);
+
+  if (iName < 0 && iId < 0) { toast('Geen artikel-kolom gevonden in CSV'); return; }
+  if (iQty < 0) { toast('Geen aantal-kolom (Quantity) gevonden'); return; }
+
+  const parsed = [];
+  for (let r = 1; r < rows.length; r++) {
+    const c = rows[r];
+    if (!c || (iName >= 0 && !c[iName] && iId >= 0 && !c[iId])) continue;
+    const name = iName >= 0 ? (c[iName]||'').trim() : '';
+    if (!name && (iId < 0 || !c[iId])) continue;
+    parsed.push({
+      name,
+      sumup_id: iId >= 0 ? (c[iId]||'').trim() : '',
+      qty: iQty >= 0 ? c[iQty] : '',
+      tx_ref: iTx >= 0 ? (c[iTx]||'').trim() : '',
+      date: iDate >= 0 ? (c[iDate]||'').trim() : '',
+      amount: iAmt >= 0 ? (c[iAmt]||'').replace(',','.').replace(/[^0-9.]/g,'') : '',
+    });
+  }
+  if (!parsed.length) { toast('Geen verkopen gevonden in CSV'); return; }
+  pendingSalesRows = parsed;
+
+  el.style.display = 'block';
+  el.style.color = 'var(--mu)';
+  el.textContent = 'Voorbeeld berekenen…';
+
+  try {
+    const pv = await API.products.importSumupSalesPreview(parsed);
+    let html = '';
+    if (pv.matched.length) {
+      html += `<div style="font-weight:600;margin-bottom:6px;color:var(--tx);">Wordt afgetrokken:</div>`;
+      html += pv.matched.map(m =>
+        `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid var(--bd);">
+          <span>${m.icon||'🍺'} ${m.name}</span>
+          <span style="color:var(--coral-d);">−${m.qty} <span style="color:var(--mu);font-size:11px;">(nu ${m.stock < 0 ? '∞' : m.stock})</span></span>
+        </div>`).join('');
+    }
+    if (pv.skipped_transactions > 0) {
+      html += `<div style="margin-top:8px;color:var(--mu);font-size:12px;">⏭️ ${pv.skipped_transactions} transacties al eerder verwerkt (worden overgeslagen)</div>`;
+    }
+    if (pv.unmatched.length) {
+      html += `<div style="margin-top:8px;color:var(--coral-d);font-size:12px;">⚠️ Niet gevonden in je producten: ${pv.unmatched.join(', ')}</div>`;
+    }
+    if (!pv.matched.length) {
+      html += `<div style="color:var(--coral-d);">Niets om af te trekken${pv.skipped_transactions ? ' (alles al verwerkt)' : ''}.</div>`;
+      el.style.color = 'var(--coral-d)';
+      el.innerHTML = html;
+      return;
+    }
+    if (!pv.has_tx_refs) {
+      html += `<div style="margin-top:8px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:8px;padding:8px 10px;color:var(--sun-t);font-size:12px;">
+        ⚠️ Dit rapport heeft geen transactie-ID's. Let op dat je dezelfde periode niet twee keer importeert, anders trek je dubbel af.
+      </div>`;
+    }
+    html += `<button class="btn btn-teal btn-full" style="margin-top:10px;" onclick="confirmSumupSales()">✓ Voorraad nu aftrekken</button>`;
+    el.style.color = 'var(--tx)';
+    el.innerHTML = html;
+  } catch(e) {
+    el.style.color = 'var(--coral-d)';
+    el.textContent = '❌ ' + e.message;
+  }
+}
+
+async function confirmSumupSales() {
+  if (!pendingSalesRows) return;
+  const el = document.getElementById('sumup-sales-result');
+  el.textContent = 'Voorraad bijwerken…';
+  try {
+    const r = await API.products.importSumupSales(pendingSalesRows);
+    products = r.products || products;
+    renderProducts();
+    el.style.color = 'var(--teal-d)';
+    el.innerHTML = `✅ ${r.total_deducted} stuks afgetrokken bij ${r.products_updated} producten${r.processed_transactions ? ` · ${r.processed_transactions} transacties verwerkt` : ''}`;
+    document.getElementById('sumup-sales-csv').value = '';
+    pendingSalesRows = null;
+    toast('✅ Voorraad bijgewerkt');
   } catch(e) {
     el.style.color = 'var(--coral-d)';
     el.textContent = '❌ ' + e.message;

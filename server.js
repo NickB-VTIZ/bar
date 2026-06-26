@@ -80,6 +80,14 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     expires_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS sumup_sales (
+    tx_ref      TEXT PRIMARY KEY,
+    date        TEXT,
+    amount      REAL,
+    items_json  TEXT,
+    processed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ── Database migraties ───────────────────────────────────────────
@@ -94,6 +102,8 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0`,
   `ALTER TABLE products ADD COLUMN vat_rate REAL DEFAULT 0`,
   `ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN gift REAL DEFAULT 0`,
 ];
 
 migrations.forEach(sql => {
@@ -207,7 +217,14 @@ async function sendSMS(phone, message) {
 async function notifyOrderReady(order) {
   if (!order.phone) return;
   const barName = getSetting('barName') || 'Zomerbar';
-  const msg = `${barName}: Bestelling #${order.order_number} is klaar! Haal op aan de bar. Smakelijk! ☀️`;
+  // Aanpasbare template met placeholders {bar}, {nummer}, {totaal}
+  const template = getSetting('smsTemplate')
+    || '{bar}: Bestelling #{nummer} is klaar! Haal op aan de bar. Smakelijk! ☀️';
+  const amtFmt = '€ ' + (order.amount || 0).toFixed(2).replace('.', ',');
+  const msg = template
+    .replace(/\{bar\}/g, barName)
+    .replace(/\{nummer\}/g, order.order_number)
+    .replace(/\{totaal\}/g, amtFmt);
   try { await sendSMS(order.phone, msg); }
   catch (e) { console.error('SMS mislukt:', e.message); }
 }
@@ -402,7 +419,22 @@ app.post('/api/auth/change-password', requireAuth, (req, res) => {
 
 // Products
 app.get('/api/products', (req, res) => {
-  res.json(db.prepare('SELECT * FROM products WHERE active=1 ORDER BY sort_order,name').all());
+  const products = db.prepare('SELECT * FROM products WHERE active=1').all();
+  // Bereken marge per product en sorteer hoogste marge bovenaan
+  const withMargin = products.map(p => {
+    const noVat = p.vat_rate === -1;
+    const vatR = noVat ? 0 : (p.vat_rate != null && p.vat_rate >= 0 ? p.vat_rate : (p.vat_type === 'food' ? 12 : 6));
+    const excl = noVat ? p.price : p.price / (1 + vatR/100);
+    const marginPct = (p.cost_price > 0 && excl > 0) ? ((excl - p.cost_price) / excl) : -1;
+    return { ...p, _margin: marginPct };
+  });
+  // Sorteer: hoogste marge eerst; producten zonder kostprijs (marge -1) onderaan
+  withMargin.sort((a, b) => {
+    if (b._margin !== a._margin) return b._margin - a._margin;
+    return (a.sort_order || 0) - (b.sort_order || 0);
+  });
+  withMargin.forEach(p => delete p._margin);
+  res.json(withMargin);
 });
 
 // ── SumUp CSV import ─────────────────────────────────────────────
@@ -457,9 +489,9 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
   };
 
   const maxOrd0 = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
-  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,image_url,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,image_url,description,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const findBySumup = db.prepare('SELECT id FROM products WHERE sumup_id=?');
-  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=?,image_url=?,stock=? WHERE sumup_id=?`);
+  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=?,image_url=?,stock=?,description=? WHERE sumup_id=?`);
 
   let added = 0, updated = 0, failed = 0;
   const errors = [];
@@ -479,6 +511,7 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
       const icon = catEmoji[catKey] || '🍺';
       const sumup_id = row.item_id || null;
       const image_url = (row.image_url || '').trim();
+      const description = (row.description || '').trim();
       // Track inventory? quantity
       let stock = -1;
       if (row.track_inventory && String(row.track_inventory).toLowerCase() === 'yes') {
@@ -489,14 +522,15 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
       const existing = sumup_id ? findBySumup.get(sumup_id) : null;
       if (existing) {
         // Keep existing stock if SumUp doesn't track it (stock = -1)
-        const existingRow = db.prepare('SELECT stock, image_url FROM products WHERE sumup_id=?').get(sumup_id);
+        const existingRow = db.prepare('SELECT stock, image_url, description FROM products WHERE sumup_id=?').get(sumup_id);
         const finalStock = stock === -1 ? existingRow.stock : stock;
         const finalImage = image_url || existingRow.image_url || '';
-        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, finalImage, finalStock, sumup_id);
+        const finalDesc = description || existingRow.description || '';
+        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, finalImage, finalStock, finalDesc, sumup_id);
         updated++;
       } else {
         ord++;
-        insert.run(name, category, price, icon, vat_type, stock, 5, isNaN(cost_price)?0:cost_price, vat_rate, sumup_id, image_url, ord);
+        insert.run(name, category, price, icon, vat_type, stock, 5, isNaN(cost_price)?0:cost_price, vat_rate, sumup_id, image_url, description, ord);
         added++;
       }
     } catch(e) { failed++; errors.push(`${row.name}: ${e.message}`); }
@@ -506,9 +540,107 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
   res.json({ ok: true, added, updated, failed, errors: errors.slice(0,10), products: allProducts });
 });
 
+// ── SumUp verkopen → voorraad aftrekken ──────────────────────────
+// Preview: toont wat er afgetrokken zou worden, zonder iets te wijzigen
+app.post('/api/products/import-sumup-sales/preview', requireAuth, (req, res) => {
+  const { rows } = req.body; // [{ tx_ref, date, name, sumup_id, qty, amount }]
+  if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'Geen verkopen ontvangen' });
+
+  const findBySumup = db.prepare('SELECT id,name,stock,icon FROM products WHERE sumup_id=?');
+  const findByName = db.prepare('SELECT id,name,stock,icon FROM products WHERE LOWER(name)=LOWER(?)');
+  const alreadyDone = db.prepare('SELECT tx_ref FROM sumup_sales WHERE tx_ref=?');
+
+  const matched = {}, unmatched = [];
+  let skippedTx = 0, newTx = 0;
+  const seenTx = new Set();
+
+  for (const row of rows) {
+    const txRef = (row.tx_ref || '').trim();
+    // Dubbeltelling-preventie: sla al verwerkte transacties over
+    if (txRef) {
+      if (seenTx.has(txRef)) continue;
+      seenTx.add(txRef);
+      if (alreadyDone.get(txRef)) { skippedTx++; continue; }
+      newTx++;
+    }
+    const qty = parseInt(row.qty) || 0;
+    if (qty <= 0) continue;
+    let p = row.sumup_id ? findBySumup.get(row.sumup_id) : null;
+    if (!p && row.name) p = findByName.get(row.name.trim());
+    if (!p) { unmatched.push(row.name || row.sumup_id || '?'); continue; }
+    if (!matched[p.id]) matched[p.id] = { id: p.id, name: p.name, icon: p.icon, stock: p.stock, qty: 0 };
+    matched[p.id].qty += qty;
+  }
+
+  res.json({
+    matched: Object.values(matched),
+    unmatched: [...new Set(unmatched)],
+    skipped_transactions: skippedTx,
+    new_transactions: newTx,
+    has_tx_refs: rows.some(r => r.tx_ref),
+  });
+});
+
+// Verwerk: trekt de voorraad af en logt de transacties
+app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
+  const { rows } = req.body;
+  if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'Geen verkopen ontvangen' });
+
+  const findBySumup = db.prepare('SELECT id,name,stock FROM products WHERE sumup_id=?');
+  const findByName = db.prepare('SELECT id,name,stock FROM products WHERE LOWER(name)=LOWER(?)');
+  const alreadyDone = db.prepare('SELECT tx_ref FROM sumup_sales WHERE tx_ref=?');
+  const markTx = db.prepare('INSERT OR IGNORE INTO sumup_sales (tx_ref,date,amount,items_json) VALUES (?,?,?,?)');
+  const updStock = db.prepare('UPDATE products SET stock = MAX(0, stock - ?) WHERE id=? AND stock >= 0');
+  const logStock = db.prepare("INSERT INTO stock_log (product_id,delta,reason,order_id) VALUES (?,?,'sumup_sale',?)");
+
+  const seenTx = new Set();
+  const deductions = {}; // product_id → qty
+  let processedTx = 0, skippedTx = 0;
+
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const txRef = (row.tx_ref || '').trim();
+      if (txRef) {
+        if (seenTx.has(txRef)) continue;
+        seenTx.add(txRef);
+        if (alreadyDone.get(txRef)) { skippedTx++; continue; }
+      }
+      const qty = parseInt(row.qty) || 0;
+      if (qty <= 0) continue;
+      let p = row.sumup_id ? findBySumup.get(row.sumup_id) : null;
+      if (!p && row.name) p = findByName.get(row.name.trim());
+      if (!p) continue;
+      deductions[p.id] = (deductions[p.id] || 0) + qty;
+      if (txRef) {
+        markTx.run(txRef, row.date || null, row.amount != null ? parseFloat(row.amount) : null, JSON.stringify({ name: row.name, qty }));
+        processedTx++;
+      }
+    }
+    // Pas aftrek toe (alleen producten met getrackte voorraad, stock >= 0)
+    Object.entries(deductions).forEach(([pid, qty]) => {
+      updStock.run(qty, pid);
+      logStock.run(pid, -qty, 'sumup-import');
+    });
+  });
+  tx();
+
+  // Low stock alerts
+  const low = db.prepare('SELECT * FROM products WHERE stock >= 0 AND stock <= low_stock AND active=1').all();
+  if (low.length) broadcast('low_stock', { products: low });
+  const allProducts = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY sort_order,name').all();
+  allProducts.forEach(p => broadcast('product_updated', { product: p }));
+
+  res.json({
+    ok: true,
+    products_updated: Object.keys(deductions).length,
+    total_deducted: Object.values(deductions).reduce((a,b)=>a+b,0),
+    processed_transactions: processedTx,
+    skipped_transactions: skippedTx,
+    products: allProducts,
+  });
+});
+
 app.post('/api/products', requireAuth, (req, res) => {
-  const { name, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate } = req.body;
-  if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
   // Determine vat_rate: explicit, or from vat_type default
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
@@ -595,7 +727,7 @@ app.get('/api/orders/:id', (req, res) => {
 
 // Create order + SumUp checkout
 app.post('/api/orders', async (req, res) => {
-  const { items, method, note, table_ref, phone, redirect_url } = req.body;
+  const { items, method, note, table_ref, phone, redirect_url, gift } = req.body;
   if (!items?.length) return res.status(400).json({ error: 'Geen items' });
 
   // Validate stock
@@ -610,15 +742,16 @@ app.post('/api/orders', async (req, res) => {
 
   const id = generateOrderId();
   const orderNumber = nextOrderNumber();
-  const amount = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const giftAmount = (gift && gift > 0) ? parseFloat(gift) : 0;
+  const amount = items.reduce((s, i) => s + i.price * i.qty, 0) + giftAmount;
   let molliePaymentId = null;
   let mollieCheckoutUrl = null;
 
   // Cash = immediately paid, mollie = pending until webhook/return
   const status = method === 'cash' ? 'paid' : 'pending';
 
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref)
-    VALUES (?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, method||'cash', note||'', phone||'', table_ref||'');
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift)
+    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, method||'cash', note||'', phone||'', table_ref||'', giftAmount);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
@@ -700,11 +833,7 @@ app.get('/api/orders/:id/payment-status', async (req, res) => {
     try {
       const payment = await checkMolliePayment(o.mollie_payment_id);
       if (payment && payment.status === 'paid') {
-        db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
-        const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
-        deductStock(items, o.id);
-        const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
-        broadcast('order_updated', { order: updated });
+        const updated = markOrderPaid(o);
         return res.json({ status: 'paid', order: updated });
       }
       return res.json({ status: payment?.status || 'pending' });
@@ -716,11 +845,7 @@ app.get('/api/orders/:id/payment-status', async (req, res) => {
     try {
       const checkout = await checkSumupCheckout(o.sumup_checkout_id);
       if (checkout && checkout.status === 'PAID') {
-        db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
-        const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
-        deductStock(items, o.id);
-        const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
-        broadcast('order_updated', { order: updated });
+        const updated = markOrderPaid(o);
         return res.json({ status: 'paid', order: updated });
       }
       return res.json({ status: (checkout?.status || 'pending').toLowerCase() });
@@ -740,13 +865,7 @@ app.post('/api/sumup/webhook', async (req, res) => {
     if (!o && checkoutId) o = db.prepare('SELECT * FROM orders WHERE sumup_checkout_id=?').get(checkoutId);
     if (!o || o.status === 'paid') return;
     const checkout = await checkSumupCheckout(o.sumup_checkout_id);
-    if (checkout && checkout.status === 'PAID') {
-      db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
-      const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
-      deductStock(items, o.id);
-      const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
-      broadcast('order_updated', { order: updated });
-    }
+    if (checkout && checkout.status === 'PAID') markOrderPaid(o);
   } catch(e) { console.error('SumUp webhook fout:', e.message); }
 });
 
@@ -760,13 +879,7 @@ app.post('/api/mollie/webhook', async (req, res) => {
     if (!payment) return;
     const o = db.prepare('SELECT * FROM orders WHERE mollie_payment_id=?').get(paymentId);
     if (!o || o.status === 'paid') return;
-    if (payment.status === 'paid') {
-      db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
-      const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
-      deductStock(items, o.id);
-      const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
-      broadcast('order_updated', { order: updated });
-    }
+    if (payment.status === 'paid') markOrderPaid(o);
   } catch(e) { console.error('Mollie webhook fout:', e.message); }
 });
 
@@ -946,7 +1059,7 @@ async function billitRequest(method, apiPath, body) {
 app.get('/api/billit/daily-overview', requireAuth, (req, res) => {
   const day = req.query.date || new Date().toISOString().slice(0,10);
   const orders = db.prepare(`
-    SELECT o.id, o.amount, o.method FROM orders o
+    SELECT o.id, o.amount, o.method, o.gift FROM orders o
     WHERE DATE(o.created_at) = ?
       AND o.status NOT IN ('cancelled','archived','pending')
   `).all(day);
@@ -956,10 +1069,11 @@ app.get('/api/billit/daily-overview', requireAuth, (req, res) => {
 
   // Billit categories: 0, 6, 12, 21, and "zonder btw" (-1)
   const cats = { '0': 0, '6': 0, '12': 0, '21': 0, 'geen': 0 };
-  let cash = 0, card = 0;
+  let cash = 0, card = 0, giftTotal = 0;
 
   orders.forEach(o => {
     if (o.method === 'cash') cash += o.amount; else card += o.amount;
+    if (o.gift > 0) { giftTotal += o.gift; cats['geen'] += o.gift; }
     const items = db.prepare('SELECT oi.*, p.vat_type, p.vat_rate FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
     items.forEach(it => {
       const lineTotal = it.price * it.qty;
@@ -976,6 +1090,7 @@ app.get('/api/billit/daily-overview', requireAuth, (req, res) => {
     date: day,
     order_count: orders.length,
     cash, card, total: cash + card,
+    gift: giftTotal,
     categories: cats, // incl. BTW bedragen per categorie
   });
 });
@@ -1255,4 +1370,45 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'bestel.html'));
 });
 
-server.listen(PORT, () => console.log(`☀️  Zomerbar v5.2.0 op http://localhost:${PORT}`));
+// ── Achtergrond-poller voor online betalingen ────────────────────
+// Controleert elke 20s alle wachtende Mollie/SumUp bestellingen.
+// Zo wordt een betaling altijd geregistreerd, ook als de webhook faalt
+// of de klant zijn pagina sluit.
+function markOrderPaid(o) {
+  db.prepare("UPDATE orders SET status='paid', updated_at=datetime('now') WHERE id=?").run(o.id);
+  const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
+  deductStock(items, o.id);
+  const updated = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(o.id));
+  broadcast('order_updated', { order: updated });
+  console.log(`💰 Betaling geregistreerd: bestelling #${o.order_number} (${o.id})`);
+  return updated;
+}
+
+async function pollPendingPayments() {
+  // Alleen recente wachtende online bestellingen (laatste 24u)
+  const pending = db.prepare(`
+    SELECT * FROM orders
+    WHERE status='pending'
+      AND (mollie_payment_id IS NOT NULL OR sumup_checkout_id IS NOT NULL)
+      AND created_at > datetime('now','-1 day')
+  `).all();
+  for (const o of pending) {
+    try {
+      if (o.mollie_payment_id) {
+        const payment = await checkMolliePayment(o.mollie_payment_id);
+        if (payment && payment.status === 'paid') markOrderPaid(o);
+        else if (payment && ['expired','canceled','failed'].includes(payment.status)) {
+          // laat bestelling staan maar log
+        }
+      } else if (o.sumup_checkout_id) {
+        const checkout = await checkSumupCheckout(o.sumup_checkout_id);
+        if (checkout && checkout.status === 'PAID') markOrderPaid(o);
+      }
+    } catch(e) { /* stil, probeer volgende ronde opnieuw */ }
+  }
+}
+
+// Start poller (elke 20 seconden)
+setInterval(() => { pollPendingPayments().catch(()=>{}); }, 20000);
+
+server.listen(PORT, () => console.log(`☀️  Zomerbar v5.4.0 op http://localhost:${PORT}`));
