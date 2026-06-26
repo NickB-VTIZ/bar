@@ -896,6 +896,32 @@ app.patch('/api/orders/:id/status', requireAuth, (req, res) => {
   res.json(order);
 });
 
+// ── Data resetten (voor live gaan) ───────────────────────────────
+// Verwijdert alle bestellingen, verkopen en boekhoud-data.
+// Producten en instellingen blijven behouden. Vereist bevestiging.
+app.post('/api/reset', requireAuth, (req, res) => {
+  const { confirm, keepStock } = req.body;
+  if (confirm !== 'RESET') return res.status(400).json({ error: 'Bevestiging vereist' });
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM order_items').run();
+    db.prepare('DELETE FROM orders').run();
+    db.prepare('DELETE FROM stock_log').run();
+    db.prepare('DELETE FROM sumup_sales').run();
+    // Verwijder dagontvangsten/factuur-referenties uit settings
+    const keys = db.prepare("SELECT key FROM settings WHERE key LIKE 'daily_receipt_%' OR key LIKE 'invoice_%'").all();
+    const delSetting = db.prepare('DELETE FROM settings WHERE key=?');
+    keys.forEach(k => delSetting.run(k.key));
+    // Reset bestelnummer-teller
+    db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('orderCounter','0')").run();
+  });
+  tx();
+
+  orderNumCounter = 1; // reset in-memory teller
+  broadcast('orders_reset', {});
+  res.json({ ok: true, message: 'Alle bestellingen en boekhoud-data gewist' });
+});
+
 app.delete('/api/orders/:id', requireAuth, (req, res) => {
   db.prepare("UPDATE orders SET status='archived' WHERE id=?").run(req.params.id);
   broadcast('order_deleted', { id: req.params.id });
@@ -995,13 +1021,14 @@ app.get('/api/cashbook', requireAuth, (req, res) => {
   // Group by day
   const days = {};
   orders.forEach(o => {
-    if (!days[o.day]) days[o.day] = { date: o.day, orders: [], cash: 0, card: 0, total: 0, vat: {} };
+    if (!days[o.day]) days[o.day] = { date: o.day, orders: [], cash: 0, card: 0, total: 0, gift: 0, vat: {} };
     const d = days[o.day];
     const items = db.prepare('SELECT oi.*, p.vat_type FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?').all(o.id);
     d.orders.push({ ...o, items });
     if (o.method === 'cash') d.cash += o.amount;
     else d.card += o.amount;
     d.total += o.amount;
+    if (o.gift > 0) d.gift += o.gift;
     // VAT breakdown per line
     items.forEach(it => {
       const rate = it.vat_type === 'food' ? vatFood : vatDrinks;
@@ -1016,9 +1043,9 @@ app.get('/api/cashbook', requireAuth, (req, res) => {
   });
 
   // Totals across the period
-  const totals = { cash: 0, card: 0, total: 0, vat: {}, order_count: orders.length };
+  const totals = { cash: 0, card: 0, total: 0, gift: 0, vat: {}, order_count: orders.length };
   Object.values(days).forEach(d => {
-    totals.cash += d.cash; totals.card += d.card; totals.total += d.total;
+    totals.cash += d.cash; totals.card += d.card; totals.total += d.total; totals.gift += d.gift;
     Object.values(d.vat).forEach(v => {
       if (!totals.vat[v.rate]) totals.vat[v.rate] = { rate: v.rate, incl: 0, excl: 0, vat: 0 };
       totals.vat[v.rate].incl += v.incl;

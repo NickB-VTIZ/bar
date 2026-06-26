@@ -86,5 +86,6 @@ window.API = (() => {
       save: (s) => req('POST', '/api/settings', s),
     },
     stock: { log: () => req('GET', '/api/stock/log') },
+    reset: (opts) => req('POST', '/api/reset', opts),
   };
 })();

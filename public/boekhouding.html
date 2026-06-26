@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/favicon-180.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Zomerbar · Kasdagboek</title>
@@ -210,6 +212,7 @@ function renderCashbook(data){
     <div class="cb-stat"><div class="cb-stat-n">${fmt(t.total)}</div><div class="cb-stat-l">Totaal ontvangsten</div></div>
     <div class="cb-stat cash"><div class="cb-stat-n">${fmt(t.cash)}</div><div class="cb-stat-l">💶 Cash</div></div>
     <div class="cb-stat card"><div class="cb-stat-n">${fmt(t.card)}</div><div class="cb-stat-l">💳 Kaart (SumUp)</div></div>
+    ${t.gift > 0 ? `<div class="cb-stat" style="border-color:var(--sun);"><div class="cb-stat-n" style="color:var(--sun-d)">${fmt(t.gift)}</div><div class="cb-stat-l">🐝 Giften bijen</div></div>` : ''}
   </div>`;
 
   // Per day
@@ -232,7 +235,8 @@ function renderCashbook(data){
         ${d.vat.sort((a,b)=>a.rate-b.rate).map(v=>`<tr>
           <td>${v.rate}%</td><td class="txt-right">${fmt(v.excl)}</td><td class="txt-right">${fmt(v.vat)}</td><td class="txt-right">${fmt(v.incl)}</td>
         </tr>`).join('')}
-        <tr class="tot-row"><td>Dagtotaal</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.excl,0))}</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.vat,0))}</td><td class="txt-right">${fmt(d.total)}</td></tr>
+        <tr class="tot-row"><td>Dagtotaal</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.excl,0))}</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.vat,0))}</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.incl,0))}</td></tr>
+        ${d.gift > 0 ? `<tr><td>🐝 Giften (zonder btw)</td><td class="txt-right">${fmt(d.gift)}</td><td class="txt-right">—</td><td class="txt-right">${fmt(d.gift)}</td></tr>` : ''}
         </tbody>
       </table>
     </div>`;
@@ -284,7 +288,7 @@ function renderDailyOverview(o){
 
   let html = `<div class="inv-card">
     <div class="inv-preview-title">Dagontvangsten — ${new Date(o.date).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
-    <div class="inv-preview-sub">${o.order_count} bestellingen · 💶 Cash ${fmt(o.cash)} · 💳 Kaart ${fmt(o.card)}</div>
+    <div class="inv-preview-sub">${o.order_count} bestellingen · 💶 Cash ${fmt(o.cash)} · 💳 Kaart ${fmt(o.card)}${o.gift > 0 ? ` · 🐝 Giften ${fmt(o.gift)}` : ''}</div>
 
     <div style="background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);padding:10px 12px;font-size:12px;color:var(--sun-t);margin:12px 0;line-height:1.5;">
       💡 Tik onderstaande bedragen over in Billit → Dagontvangstenboek → Toevoegen. De categorieën komen exact overeen.
@@ -294,8 +298,11 @@ function renderDailyOverview(o){
 
   rows.forEach(r => {
     const isZero = !r.val;
+    // Toon bij "zonder btw" hoeveel daarvan giften zijn
+    const giftNote = (r.label === 'Categorie zonder btw' && o.gift > 0)
+      ? `<div style="font-size:11px;color:var(--sun-d);">waarvan 🐝 ${fmt(o.gift)} giften</div>` : '';
     html += `<div class="inv-line" style="${isZero?'opacity:.4;':''}">
-      <div class="inv-line-label">${r.label}</div>
+      <div><div class="inv-line-label">${r.label}</div>${giftNote}</div>
       <div class="inv-line-amt" style="font-size:17px;cursor:pointer;" onclick="copyAmount(${(r.val||0).toFixed(2)})" title="Klik om te kopiëren">${fmt(r.val)}</div>
     </div>`;
   });
