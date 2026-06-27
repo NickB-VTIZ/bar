@@ -495,9 +495,9 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
   };
 
   const maxOrd0 = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
-  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,image_url,description,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const findBySumup = db.prepare('SELECT id FROM products WHERE sumup_id=?');
-  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=?,image_url=?,stock=?,description=? WHERE sumup_id=?`);
+  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,image_url,description,sort_order,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)`);
+  const findBySumup = db.prepare('SELECT * FROM products WHERE sumup_id=?');
+  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=?,icon=?,image_url=?,stock=?,description=?,active=1 WHERE sumup_id=?`);
 
   let added = 0, updated = 0, failed = 0;
   const errors = [];
@@ -518,21 +518,31 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
       const sumup_id = row.item_id || null;
       const image_url = (row.image_url || '').trim();
       const description = (row.description || '').trim();
-      // Track inventory? quantity
-      let stock = -1;
+      // Track inventory? quantity — SumUp geeft de voorraad mee
+      let stock = -1; // -1 = onbeperkt (geen tracking)
       if (row.track_inventory && String(row.track_inventory).toLowerCase() === 'yes') {
-        stock = row.quantity != null ? parseInt(row.quantity) : 0;
-        if (isNaN(stock)) stock = 0;
+        const q = row.quantity != null && row.quantity !== '' ? parseInt(row.quantity) : 0;
+        // SumUp gebruikt soms -1 voor "onbeperkt" ondanks tracking aan
+        stock = (isNaN(q) || q < 0) ? -1 : q;
       }
 
       const existing = sumup_id ? findBySumup.get(sumup_id) : null;
       if (existing) {
-        // Keep existing stock if SumUp doesn't track it (stock = -1)
-        const existingRow = db.prepare('SELECT stock, image_url, description FROM products WHERE sumup_id=?').get(sumup_id);
-        const finalStock = stock === -1 ? existingRow.stock : stock;
-        const finalImage = image_url || existingRow.image_url || '';
-        const finalDesc = description || existingRow.description || '';
-        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, finalImage, finalStock, finalDesc, sumup_id);
+        // Voorraad: gebruik CSV-waarde als SumUp tracking aan heeft,
+        // anders behoud de bestaande voorraad (tenzij product verwijderd was → dan 0)
+        const wasDeleted = existing.active === 0;
+        let finalStock;
+        if (stock >= 0) {
+          finalStock = stock; // SumUp trackt: neem die waarde
+        } else if (wasDeleted) {
+          finalStock = -1; // heractiveren zonder tracking → onbeperkt
+        } else {
+          finalStock = existing.stock; // behoud
+        }
+        const finalImage = image_url || existing.image_url || '';
+        const finalDesc = description || existing.description || '';
+        const finalIcon = existing.icon && existing.icon !== '🍺' ? existing.icon : icon;
+        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, finalIcon, finalImage, finalStock, finalDesc, sumup_id);
         updated++;
       } else {
         ord++;
