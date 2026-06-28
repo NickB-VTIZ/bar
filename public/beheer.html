@@ -759,6 +759,14 @@ async function checkSumupMethods() {
 }
 
 // ── SumUp CSV import ──
+function stripHtml(s) {
+  if (!s) return '';
+  // Verwijder HTML-tags (SumUp zet beschrijvingen in <p>…</p>), normaliseer witruimte
+  const tmp = document.createElement('div');
+  tmp.innerHTML = String(s).replace(/<br\s*\/?>/gi, ' ').replace(/<\/p>/gi, ' ');
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+}
+
 function parseCSV(text) {
   // Proper CSV parser handling quoted fields with commas and newlines
   const rows = [];
@@ -827,7 +835,7 @@ async function importSumupCsv() {
   const iQty = col(['Quantity']);
   const iId = col(['Item id (Do not change)']);
   const iImg = col(['Image 1']);
-  const iDesc = col(['Description']);
+  const iDesc = col(['Description (Online Store and Invoices only)','Description','Beschrijving']);
 
   if (iName < 0 || iPrice < 0) { toast('Geen geldige SumUp CSV (kolom Item name/Price ontbreekt)'); return; }
 
@@ -845,7 +853,7 @@ async function importSumupCsv() {
       quantity: iQty >= 0 ? cells[iQty] : '',
       item_id: iId >= 0 ? cells[iId] : '',
       image_url: iImg >= 0 ? cells[iImg] : '',
-      description: iDesc >= 0 ? cells[iDesc] : '',
+      description: iDesc >= 0 ? stripHtml(cells[iDesc]) : '',
     });
   }
 

@@ -73,6 +73,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .stock-low{color:var(--coral-d);}
 .prod-qty-badge{position:absolute;top:8px;right:8px;background:var(--sun);color:var(--sun-t);font-size:12px;font-weight:600;width:24px;height:24px;border-radius:50%;display:none;align-items:center;justify-content:center;}
 .prod.in-cart .prod-qty-badge{display:flex;}
+.prod-stepper{position:absolute;top:8px;right:8px;display:flex;align-items:center;gap:2px;background:var(--card);border:0.5px solid var(--sun);border-radius:16px;padding:2px;box-shadow:0 1px 4px rgba(0,0,0,.12);z-index:3;}
+.step-btn{width:26px;height:26px;border:none;background:var(--sun);color:#fff;font-size:17px;font-weight:600;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;padding:0;}
+.step-btn:active{transform:scale(.92);}
+.step-qty{min-width:20px;text-align:center;font-size:14px;font-weight:600;color:var(--tx);}
 
 /* Cart sheet */
 .sheet-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;align-items:flex-end;justify-content:center;}
@@ -361,8 +365,13 @@ function renderProds() {
         : lowStock ? `<div class="prod-stock stock-low">Nog ${p.stock}</div>` : '')
       : '';
     const showDesc = p.description && p.description.trim();
-    return `<div class="prod ${qty>0?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock?'':'addItem('+p.id+')'}">
-      <div class="prod-qty-badge">${qty}</div>
+    const inCart = qty > 0;
+    return `<div class="prod ${inCart?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock||inCart?'':'addItem('+p.id+')'}">
+      ${inCart ? `<div class="prod-stepper" onclick="event.stopPropagation()">
+        <button class="step-btn" onclick="changeQty(${p.id},-1)">−</button>
+        <span class="step-qty">${qty}</span>
+        <button class="step-btn" onclick="addItem(${p.id})">+</button>
+      </div>` : ''}
       ${p.image_url
         ? `<div class="prod-img"><img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=&quot;prod-icon&quot;>${p.icon}</div>'"></div>`
         : `<div class="prod-icon">${p.icon}</div>`}
