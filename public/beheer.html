@@ -112,7 +112,8 @@ select.inp{cursor:pointer;}
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('products',this)">🍺 Producten</button>
   <button class="nav-btn" onclick="showScreen('stock',this);renderStock()">📦 Stock</button>
-  <button class="nav-btn" onclick="showScreen('sumup',this)">💳 Betalingen</button>
+  <button class="nav-btn" onclick="showScreen('sumup',this)">🔄 SumUp</button>
+  <button class="nav-btn" onclick="showScreen('payments',this)">💳 Betalingen</button>
   <button class="nav-btn" onclick="showScreen('sms',this)">📱 SMS</button>
   <button class="nav-btn" onclick="showScreen('billit',this)">🧾 Billit</button>
   <button class="nav-btn" onclick="showScreen('vat',this)">% BTW</button>
@@ -178,8 +179,8 @@ select.inp{cursor:pointer;}
   </div>
 </div>
 
-<!-- SumUp -->
-<div id="screen-sumup" class="screen">
+<!-- Betalingen (providers) -->
+<div id="screen-payments" class="screen">
   <div class="wrap">
     <div class="sec">
       <div class="sec-title">Mollie Bancontact</div>
@@ -190,7 +191,7 @@ select.inp{cursor:pointer;}
         </div>
         <div class="row">
           <div><div class="row-label">Website URL</div><div class="row-sub">Volledige URL van je bar (voor redirect na betaling)</div></div>
-          <input class="inp" id="s-site-url" placeholder="https://jouwbar.be">
+          <input class="inp" id="s-site-url" placeholder="https://bar.boerderbij.be">
         </div>
       </div>
       <button class="btn btn-teal btn-full" onclick="saveMollie()">Opslaan</button>
@@ -225,9 +226,21 @@ select.inp{cursor:pointer;}
         <strong>SumUp webhook:</strong> wordt automatisch gebruikt op <code style="background:var(--card);padding:2px 6px;border-radius:4px;">https://JOUW-URL/api/sumup/webhook</code>. Zorg dat je Website URL hierboven ingevuld staat.
       </div>
     </div>
+  </div>
+</div>
+
+<!-- SumUp (artikelen & voorraad sync) -->
+<div id="screen-sumup" class="screen">
+  <div class="wrap">
+    <div class="sec">
+      <div style="background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:14px 16px;font-size:13px;color:var(--sun-t);line-height:1.6;margin-bottom:4px;">
+        🔄 <strong>SumUp synchronisatie</strong><br>
+        <span style="font-size:12px;color:var(--mu);">Hier beheer je de uitwisseling met SumUp: artikelen importeren, je voorraad exporteren, en bar-verkopen aftrekken. De betaalinstellingen vind je onder het tabblad 💳 Betalingen.</span>
+      </div>
+    </div>
 
     <div class="sec">
-      <div class="sec-title">SumUp producten importeren</div>
+      <div class="sec-title">① Artikelen importeren uit SumUp</div>
       <div class="card">
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
           <div class="row-label">Upload je SumUp items-export (CSV)</div>
@@ -241,15 +254,16 @@ select.inp{cursor:pointer;}
       <div id="sumup-result" style="margin-top:10px;font-size:13px;display:none;"></div>
 
       <div style="margin-top:14px;border-top:0.5px solid var(--bd);padding-top:14px;">
+        <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:4px;">② Voorraad terug naar SumUp</div>
         <div style="font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:10px;">
-          Of exporteer je huidige producten (incl. bijgewerkte voorraad) als CSV in SumUp-formaat. Dit bestand kan je in SumUp importeren om daar de voorraad bij te werken.
+          Exporteer je huidige producten (incl. bijgewerkte voorraad) als CSV in SumUp-formaat. Dit bestand kan je in SumUp importeren om daar de voorraad bij te werken.
         </div>
         <button class="btn btn-ghost btn-full" onclick="exportSumupCsv()">📤 Exporteren naar SumUp CSV</button>
       </div>
     </div>
 
     <div class="sec">
-      <div class="sec-title">SumUp verkopen → voorraad aftrekken</div>
+      <div class="sec-title">③ Bar-verkopen aftrekken van voorraad</div>
       <div class="card">
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
           <div class="row-label">Upload je SumUp verkooprapport (CSV)</div>
@@ -264,7 +278,7 @@ select.inp{cursor:pointer;}
     </div>
 
     <div class="sec">
-      <div class="sec-title">Of: handmatig plakken</div>
+      <div class="sec-title">Handmatig producten plakken (zonder SumUp)</div>
       <div class="card">
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:8px;">
           <div style="font-size:12px;color:var(--mu);line-height:1.6;">
