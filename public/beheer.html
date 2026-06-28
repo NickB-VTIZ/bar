@@ -17,6 +17,21 @@
   --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
   --r:12px;--rm:8px;
 }
+/* ── Donkere modus (volgt systeeminstelling) ── */
+@media (prefers-color-scheme: dark) {
+  :root{
+    --bg:#16151A;--card:#211F26;--bd:#34313C;
+    --tx:#F2F0F5;--mu:#A8A5B0;--mu2:#76737E;
+    --sun-l:#3A2E18;--sun-t:#F5D9A8;
+    --teal-l:#13362C;--teal-d:#3FD9A8;
+    --coral-l:#3A211A;--coral-d:#F0876A;
+  }
+  /* Witte productfoto-achtergrond iets dempen */
+  .prod-img{background:#F2F0F5;}
+  /* Schaduwen wat zachter in dark */
+  img{filter:brightness(.97);}
+}
+
 body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
 header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
 .logo{font-size:16px;font-weight:600;color:var(--sun-t);}
@@ -113,6 +128,8 @@ select.inp{cursor:pointer;}
       <div class="card" id="prod-list"></div>
       <div class="add-form" id="add-form">
         <label>Naam</label><input id="np-name" placeholder="Rosé">
+        <label>Beschrijving <span style="color:var(--mu);font-weight:400;">(bv. ingrediënten van een cocktail)</span></label>
+        <input id="np-desc" placeholder="gin, citroensap, honingsiroop">
         <div class="add-form-grid">
           <div><label>Categorie</label><input id="np-cat" placeholder="Cocktails"></div>
           <div><label>Emoji</label><input id="np-icon" placeholder="🍷" maxlength="4"></div>
@@ -282,13 +299,20 @@ select.inp{cursor:pointer;}
           <input class="inp" id="s-twilio-token" type="password" placeholder="Auth Token">
         </div>
         <div class="row">
-          <div><div class="row-label">Van-nummer</div><div class="row-sub">Twilio telefoonnummer in E.164 formaat (bv. +32...)  of een alphanumerieke afzender</div></div>
-          <input class="inp" id="s-twilio-from" placeholder="+3200000000">
+          <div><div class="row-label">Afzender (Van-nummer of naam)</div><div class="row-sub">Een Twilio-nummer (+32…) óf een merknaam zoals "Boerderbij" (max 11 tekens, enkel letters/cijfers)</div></div>
+          <input class="inp" id="s-twilio-from" placeholder="Boerderbij of +3200000000">
+        </div>
+        <div class="row">
+          <div><div class="row-label">Messaging Service SID <span style="color:var(--mu);font-weight:400;">(optioneel, aanbevolen)</span></div><div class="row-sub">Begint met "MG…" — als ingevuld, gebruikt Twilio dit i.p.v. het van-nummer</div></div>
+          <input class="inp" id="s-twilio-msid" placeholder="MGxxxxxxxx">
         </div>
       </div>
       <button class="btn btn-teal btn-full" onclick="saveSms()">Opslaan</button>
-      <div style="margin-top:10px;background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--teal-d);line-height:1.6;">
-        <strong>Gratis starten:</strong> Maak een account aan op <a href="https://www.twilio.com/try-twilio" target="_blank" style="color:var(--teal-d)">twilio.com/try-twilio</a>. Je krijgt startcredits (~€12) om te testen. Voor productie koop je een Twilio-nummer (~€1/maand) of stel je een alphanumerieke afzender in.
+      <div style="margin-top:10px;background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--teal-d);line-height:1.7;">
+        <strong>Drie manieren om af te zenden:</strong><br>
+        <strong>1. Merknaam (gratis, aanbevolen voor BE):</strong> vul bij Afzender bv. <code style="background:var(--card);padding:1px 5px;border-radius:4px;">Boerderbij</code> in. De klant ziet jouw naam als afzender. Werkt direct in België, geen nummer nodig. Let op: de klant kan niet antwoorden.<br>
+        <strong>2. Twilio-nummer:</strong> koop een nummer (~€1/maand) en vul het in E.164-formaat in (<code style="background:var(--card);padding:1px 5px;border-radius:4px;">+32…</code>). Klanten kunnen wel antwoorden.<br>
+        <strong>3. Messaging Service:</strong> de robuustste optie. Maak er een aan in de Twilio Console, koppel je nummer(s) en/of merknaam, en plak de <code style="background:var(--card);padding:1px 5px;border-radius:4px;">MG…</code> SID hierboven. Twilio kiest dan automatisch de beste afzender.
       </div>
     </div>
     <div class="sec">
@@ -443,7 +467,7 @@ function showScreen(name, btn) {
 }
 
 async function init() {
-  [products, settings] = await Promise.all([API.products.list(), API.settings.get()]);
+  [products, settings] = await Promise.all([API.products.listAdmin(), API.settings.get()]);
   renderProducts();
   loadSettingsToForm();
 }
@@ -466,10 +490,14 @@ function renderProducts() {
       const marginLbl = marginPct != null
         ? ` · <span style="color:var(--teal-d)">marge ${marginPct.toFixed(0)}%</span>`
         : '';
-      html += `<div class="prod-row">
+      const isHidden = p.hidden === 1;
+      const descLine = p.description && p.description.trim()
+        ? `<div style="font-size:11px;color:var(--mu);font-style:italic;margin-top:1px;">${p.description}</div>` : '';
+      html += `<div class="prod-row" style="${isHidden?'opacity:.5;':''}">
         <span class="prod-icon">${p.icon}</span>
-        <div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-meta">Stock: ${stockLbl} · ${vatLbl}${marginLbl}</div></div>
+        <div class="prod-info"><div class="prod-name">${p.name}${isHidden?' <span style="font-size:11px;color:var(--coral-d);font-weight:600;">· verborgen</span>':''}</div>${descLine}<div class="prod-meta">Stock: ${stockLbl} · ${vatLbl}${marginLbl}</div></div>
         <span class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</span>
+        <button class="icon-btn" onclick="toggleHidden(${p.id})" title="${isHidden?'Tonen':'Verbergen'}">${isHidden?'🙈':'👁'}</button>
         <button class="icon-btn" onclick="editProduct(${p.id})" title="Bewerken">✏️</button>
         <button class="icon-btn" onclick="deleteProduct(${p.id})" title="Verwijderen">🗑</button>
       </div>`;
@@ -517,11 +545,25 @@ function renderMarginSummary() {
 
 let editingId = null;
 
+async function toggleHidden(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  const newHidden = p.hidden === 1 ? 0 : 1;
+  try {
+    const updated = await API.products.setHidden(id, newHidden);
+    const idx = products.findIndex(x => x.id === id);
+    if (idx >= 0) products[idx] = updated;
+    renderProducts();
+    toast(newHidden ? `🙈 ${p.name} verborgen` : `👁 ${p.name} weer zichtbaar`);
+  } catch(e) { toast('Fout: ' + e.message); }
+}
+
 function editProduct(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   editingId = id;
   document.getElementById('np-name').value = p.name;
+  document.getElementById('np-desc').value = p.description || '';
   document.getElementById('np-cat').value = p.category;
   document.getElementById('np-price').value = p.price;
   document.getElementById('np-cost').value = p.cost_price || '';
@@ -557,6 +599,7 @@ function calcMargin() {
 
 async function saveProduct() {
   const name = document.getElementById('np-name').value.trim();
+  const description = document.getElementById('np-desc').value.trim();
   const category = document.getElementById('np-cat').value.trim();
   const price = parseFloat(document.getElementById('np-price').value);
   const cost_price = parseFloat(document.getElementById('np-cost').value) || 0;
@@ -567,12 +610,12 @@ async function saveProduct() {
   if (!name || !category || isNaN(price)) { toast('Vul naam, categorie en prijs in'); return; }
   try {
     if (editingId) {
-      const updated = await API.products.update(editingId, { name, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate });
+      const updated = await API.products.update(editingId, { name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate });
       const idx = products.findIndex(p => p.id === editingId);
       if (idx >= 0) products[idx] = updated;
       toast('✅ Product bijgewerkt');
     } else {
-      const p = await API.products.add({ name, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate });
+      const p = await API.products.add({ name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate });
       products.push(p);
       toast('✅ Product toegevoegd');
     }
@@ -584,7 +627,7 @@ async function saveProduct() {
 function closeAddForm() {
   editingId = null;
   document.getElementById('add-form').classList.remove('show');
-  ['np-name','np-cat','np-price','np-cost','np-icon','np-stock'].forEach(id => document.getElementById(id).value='');
+  ['np-name','np-desc','np-cat','np-price','np-cost','np-icon','np-stock'].forEach(id => document.getElementById(id).value='');
   document.getElementById('np-vatrate').value = '6';
   document.getElementById('margin-display').style.display = 'none';
   document.querySelector('#add-form .add-form-btns .btn-sun').textContent = 'Opslaan';
@@ -643,6 +686,7 @@ function loadSettingsToForm() {
   if(s.twilioAccountSid) document.getElementById('s-twilio-sid').value=s.twilioAccountSid;
   if(s.twilioAuthToken)  document.getElementById('s-twilio-token').value=s.twilioAuthToken;
   if(s.twilioFrom)       document.getElementById('s-twilio-from').value=s.twilioFrom;
+  if(s.twilioMessagingServiceSid) document.getElementById('s-twilio-msid').value=s.twilioMessagingServiceSid;
   if(s.billitApiKey) document.getElementById('s-billit-key').value=s.billitApiKey;
   if(s.billitEnv)    document.getElementById('s-billit-env').value=s.billitEnv;
   if(s.barName)      document.getElementById('s-bar-name').value=s.barName;
@@ -986,6 +1030,7 @@ async function saveSms() {
     twilioAccountSid: document.getElementById('s-twilio-sid').value,
     twilioAuthToken:  document.getElementById('s-twilio-token').value,
     twilioFrom:       document.getElementById('s-twilio-from').value,
+    twilioMessagingServiceSid: document.getElementById('s-twilio-msid').value,
   });
   toast('✅ Twilio instellingen opgeslagen');
 }

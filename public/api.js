@@ -52,6 +52,8 @@ window.API = (() => {
     },
     products: {
       list:      ()       => req('GET',    '/api/products'),
+      listAdmin: ()       => req('GET',    '/api/products?admin=1'),
+      setHidden: (id, h)  => req('PATCH',  `/api/products/${id}/hidden`, { hidden: h }),
       add:       (p)      => req('POST',   '/api/products', p),
       update:    (id, p)  => req('PUT',    `/api/products/${id}`, p),
       setStock:  (id, s)  => req('PATCH',  `/api/products/${id}/stock`, { stock: s }),

@@ -103,6 +103,7 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN vat_rate REAL DEFAULT 0`,
   `ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN hidden INTEGER DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN gift REAL DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN cash_paid INTEGER DEFAULT 0`,
 ];
@@ -208,9 +209,16 @@ function normalizePhone(phone) {
 async function sendSMS(phone, message) {
   const client = getTwilioClient();
   if (!client) return { skipped: true, reason: 'Geen Twilio-sleutels ingesteld' };
-  const from = getSetting('twilioFrom') || getSetting('smsOriginator') || 'Zomerbar';
-  const to   = normalizePhone(phone);
-  const msg  = await client.messages.create({ body: message, from, to });
+  const to = normalizePhone(phone);
+  const messagingServiceSid = getSetting('twilioMessagingServiceSid');
+  const payload = { body: message, to };
+  if (messagingServiceSid && messagingServiceSid.startsWith('MG')) {
+    // Messaging Service kiest zelf de beste afzender (nummer of merknaam)
+    payload.messagingServiceSid = messagingServiceSid;
+  } else {
+    payload.from = getSetting('twilioFrom') || getSetting('smsOriginator') || 'Boerderbij';
+  }
+  const msg = await client.messages.create(payload);
   console.log('SMS verstuurd via Twilio naar', to, '— SID:', msg.sid);
   return msg;
 }
@@ -425,7 +433,12 @@ app.post('/api/auth/change-password', requireAuth, (req, res) => {
 
 // Products
 app.get('/api/products', (req, res) => {
-  const products = db.prepare('SELECT * FROM products WHERE active=1').all();
+  // Admin ziet ook verborgen producten (?admin=1), klant niet
+  const isAdmin = req.query.admin === '1';
+  const sql = isAdmin
+    ? 'SELECT * FROM products WHERE active=1'
+    : 'SELECT * FROM products WHERE active=1 AND hidden=0';
+  const products = db.prepare(sql).all();
   // Bereken marge per product en sorteer hoogste marge bovenaan
   const withMargin = products.map(p => {
     const noVat = p.vat_rate === -1;
@@ -441,6 +454,17 @@ app.get('/api/products', (req, res) => {
   });
   withMargin.forEach(p => delete p._margin);
   res.json(withMargin);
+});
+
+// Verberg/toon product (snel togglen)
+app.patch('/api/products/:id/hidden', requireAuth, (req, res) => {
+  const { hidden } = req.body;
+  const o = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Product niet gevonden' });
+  db.prepare('UPDATE products SET hidden=? WHERE id=?').run(hidden ? 1 : 0, req.params.id);
+  const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
+  broadcast('product_updated', { product: p });
+  res.json(p);
 });
 
 // ── SumUp CSV import ─────────────────────────────────────────────
@@ -657,13 +681,15 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
 });
 
 app.post('/api/products', requireAuth, (req, res) => {
+  const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate } = req.body;
+  if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
   // Determine vat_rate: explicit, or from vat_type default
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
   const vatFood = parseFloat(getSetting('vatFood') || '12');
   const finalVatRate = vat_rate != null ? parseFloat(vat_rate) : (vat_type === 'food' ? vatFood : vatDrinks);
-  const r = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, maxOrd+1);
+  const r = db.prepare(`INSERT INTO products (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, maxOrd+1);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -672,10 +698,11 @@ app.post('/api/products', requireAuth, (req, res) => {
 app.put('/api/products/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Product niet gevonden' });
-  const { name, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate } = req.body;
-  db.prepare(`UPDATE products SET name=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=? WHERE id=?`)
+  const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate } = req.body;
+  db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=? WHERE id=?`)
     .run(
       name ?? existing.name,
+      description != null ? description : existing.description,
       category ?? existing.category,
       price != null ? parseFloat(price) : existing.price,
       icon ?? existing.icon,

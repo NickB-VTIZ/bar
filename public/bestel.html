@@ -17,6 +17,25 @@
   --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
   --r:14px;--rm:9px;
 }
+/* ── Donkere modus (volgt systeeminstelling) ── */
+@media (prefers-color-scheme: dark) {
+  :root{
+    --bg:#16151A;--card:#211F26;--bd:#34313C;
+    --tx:#F2F0F5;--mu:#A8A5B0;--mu2:#76737E;
+    --sun-l:#3A2E18;--sun-t:#F5D9A8;
+    --teal-l:#13362C;--teal-d:#3FD9A8;
+    --coral-l:#3A211A;--coral-d:#F0876A;
+  }
+  /* Witte productfoto-achtergrond iets dempen */
+  .prod-img{background:#F2F0F5;}
+  /* In-cart highlight donker */
+  .prod.in-cart{background:#2A2418;}
+  /* Toast omkeren */
+  .toast{background:#F2F0F5;color:#16151A;}
+  /* Schaduwen wat zachter in dark */
+  img{filter:brightness(.97);}
+}
+
 body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
 
 /* Hero */
