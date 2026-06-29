@@ -504,9 +504,17 @@ function showStatusScreen(order, checkoutUrl, paymentError) {
   updateStatusScreen(order);
 
   const isOnline = order.method === 'mollie' || order.method === 'sumup';
+  const alreadyPaid = ['paid','preparing','ready','collected'].includes(order.status);
 
-  // Payment setup failed — show error instead of endless "waiting"
-  if (isOnline && !checkoutUrl) {
+  // Betaling al geslaagd → toon gewoon het statusscherm, geen foutmelding
+  if (alreadyPaid) {
+    document.getElementById('pay-pending').classList.remove('show');
+    return;
+  }
+
+  // Payment setup failed — toon enkel als de bestelling écht nog niet betaald is
+  // én we niet net terugkeren van een betaalpagina (dan checkt de poller hieronder)
+  if (isOnline && !checkoutUrl && !justReturned) {
     const pending = document.getElementById('pay-pending');
     pending.classList.add('show');
     pending.innerHTML = `
@@ -516,6 +524,39 @@ function showStatusScreen(order, checkoutUrl, paymentError) {
         Je bestelnummer is geregistreerd — probeer opnieuw of meld je aan de bar.
       </div>
       <button class="pay-link" onclick="location.reload()" style="border:none;cursor:pointer;width:100%;">Opnieuw proberen →</button>`;
+    return;
+  }
+
+  // Terugkeer van betaalpagina zonder checkoutUrl → controleer de betaalstatus via poller
+  if (isOnline && !checkoutUrl && justReturned) {
+    const pending = document.getElementById('pay-pending');
+    pending.classList.add('show');
+    pending.innerHTML = `
+      <div class="pay-pending-title">⏳ Betaling controleren…</div>
+      <div class="pay-pending-sub">Even geduld, we bevestigen je betaling.</div>`;
+    let tries = 0;
+    pollInterval = setInterval(async () => {
+      tries++;
+      try {
+        const r = await API.orders.pollPayment(order.id);
+        if (r.status === 'paid' || ['preparing','ready','collected'].includes(r.status)) {
+          clearInterval(pollInterval);
+          pending.classList.remove('show');
+          updateStatusScreen(r.order || { ...order, status: 'paid' });
+          return;
+        }
+      } catch(_) {}
+      // Na ~30s nog niet betaald → toon een nette melding (geen harde fout)
+      if (tries >= 10) {
+        clearInterval(pollInterval);
+        pending.innerHTML = `
+          <div class="pay-pending-title">Betaling nog niet bevestigd</div>
+          <div style="font-size:13px;color:var(--mu);margin:8px 0 14px;line-height:1.5;">
+            Heb je net betaald? Dan komt de bevestiging zo binnen — toon gerust je bestelnummer aan de bar.
+          </div>
+          <button class="pay-link" onclick="location.reload()" style="border:none;cursor:pointer;width:100%;">Status vernieuwen →</button>`;
+      }
+    }, 3000);
     return;
   }
 
