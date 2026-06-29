@@ -104,6 +104,7 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN hidden INTEGER DEFAULT 0`,
+  `ALTER TABLE products ADD COLUMN sku TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN gift REAL DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN cash_paid INTEGER DEFAULT 0`,
 ];
@@ -472,23 +473,36 @@ app.patch('/api/products/:id/hidden', requireAuth, (req, res) => {
 // ── Export producten naar SumUp CSV-formaat ──────────────────────
 app.get('/api/products/export-sumup', requireAuth, (req, res) => {
   const products = db.prepare('SELECT * FROM products WHERE active=1 ORDER BY category,name').all();
-  // SumUp import header (vereenvoudigd maar compatibel)
-  const header = ['Item name','Description','Price','Cost price','Tax rate (%)','Category','Track inventory? (Yes/No)','Quantity','Item id (Do not change)'];
+  // SumUp import header (vereenvoudigd maar compatibel) — incl. SKU
+  const header = ['Item name','Description','Price','Cost price','Tax rate (%)','Category','Track inventory? (Yes/No)','Quantity','SKU','Item id (Do not change)'];
   const esc = (v) => {
     if (v == null) return '';
     const s = String(v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  // Genereer een SKU voor producten die er nog geen hebben (en sla op)
+  const setSku = db.prepare('UPDATE products SET sku=? WHERE id=?');
+  const existingSkus = new Set(products.map(p => (p.sku||'').trim()).filter(Boolean));
+  const slug = (name) => (name||'item').toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,12) || 'ITEM';
+  const genSku = (p) => {
+    let base = 'ZB-' + slug(p.name);
+    let candidate = base, n = 1;
+    while (existingSkus.has(candidate)) { candidate = base + '-' + (++n); }
+    existingSkus.add(candidate);
+    return candidate;
   };
   const lines = [header.join(',')];
   products.forEach(p => {
     const vatR = p.vat_rate === -1 ? 0 : (p.vat_rate != null && p.vat_rate >= 0 ? p.vat_rate : (p.vat_type === 'food' ? 12 : 6));
     const tracks = p.stock >= 0 ? 'Yes' : 'No';
     const qty = p.stock >= 0 ? p.stock : 0;
+    let sku = (p.sku || '').trim();
+    if (!sku) { sku = genSku(p); setSku.run(sku, p.id); } // genereer + bewaar
     lines.push([
-      esc(p.name), '', p.price.toFixed(2),
+      esc(p.name), esc(p.description || ''), p.price.toFixed(2),
       p.cost_price ? p.cost_price.toFixed(2) : '',
       vatR.toFixed(2), esc(p.category),
-      tracks, qty, esc(p.sumup_id || ''),
+      tracks, qty, esc(sku), esc(p.sumup_id || ''),
     ].join(','));
   });
   const csv = lines.join('\n');
@@ -519,9 +533,9 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
   };
 
   const maxOrd0 = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
-  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,image_url,description,sort_order,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)`);
+  const insert = db.prepare(`INSERT INTO products (name,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sumup_id,image_url,description,sku,sort_order,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`);
   const findBySumup = db.prepare('SELECT * FROM products WHERE sumup_id=?');
-  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=?,icon=?,image_url=?,stock=?,description=?,active=1 WHERE sumup_id=?`);
+  const updateExisting = db.prepare(`UPDATE products SET name=?,category=?,price=?,cost_price=?,vat_rate=?,vat_type=?,icon=?,image_url=?,stock=?,description=?,sku=?,active=1 WHERE sumup_id=?`);
 
   let added = 0, updated = 0, failed = 0;
   const errors = [];
@@ -542,6 +556,7 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
       const sumup_id = row.item_id || null;
       const image_url = (row.image_url || '').trim();
       const description = (row.description || '').trim();
+      const sku = (row.sku || '').trim();
       // Track inventory? quantity — SumUp geeft de voorraad mee
       let stock = -1; // -1 = onbeperkt (geen tracking)
       if (row.track_inventory && String(row.track_inventory).toLowerCase() === 'yes') {
@@ -566,11 +581,12 @@ app.post('/api/products/import-sumup', requireAuth, (req, res) => {
         const finalImage = image_url || existing.image_url || '';
         const finalDesc = description || existing.description || '';
         const finalIcon = existing.icon && existing.icon !== '🍺' ? existing.icon : icon;
-        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, finalIcon, finalImage, finalStock, finalDesc, sumup_id);
+        const finalSku = sku || existing.sku || '';
+        updateExisting.run(name, category, price, isNaN(cost_price)?0:cost_price, vat_rate, vat_type, finalIcon, finalImage, finalStock, finalDesc, finalSku, sumup_id);
         updated++;
       } else {
         ord++;
-        insert.run(name, category, price, icon, vat_type, stock, 5, isNaN(cost_price)?0:cost_price, vat_rate, sumup_id, image_url, description, ord);
+        insert.run(name, category, price, icon, vat_type, stock, 5, isNaN(cost_price)?0:cost_price, vat_rate, sumup_id, image_url, description, sku, ord);
         added++;
       }
     } catch(e) { failed++; errors.push(`${row.name}: ${e.message}`); }
@@ -586,6 +602,7 @@ app.post('/api/products/import-sumup-sales/preview', requireAuth, (req, res) => 
   const { rows } = req.body; // [{ tx_ref, date, name, sumup_id, qty, amount }]
   if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'Geen verkopen ontvangen' });
 
+  const findBySku = db.prepare("SELECT id,name,stock,icon FROM products WHERE sku=? AND sku!=''");
   const findBySumup = db.prepare('SELECT id,name,stock,icon FROM products WHERE sumup_id=?');
   const findByName = db.prepare('SELECT id,name,stock,icon FROM products WHERE LOWER(name)=LOWER(?)');
   const alreadyDone = db.prepare('SELECT tx_ref FROM sumup_sales WHERE tx_ref=?');
@@ -605,9 +622,11 @@ app.post('/api/products/import-sumup-sales/preview', requireAuth, (req, res) => 
     }
     const qty = parseInt(row.qty) || 0;
     if (qty <= 0) continue;
-    let p = row.sumup_id ? findBySumup.get(row.sumup_id) : null;
+    // Match-volgorde: SKU (betrouwbaarst) → SumUp-ID → naam
+    let p = row.sku ? findBySku.get(row.sku.trim()) : null;
+    if (!p && row.sumup_id) p = findBySumup.get(row.sumup_id);
     if (!p && row.name) p = findByName.get(row.name.trim());
-    if (!p) { unmatched.push(row.name || row.sumup_id || '?'); continue; }
+    if (!p) { unmatched.push(row.name || row.sku || row.sumup_id || '?'); continue; }
     if (!matched[p.id]) matched[p.id] = { id: p.id, name: p.name, icon: p.icon, stock: p.stock, qty: 0 };
     matched[p.id].qty += qty;
   }
@@ -626,6 +645,7 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
   const { rows } = req.body;
   if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'Geen verkopen ontvangen' });
 
+  const findBySku = db.prepare("SELECT id,name,stock FROM products WHERE sku=? AND sku!=''");
   const findBySumup = db.prepare('SELECT id,name,stock FROM products WHERE sumup_id=?');
   const findByName = db.prepare('SELECT id,name,stock FROM products WHERE LOWER(name)=LOWER(?)');
   const alreadyDone = db.prepare('SELECT tx_ref FROM sumup_sales WHERE tx_ref=?');
@@ -647,7 +667,9 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
       }
       const qty = parseInt(row.qty) || 0;
       if (qty <= 0) continue;
-      let p = row.sumup_id ? findBySumup.get(row.sumup_id) : null;
+      // Match-volgorde: SKU → SumUp-ID → naam
+      let p = row.sku ? findBySku.get(row.sku.trim()) : null;
+      if (!p && row.sumup_id) p = findBySumup.get(row.sumup_id);
       if (!p && row.name) p = findByName.get(row.name.trim());
       if (!p) continue;
       deductions[p.id] = (deductions[p.id] || 0) + qty;
@@ -790,23 +812,19 @@ app.post('/api/orders', async (req, res) => {
   let molliePaymentId = null;
   let mollieCheckoutUrl = null;
 
-  // Cash = immediately paid, mollie = pending until webhook/return
-  const status = method === 'cash' ? 'paid' : 'pending';
+  // Alle bestellingen worden online betaald (geen cash meer via de app)
+  const payMethod = method || getSetting('payProvider') || 'mollie';
+  const status = 'pending'; // wacht op online betaling
 
   db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, method||'cash', note||'', phone||'', table_ref||'', giftAmount);
+    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
 
-  // Deduct stock immediately for cash
-  if (method === 'cash') {
-    deductStock(items.map(i => ({...i})), id);
-  }
-
   // Create Mollie Bancontact payment
   let paymentError = null;
-  if (method === 'mollie') {
+  if (payMethod === 'mollie') {
     try {
       const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
       const payment = await createMolliePayment(order, redirect_url);
@@ -825,7 +843,7 @@ app.post('/api/orders', async (req, res) => {
 
   // Create SumUp Hosted Checkout
   let sumupCheckoutUrl = null, sumupCheckoutId = null;
-  if (method === 'sumup') {
+  if (payMethod === 'sumup') {
     try {
       const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
       const checkout = await createSumupCheckout(order, redirect_url);

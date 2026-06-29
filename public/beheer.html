@@ -850,6 +850,7 @@ async function importSumupCsv() {
   const iId = col(['Item id (Do not change)']);
   const iImg = col(['Image 1']);
   const iDesc = col(['Description (Online Store and Invoices only)','Description','Beschrijving']);
+  const iSku = col(['SKU','Sku','Artikelnummer']);
 
   if (iName < 0 || iPrice < 0) { toast('Geen geldige SumUp CSV (kolom Item name/Price ontbreekt)'); return; }
 
@@ -868,6 +869,7 @@ async function importSumupCsv() {
       item_id: iId >= 0 ? cells[iId] : '',
       image_url: iImg >= 0 ? cells[iImg] : '',
       description: iDesc >= 0 ? stripHtml(cells[iDesc]) : '',
+      sku: iSku >= 0 ? (cells[iSku]||'').trim() : '',
     });
   }
 
@@ -911,33 +913,50 @@ async function previewSumupSales() {
     }
     return -1;
   };
-  // Flexibel: probeer verschillende mogelijke kolomnamen uit SumUp-rapporten
-  const iName = col(['Item name','Product','Description','Artikel','Naam','Item']);
-  const iQty  = col(['Quantity','Qty','Aantal','Quantity sold','Items sold','Number sold']);
+  // Flexibel: probeer verschillende mogelijke kolomnamen uit SumUp-rapporten (NL + EN)
+  const iName = col(['Beschrijving','Item name','Product','Description','Artikel','Naam','Item']);
+  const iQty  = col(['Aantal','Quantity','Qty','Quantity sold','Items sold','Number sold']);
+  const iSku  = col(['SKU','Sku','Artikelnummer']);
   const iId   = col(['Item id (Do not change)','Item id','Product id']);
-  const iTx   = col(['Transaction ID','Transaction code','Transactie','Receipt number','Payment ID']);
-  const iDate = col(['Date','Datum','Date and time','Time']);
-  const iAmt  = col(['Amount','Bedrag','Total','Price']);
+  const iTx   = col(['Transactie-ID','Transaction ID','Transaction code','Transactie','Receipt number','Payment ID']);
+  const iDate = col(['Datum','Date','Date and time','Time']);
+  const iAmt  = col(['Prijs (bruto)','Prijs (netto)','Amount','Bedrag','Total','Price']);
+  const iType = col(['Type','Soort']);
 
-  if (iName < 0 && iId < 0) { toast('Geen artikel-kolom gevonden in CSV'); return; }
-  if (iQty < 0) { toast('Geen aantal-kolom (Quantity) gevonden'); return; }
+  if (iName < 0 && iId < 0 && iSku < 0) { toast('Geen artikel-kolom gevonden in CSV'); return; }
+  if (iQty < 0) { toast('Geen aantal-kolom (Aantal/Quantity) gevonden'); return; }
 
   const parsed = [];
+  let skippedNonSale = 0;
   for (let r = 1; r < rows.length; r++) {
     const c = rows[r];
-    if (!c || (iName >= 0 && !c[iName] && iId >= 0 && !c[iId])) continue;
+    if (!c) continue;
+    // Filter: enkel echte verkopen (geen terugbetalingen, fees, uitbetalingen)
+    if (iType >= 0) {
+      const t = (c[iType]||'').toLowerCase();
+      const isSale = t === '' || t.includes('verkoop') || t.includes('sale') || t.includes('betaling') || t.includes('payment');
+      const isRefund = t.includes('terug') || t.includes('refund') || t.includes('uitbetaling') || t.includes('payout') || t.includes('fee') || t.includes('kost');
+      if (isRefund || (!isSale && t !== '')) { skippedNonSale++; continue; }
+    }
     const name = iName >= 0 ? (c[iName]||'').trim() : '';
-    if (!name && (iId < 0 || !c[iId])) continue;
+    const sku = iSku >= 0 ? (c[iSku]||'').trim() : '';
+    if (!name && !sku && (iId < 0 || !c[iId])) continue;
+    const qtyRaw = iQty >= 0 ? (c[iQty]||'').toString().trim() : '';
+    if (!qtyRaw || parseInt(qtyRaw) <= 0) continue;
     parsed.push({
       name,
+      sku,
       sumup_id: iId >= 0 ? (c[iId]||'').trim() : '',
-      qty: iQty >= 0 ? c[iQty] : '',
+      qty: qtyRaw,
       tx_ref: iTx >= 0 ? (c[iTx]||'').trim() : '',
       date: iDate >= 0 ? (c[iDate]||'').trim() : '',
       amount: iAmt >= 0 ? (c[iAmt]||'').replace(',','.').replace(/[^0-9.]/g,'') : '',
     });
   }
-  if (!parsed.length) { toast('Geen verkopen gevonden in CSV'); return; }
+  if (!parsed.length) {
+    toast(skippedNonSale ? 'Geen verkopen gevonden (enkel terugbetalingen/kosten)' : 'Geen verkopen gevonden in CSV');
+    return;
+  }
   pendingSalesRows = parsed;
 
   el.style.display = 'block';
