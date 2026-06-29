@@ -10,6 +10,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
+  color-scheme: light;
   --sun:#EF9F27;--sun-d:#BA7517;--sun-l:#FAEEDA;--sun-t:#412402;
   --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
   --coral:#D85A30;--coral-l:#FAECE7;--coral-d:#993C1D;
@@ -17,20 +18,7 @@
   --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
   --r:12px;--rm:8px;
 }
-/* ── Donkere modus (volgt systeeminstelling) ── */
-@media (prefers-color-scheme: dark) {
-  :root{
-    --bg:#16151A;--card:#211F26;--bd:#34313C;
-    --tx:#F2F0F5;--mu:#A8A5B0;--mu2:#76737E;
-    --sun-l:#3A2E18;--sun-t:#F5D9A8;
-    --teal-l:#13362C;--teal-d:#3FD9A8;
-    --coral-l:#3A211A;--coral-d:#F0876A;
-  }
-  /* Witte productfoto-achtergrond iets dempen */
-  .prod-img{background:#F2F0F5;}
-  /* Schaduwen wat zachter in dark */
-  img{filter:brightness(.97);}
-}
+
 
 body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
 header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
@@ -46,6 +34,7 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .wrap{max-width:680px;margin:0 auto;padding:16px;}
 .sec{margin-bottom:22px;}
 .sec-title{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.step-num{flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:var(--teal);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;}
 .card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);overflow:hidden;}
 .row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:0.5px solid var(--bd);}
 .row:last-child{border-bottom:none;}
@@ -125,7 +114,7 @@ select.inp{cursor:pointer;}
   <div class="wrap">
     <div class="sec">
       <div class="sec-title">Menu-items</div>
-      <div id="margin-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;"></div>
+      <div id="margin-summary" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;"></div>
       <div class="card" id="prod-list"></div>
       <div class="add-form" id="add-form">
         <label>Naam</label><input id="np-name" placeholder="Rosé">
@@ -235,40 +224,46 @@ select.inp{cursor:pointer;}
     <div class="sec">
       <div style="background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:14px 16px;font-size:13px;color:var(--sun-t);line-height:1.6;margin-bottom:4px;">
         🔄 <strong>SumUp synchronisatie</strong><br>
-        <span style="font-size:12px;color:var(--mu);">Hier beheer je de uitwisseling met SumUp: artikelen importeren, je voorraad exporteren, en bar-verkopen aftrekken. De betaalinstellingen vind je onder het tabblad 💳 Betalingen.</span>
+        <span style="font-size:12px;color:var(--mu);">Hier houd je de voorraad gelijk tussen de app en SumUp. De betaalinstellingen vind je onder het tabblad 💳 Betalingen.</span>
       </div>
     </div>
 
+    <!-- DAGELIJKSE ROUTINE -->
     <div class="sec">
-      <div class="sec-title">① Artikelen importeren uit SumUp</div>
-      <div class="card">
-        <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
-          <div class="row-label">Upload je SumUp items-export (CSV)</div>
-          <div style="font-size:12px;color:var(--mu);line-height:1.6;">
-            In de SumUp app of op my.sumup.com: <strong>Artikelen → Exporteren</strong>. Upload het CSV-bestand hier — naam, prijs, aankoopprijs, BTW-tarief, categorie en voorraad worden automatisch ingelezen. Bestaande producten (zelfde SumUp-ID) worden bijgewerkt.
+      <div class="sec-title" style="display:flex;align-items:center;gap:8px;">📅 Dagelijkse synchronisatie</div>
+      <div class="card" style="border-color:var(--teal);">
+        <div style="padding:4px 2px;font-size:13px;color:var(--tx);line-height:1.7;">
+          Doe deze 4 stappen op het einde van elke bardag, in deze volgorde:
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <span class="step-num">1</span>
+              <div><strong>Verkooprapport exporteren uit SumUp.</strong><br><span style="font-size:12px;color:var(--mu);">In de SumUp app of op my.sumup.com: ga naar <strong>Verkopen → Rapporten → Exporteren</strong> en kies het verkooprapport (per artikel) voor vandaag. Je krijgt een CSV-bestand.</span></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <span class="step-num">2</span>
+              <div><strong>Verkopen aftrekken van je voorraad.</strong><br><span style="font-size:12px;color:var(--mu);">Upload dat verkooprapport hieronder bij stap A. De terminal-verkopen worden van je voorraad afgetrokken (app-bestellingen waren al afgetrokken).</span></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <span class="step-num">3</span>
+              <div><strong>Voorraad exporteren uit de app.</strong><br><span style="font-size:12px;color:var(--mu);">Klik bij stap B op exporteren. Je krijgt een CSV met je actuele voorraad.</span></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <span class="step-num">4</span>
+              <div><strong>Die voorraad terug in SumUp importeren.</strong><br><span style="font-size:12px;color:var(--mu);">In SumUp: <strong>Artikelen → Importeren</strong> → kies het bestand van stap B. Nu klopt de voorraad weer overal.</span></div>
+            </div>
           </div>
-          <input type="file" id="sumup-csv" accept=".csv" style="width:100%;font-size:13px;padding:10px;border:0.5px dashed var(--sun);border-radius:var(--rm);background:var(--sun-l);color:var(--sun-t);cursor:pointer;">
         </div>
-      </div>
-      <button class="btn btn-sun btn-full" onclick="importSumupCsv()">📥 Importeren uit SumUp CSV</button>
-      <div id="sumup-result" style="margin-top:10px;font-size:13px;display:none;"></div>
-
-      <div style="margin-top:14px;border-top:0.5px solid var(--bd);padding-top:14px;">
-        <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:4px;">② Voorraad terug naar SumUp</div>
-        <div style="font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:10px;">
-          Exporteer je huidige producten (incl. bijgewerkte voorraad) als CSV in SumUp-formaat. Dit bestand kan je in SumUp importeren om daar de voorraad bij te werken.
-        </div>
-        <button class="btn btn-ghost btn-full" onclick="exportSumupCsv()">📤 Exporteren naar SumUp CSV</button>
       </div>
     </div>
 
+    <!-- STAP A: verkopen aftrekken -->
     <div class="sec">
-      <div class="sec-title">③ Bar-verkopen aftrekken van voorraad</div>
+      <div class="sec-title">Stap A · Bar-verkopen aftrekken</div>
       <div class="card">
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
           <div class="row-label">Upload je SumUp verkooprapport (CSV)</div>
           <div style="font-size:12px;color:var(--mu);line-height:1.6;">
-            Verkopen die je rechtstreeks via de SumUp-terminal aan de bar doet, kan je hier aftrekken van je zomerbar-voorraad. Exporteer in SumUp je <strong>verkopen per artikel</strong> (Sales / Items sold report) en upload het hier. Het systeem herkent al verwerkte transacties automatisch, zodat je niet dubbel aftrekt.
+            Verkopen via de SumUp-terminal worden hier van je voorraad afgetrokken. Producten worden gematcht op <strong>SKU</strong>. Al verwerkte transacties worden automatisch overgeslagen, dus je kan nooit dubbel aftrekken.
           </div>
           <input type="file" id="sumup-sales-csv" accept=".csv" style="width:100%;font-size:13px;padding:10px;border:0.5px dashed var(--teal);border-radius:var(--rm);background:var(--teal-l);color:var(--teal-d);cursor:pointer;">
         </div>
@@ -277,8 +272,34 @@ select.inp{cursor:pointer;}
       <div id="sumup-sales-result" style="margin-top:10px;font-size:13px;display:none;"></div>
     </div>
 
+    <!-- STAP B: voorraad exporteren -->
     <div class="sec">
-      <div class="sec-title">Handmatig producten plakken (zonder SumUp)</div>
+      <div class="sec-title">Stap B · Voorraad exporteren naar SumUp</div>
+      <div class="card">
+        <div style="padding:4px 2px;font-size:12px;color:var(--mu);line-height:1.6;">
+          Download je actuele voorraad als CSV in SumUp-formaat. Importeer dit bestand daarna in SumUp (Artikelen → Importeren) zodat de voorraad daar gelijkloopt met de app. Producten zonder SKU krijgen er automatisch een.
+        </div>
+      </div>
+      <button class="btn btn-teal btn-full" onclick="exportSumupCsv()">📤 Voorraad exporteren naar SumUp CSV</button>
+    </div>
+
+    <!-- EENMALIG: artikelen importeren -->
+    <div class="sec">
+      <div class="sec-title" style="color:var(--mu);">⚙️ Eenmalig · Artikelen importeren uit SumUp</div>
+      <div class="card">
+        <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+          <div style="font-size:12px;color:var(--mu);line-height:1.6;">
+            Doe je <strong>vóór de eerste keer</strong> (of als je in SumUp nieuwe artikelen toevoegde). In SumUp: <strong>Artikelen → Exporteren</strong>. Upload het CSV hier — naam, prijs, aankoopprijs, BTW, categorie, voorraad, beschrijving en SKU worden ingelezen. Bestaande producten worden bijgewerkt, niet gedupliceerd.
+          </div>
+          <input type="file" id="sumup-csv" accept=".csv" style="width:100%;font-size:13px;padding:10px;border:0.5px dashed var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--mu);cursor:pointer;">
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-full" onclick="importSumupCsv()">📥 Artikelen importeren uit SumUp CSV</button>
+      <div id="sumup-result" style="margin-top:10px;font-size:13px;display:none;"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title" style="color:var(--mu);">Handmatig producten plakken (zonder SumUp)</div>
       <div class="card">
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:8px;">
           <div style="font-size:12px;color:var(--mu);line-height:1.6;">
@@ -529,7 +550,7 @@ function renderMarginSummary() {
   }
   document.getElementById('margin-summary').style.display = 'grid';
   // Average margin %
-  let totalMarginPct = 0, count = 0, stockValue = 0;
+  let totalMarginPct = 0, count = 0, stockValueCost = 0, stockValueSale = 0;
   products.forEach(p => {
     const noVat = p.vat_rate === -1;
     const vatR = noVat ? 0 : (p.vat_rate != null && p.vat_rate >= 0 ? p.vat_rate : (p.vat_type==='food'?12:6));
@@ -538,7 +559,10 @@ function renderMarginSummary() {
       totalMarginPct += ((excl - p.cost_price) / excl * 100);
       count++;
     }
-    if (p.stock > 0 && p.cost_price > 0) stockValue += p.stock * p.cost_price;
+    if (p.stock > 0) {
+      if (p.cost_price > 0) stockValueCost += p.stock * p.cost_price; // wat het jou kostte
+      stockValueSale += p.stock * p.price; // wat het opbrengt (incl. btw)
+    }
   });
   const avgMargin = count ? (totalMarginPct / count) : 0;
   const fmt = n => '€ ' + n.toFixed(2).replace('.', ',');
@@ -548,8 +572,12 @@ function renderMarginSummary() {
       <div style="font-size:11px;color:var(--mu);margin-top:2px;">Gem. marge</div>
     </div>
     <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:12px;text-align:center;">
-      <div style="font-size:20px;font-weight:700;color:var(--sun-d);">${fmt(stockValue)}</div>
-      <div style="font-size:11px;color:var(--mu);margin-top:2px;">Voorraadwaarde</div>
+      <div style="font-size:20px;font-weight:700;color:var(--sun-d);">${fmt(stockValueCost)}</div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px;">Voorraad (inkoop)</div>
+    </div>
+    <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:12px;text-align:center;">
+      <div style="font-size:20px;font-weight:700;color:var(--teal-d);">${fmt(stockValueSale)}</div>
+      <div style="font-size:11px;color:var(--mu);margin-top:2px;">Voorraad (verkoop)</div>
     </div>
     <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:12px;text-align:center;">
       <div style="font-size:20px;font-weight:700;color:var(--tx);">${products.length}</div>

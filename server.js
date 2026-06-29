@@ -254,10 +254,13 @@ async function createMolliePayment(order, redirectUrl) {
   if (!mollie) return null;
   const barName = getSetting('barName') || 'Zomerbar';
   const siteUrl = getSetting('siteUrl') || '';
+  // Basis-URL bepalen (van client of instelling), dan ALTIJD ?order=<id> toevoegen
+  const base = (redirectUrl || siteUrl || '').replace(/\?.*$/, '').replace(/\/+$/, '');
+  const finalRedirect = `${base || siteUrl}/?order=${order.id}`;
   const payload = {
     amount: { currency: 'EUR', value: order.amount.toFixed(2) },
     description: `${barName} — Bestelling #${order.order_number}`,
-    redirectUrl: redirectUrl || `${siteUrl}/bestel.html?order=${order.id}`,
+    redirectUrl: finalRedirect,
     metadata: { order_id: order.id, order_number: String(order.order_number) },
   };
   // Only add webhook if we have a public https URL (Mollie rejects localhost)
@@ -297,6 +300,9 @@ async function createSumupCheckout(order, redirectUrl) {
   if (!merchantCode) throw new Error('Geen SumUp merchant code ingesteld');
   const barName = getSetting('barName') || 'Zomerbar';
   const siteUrl = getSetting('siteUrl') || '';
+  // Basis-URL bepalen (van client of instelling), dan ALTIJD ?order=<id> toevoegen
+  const base = (redirectUrl || siteUrl || '').replace(/\?.*$/, '').replace(/\/+$/, '');
+  const finalRedirect = `${base || siteUrl}/?order=${order.id}`;
   const payload = {
     checkout_reference: order.id,
     amount: parseFloat(order.amount.toFixed(2)),
@@ -304,7 +310,7 @@ async function createSumupCheckout(order, redirectUrl) {
     merchant_code: merchantCode,
     description: `${barName} — Bestelling #${order.order_number}`,
     hosted_checkout: { enabled: true },
-    redirect_url: redirectUrl || `${siteUrl}/?order=${order.id}`,
+    redirect_url: finalRedirect,
   };
   // Webhook voor automatische bevestiging (enkel bij geldige https-URL)
   if (siteUrl && siteUrl.startsWith('https://')) {
