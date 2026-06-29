@@ -43,6 +43,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 
 /* Products */
 .prod-grid{display:flex;flex-direction:column;gap:8px;padding:12px 16px 120px;}
+.cat-heading{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:var(--sun-t);margin:16px 2px 2px;padding-bottom:6px;border-bottom:2px solid var(--sun);}
+.cat-heading:first-child{margin-top:2px;}
+.cat-heading-icon{font-size:18px;}
+.cat-heading-count{margin-left:auto;font-size:12px;font-weight:600;color:var(--mu);background:var(--sun-l);border-radius:10px;padding:2px 9px;}
 .prod{display:flex;align-items:center;gap:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:10px;cursor:pointer;transition:all .12s;position:relative;user-select:none;}
 .prod:active{transform:scale(.99);}
 .prod.in-cart{border-color:var(--sun);background:var(--sun-l);}
@@ -317,38 +321,66 @@ function renderCats() {
 }
 function setCat(c) { activeCat = c; renderCats(); renderProds(); }
 
+function prodCardHtml(p) {
+  const qty = cart[p.id] || 0;
+  const outOfStock = p.stock === 0;
+  const lowStock = p.stock > 0 && p.stock <= p.low_stock;
+  const stockLabel = p.stock >= 0
+    ? (outOfStock ? '<div class="prod-stock stock-low">Uitverkocht</div>'
+      : lowStock ? `<div class="prod-stock stock-low">Nog ${p.stock}</div>` : '')
+    : '';
+  const showDesc = p.description && p.description.trim();
+  const inCart = qty > 0;
+  const thumb = p.image_url
+    ? `<div class="prod-thumb"><img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.parentElement.classList.add('thumb-fallback');this.parentElement.innerHTML='${p.icon}'"></div>`
+    : `<div class="prod-thumb thumb-fallback">${p.icon}</div>`;
+  return `<div class="prod ${inCart?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock||inCart?'':'addItem('+p.id+')'}">
+    ${thumb}
+    <div class="prod-body">
+      <div class="prod-name">${p.name}</div>
+      ${showDesc ? `<div class="prod-desc">${p.description}</div>` : ''}
+      <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
+      ${stockLabel}
+    </div>
+    ${inCart
+      ? `<div class="prod-stepper" onclick="event.stopPropagation()">
+          <button class="step-btn" onclick="changeQty(${p.id},-1)">−</button>
+          <span class="step-qty">${qty}</span>
+          <button class="step-btn" onclick="addItem(${p.id})">+</button>
+        </div>`
+      : (outOfStock ? '' : `<div class="prod-add" onclick="event.stopPropagation();addItem(${p.id})">+</div>`)}
+  </div>`;
+}
+
+function catEmoji(cat) {
+  const map = {
+    'bier':'🍺','bieren':'🍺','frisdrank':'🥤','frisdranken':'🥤','water':'💧',
+    'wijn':'🍷','cocktails':'🍹','coctails':'🍹','mocktails':'🍸','alcoholvrij':'🚫',
+    'warme dranken':'☕','koffie':'☕','food':'🍔','eten':'🍔','snacks':'🍿',
+    'homemade':'🏡','aperitief':'🥂','sterke drank':'🥃'
+  };
+  return map[(cat||'').toLowerCase()] || '🍽️';
+}
+
 function renderProds() {
-  const list = activeCat === 'Alle' ? products : products.filter(p => p.category === activeCat);
-  document.getElementById('prod-grid').innerHTML = list.map(p => {
-    const qty = cart[p.id] || 0;
-    const outOfStock = p.stock === 0;
-    const lowStock = p.stock > 0 && p.stock <= p.low_stock;
-    const stockLabel = p.stock >= 0
-      ? (outOfStock ? '<div class="prod-stock stock-low">Uitverkocht</div>'
-        : lowStock ? `<div class="prod-stock stock-low">Nog ${p.stock}</div>` : '')
-      : '';
-    const showDesc = p.description && p.description.trim();
-    const inCart = qty > 0;
-    const thumb = p.image_url
-      ? `<div class="prod-thumb"><img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.parentElement.classList.add('thumb-fallback');this.parentElement.innerHTML='${p.icon}'"></div>`
-      : `<div class="prod-thumb thumb-fallback">${p.icon}</div>`;
-    return `<div class="prod ${inCart?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock||inCart?'':'addItem('+p.id+')'}">
-      ${thumb}
-      <div class="prod-body">
-        <div class="prod-name">${p.name}</div>
-        ${showDesc ? `<div class="prod-desc">${p.description}</div>` : ''}
-        <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
-        ${stockLabel}
-      </div>
-      ${inCart
-        ? `<div class="prod-stepper" onclick="event.stopPropagation()">
-            <button class="step-btn" onclick="changeQty(${p.id},-1)">−</button>
-            <span class="step-qty">${qty}</span>
-            <button class="step-btn" onclick="addItem(${p.id})">+</button>
-          </div>`
-        : (outOfStock ? '' : `<div class="prod-add" onclick="event.stopPropagation();addItem(${p.id})">+</div>`)}
-    </div>`;
-  }).join('');
+  const grid = document.getElementById('prod-grid');
+  if (activeCat !== 'Alle') {
+    const list = products.filter(p => p.category === activeCat);
+    grid.innerHTML = list.map(prodCardHtml).join('');
+    return;
+  }
+  // "Alle": groepeer per categorie met een hoofding
+  const groups = {};
+  const order = [];
+  products.forEach(p => {
+    const cat = p.category || 'Overige';
+    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+    groups[cat].push(p);
+  });
+  grid.innerHTML = order.map(cat => `
+    <div class="cat-heading"><span class="cat-heading-icon">${catEmoji(cat)}</span>${cat}<span class="cat-heading-count">${groups[cat].length}</span></div>
+    ${groups[cat].map(prodCardHtml).join('')}
+  `).join('');
 }
 
 function addItem(id) {
