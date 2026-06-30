@@ -11,11 +11,11 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   color-scheme: light;
-  --sun:#EF9F27;--sun-d:#BA7517;--sun-l:#FAEEDA;--sun-t:#412402;
+  --sun:#FFB700;--sun-d:#E09600;--sun-l:#FCEBC8;--sun-t:#391C14;
   --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
-  --coral:#D85A30;--coral-l:#FAECE7;--coral-d:#993C1D;
-  --bg:#F7F6F2;--card:#fff;--bd:#E5E3DC;
-  --tx:#1A1917;--mu:#6B6A65;--mu2:#9B9A96;
+  --coral:#D8642F;--coral-l:#FBEADF;--coral-d:#A8431B;
+  --bg:#FDF1DB;--card:#FFFBF2;--bd:#EADBBE;
+  --tx:#391C14;--mu:#8A7256;--mu2:#B3A082;
   --r:14px;--rm:9px;
 }
 
@@ -23,10 +23,9 @@
 body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
 
 /* Hero */
-.hero{background:var(--sun);padding:28px 20px 22px;text-align:center;}
-.hero-icon{font-size:40px;margin-bottom:8px;}
-.hero-title{font-size:20px;font-weight:600;color:var(--sun-t);}
-.hero-sub{font-size:13px;color:#633806;margin-top:4px;}
+.hero{background:var(--bg);padding:18px 16px 10px;text-align:center;}
+.hero-banner{max-width:340px;width:100%;height:auto;margin:0 auto;display:block;}
+.hero-tagline{font-size:13px;color:var(--mu);margin-top:8px;font-weight:500;}
 
 /* Cart bar */
 .cart-bar{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:0.5px solid var(--bd);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
@@ -133,9 +132,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 <body>
 
 <div class="hero">
-  <div class="hero-icon">☀️</div>
-  <div class="hero-title">Zomerbar</div>
-  <div class="hero-sub">Bestel en betaal hier — haal op aan de bar</div>
+  <img src="/banner-bieke.png" alt="Zomerbar 't Bieke" class="hero-banner">
+  <div class="hero-tagline">Bestel & betaal hier — haal op aan de bar</div>
 </div>
 
 <div class="cart-bar">
