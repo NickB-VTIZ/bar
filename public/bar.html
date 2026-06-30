@@ -62,11 +62,6 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .card-head{padding:14px 18px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
 .order-num{font-size:34px;font-weight:700;color:var(--sun-d);line-height:1;}
 .order-meta{font-size:14px;color:var(--mu);margin-top:3px;}
-.badge{font-size:13px;padding:5px 12px;border-radius:14px;font-weight:600;}
-.badge-pending{background:#F1EFE8;color:var(--mu);}
-.badge-paid{background:var(--sun-l);color:var(--sun-t);}
-.badge-preparing{background:var(--teal-l);color:var(--teal-d);}
-.badge-ready{background:var(--teal);color:#fff;}
 .card-items{padding:14px 18px;}
 .item-row{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:18px;border-bottom:0.5px solid var(--bd);}
 .item-row:last-child{border-bottom:none;}
@@ -123,11 +118,28 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;font-weight:500;padding:11px 20px;border-radius:24px;opacity:0;transition:all .25s;z-index:100;pointer-events:none;white-space:nowrap;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-.badge-cash-open{background:#FFF3CD;color:#7A4F00;}
-.is-cash-open{border-left:4px solid var(--sun);}
+.badge{font-size:14px;padding:6px 13px;border-radius:14px;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;}
+.badge-pending{background:#EFE9DD;color:#8A7256;border:1px solid #DDD0B8;}
+.badge-paid{background:#D7F0E4;color:#0F6E56;border:1px solid #A8E0C9;}
+.badge-preparing{background:#FCE9C0;color:#9A6A00;border:1px solid #F3D58A;}
+.badge-ready{background:var(--teal);color:#fff;border:1px solid var(--teal-d);box-shadow:0 1px 4px rgba(29,158,117,.3);}
+.badge-cash-open{background:#FFE08A;color:#7A4F00;border:1px solid #F0C24A;}
+.badge-done{background:#EFE9DD;color:#B3A082;border:1px solid #E0D4BE;}
+.is-cash-open{border-left:5px solid var(--sun);}
 
 /* Betaal modal */
 .pay-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;align-items:flex-end;justify-content:center;}
+.qo-row{display:flex;align-items:center;gap:11px;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:8px;cursor:pointer;transition:all .12s;}
+.qo-row.sel{background:var(--sun-l);border-color:var(--sun);}
+.qo-thumb{flex:0 0 42px;width:42px;height:42px;border-radius:9px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;border:0.5px solid var(--bd);}
+.qo-thumb img{width:100%;height:100%;object-fit:cover;}
+.qo-row-body{flex:1;min-width:0;}
+.qo-row-name{font-size:15px;font-weight:600;color:var(--tx);line-height:1.2;}
+.qo-row-price{font-size:13px;color:var(--sun-d);font-weight:600;margin-top:2px;}
+.qo-add{flex:0 0 32px;width:32px;height:32px;border-radius:50%;background:var(--sun);color:var(--sun-t);font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;}
+.qo-stepper{flex:0 0 auto;display:flex;align-items:center;gap:2px;background:var(--card);border:0.5px solid var(--sun);border-radius:16px;padding:3px;}
+.qo-step{width:30px;height:30px;border:none;background:var(--sun);color:var(--sun-t);font-size:19px;font-weight:700;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;padding:0;}
+.qo-step-qty{min-width:24px;text-align:center;font-size:16px;font-weight:700;color:var(--tx);}
 .pay-modal-bg.show{display:flex;}
 .pay-modal{background:var(--card);border-radius:20px 20px 0 0;padding:22px;width:100%;max-width:480px;}
 .pay-modal-handle{width:36px;height:4px;background:var(--bd);border-radius:2px;margin:0 auto 16px;}
@@ -229,8 +241,8 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
     <div style="font-size:17px;font-weight:600;margin-bottom:4px;color:var(--tx);">Snelle bestelling</div>
     <div style="font-size:13px;color:var(--mu);margin-bottom:14px;">Voeg een bestelling toe namens de klant</div>
 
-    <!-- Products quick grid -->
-    <div id="qo-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;"></div>
+    <!-- Products quick list -->
+    <div id="qo-grid" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-height:42vh;overflow-y:auto;"></div>
 
     <!-- Cart summary -->
     <div id="qo-cart" style="background:var(--bg);border-radius:var(--rm);padding:10px 12px;margin-bottom:10px;min-height:40px;font-size:13px;color:var(--mu);">Niets gekozen</div>
@@ -270,6 +282,24 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
         <div class="pay-modal-method-label">SumUp</div>
         <div class="pay-modal-method-sub">Kaartlezer</div>
       </div>
+    </div>
+    <!-- Wisselgeld-rekenhulp (enkel bij cash) -->
+    <div id="change-calc" style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:var(--mu);margin-bottom:8px;">Wisselgeld berekenen</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:14px;color:var(--mu);white-space:nowrap;">Klant geeft</span>
+        <div style="flex:1;display:flex;align-items:center;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:0 12px;">
+          <span style="font-size:18px;color:var(--mu);">€</span>
+          <input id="cash-given" type="number" inputmode="decimal" step="0.50" min="0" placeholder="0,00"
+            oninput="calcChange()" style="flex:1;border:none;background:none;font-size:20px;font-weight:600;color:var(--tx);padding:11px 6px;outline:none;width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;" id="cash-quick"></div>
+      <div id="change-result" style="background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--r);padding:14px;text-align:center;display:none;">
+        <div style="font-size:13px;color:var(--teal-d);">Wisselgeld terug te geven</div>
+        <div id="change-amount" style="font-size:36px;font-weight:700;color:var(--teal-d);line-height:1.1;margin-top:2px;">€ 0,00</div>
+      </div>
+      <div id="change-short" style="background:var(--coral-l);border:0.5px solid var(--coral);border-radius:var(--r);padding:12px;text-align:center;display:none;font-size:14px;color:var(--coral-d);font-weight:600;"></div>
     </div>
     <button class="pay-modal-confirm" id="pay-modal-confirm" onclick="confirmCashPayment()">✅ Betaling bevestigen</button>
     <button class="pay-modal-cancel" onclick="closePayModal()">Annuleren</button>
@@ -522,15 +552,23 @@ async function markPaid(id){
 }
 
 // ── Cash betaal modal ────────────────────────────────────────────
-let payModalOrderId = null, payModalMethod = 'cash';
+let payModalOrderId = null, payModalMethod = 'cash', payModalAmountNum = 0;
 
 function openPayModal(orderId, amtFmt, orderNum) {
   payModalOrderId = orderId;
   payModalMethod = 'cash';
+  const o = orders[orderId];
+  payModalAmountNum = o ? (o.amount || 0) : 0;
   document.getElementById('pay-modal-amt').textContent = amtFmt;
   document.getElementById('pay-modal-order').textContent = `Bestelling #${orderNum}`;
   document.getElementById('pm-cash-modal').classList.add('sel');
   document.getElementById('pm-sumup-modal').classList.remove('sel');
+  // Reset wisselgeld
+  document.getElementById('cash-given').value = '';
+  document.getElementById('change-result').style.display = 'none';
+  document.getElementById('change-short').style.display = 'none';
+  document.getElementById('change-calc').style.display = 'block';
+  renderCashQuickButtons();
   document.getElementById('pay-modal-bg').classList.add('show');
 }
 
@@ -543,8 +581,51 @@ function selPayModal(m) {
   payModalMethod = m;
   document.getElementById('pm-cash-modal').classList.toggle('sel', m==='cash');
   document.getElementById('pm-sumup-modal').classList.toggle('sel', m==='sumup');
+  // Wisselgeld enkel relevant bij cash
+  document.getElementById('change-calc').style.display = m === 'cash' ? 'block' : 'none';
   document.getElementById('pay-modal-confirm').textContent =
     m === 'sumup' ? '💳 Betaald via SumUp' : '✅ Cash ontvangen';
+}
+
+// Snelknoppen met handige briefjes boven het te betalen bedrag
+function renderCashQuickButtons() {
+  const amt = payModalAmountNum;
+  const notes = [5, 10, 20, 50];
+  const suggestions = new Set();
+  // Gepast bedrag
+  suggestions.add(Math.ceil(amt * 100) / 100);
+  // Volgende ronde euro's
+  suggestions.add(Math.ceil(amt));
+  // Briefjes die genoeg zijn
+  notes.forEach(n => { if (n >= amt) suggestions.add(n); });
+  const sorted = [...suggestions].filter(v => v >= amt).sort((a,b)=>a-b).slice(0,4);
+  document.getElementById('cash-quick').innerHTML = sorted.map(v =>
+    `<button onclick="setCashGiven(${v})" style="flex:1;min-width:70px;padding:9px 4px;font-size:14px;font-weight:600;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);cursor:pointer;">€ ${v.toFixed(2).replace('.',',')}</button>`
+  ).join('');
+}
+
+function setCashGiven(v) {
+  document.getElementById('cash-given').value = v.toFixed(2);
+  calcChange();
+}
+
+function calcChange() {
+  const given = parseFloat(document.getElementById('cash-given').value.replace(',','.')) || 0;
+  const result = document.getElementById('change-result');
+  const short = document.getElementById('change-short');
+  if (given <= 0) {
+    result.style.display = 'none'; short.style.display = 'none'; return;
+  }
+  const change = given - payModalAmountNum;
+  if (change < -0.001) {
+    result.style.display = 'none';
+    short.style.display = 'block';
+    short.textContent = `Tekort: € ${Math.abs(change).toFixed(2).replace('.',',')} te weinig`;
+  } else {
+    short.style.display = 'none';
+    result.style.display = 'block';
+    document.getElementById('change-amount').textContent = '€ ' + change.toFixed(2).replace('.',',');
+  }
 }
 
 async function confirmCashPayment() {
@@ -609,17 +690,34 @@ function closeQuickOrder() {
 function renderQoGrid() {
   document.getElementById('qo-grid').innerHTML = products.map(p => {
     const qty = qoCart[p.id] || 0;
-    return `<div onclick="qoAddItem(${p.id})" style="background:${qty>0?'var(--sun-l)':'var(--bg)'};border:0.5px solid ${qty>0?'var(--sun)':'var(--bd)'};border-radius:var(--rm);padding:10px 6px;text-align:center;cursor:pointer;position:relative;transition:all .12s;">
-      ${qty>0?`<div style="position:absolute;top:4px;right:4px;background:var(--sun);color:var(--sun-t);font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;">${qty}</div>`:''}
-      <div style="font-size:20px;margin-bottom:4px;">${p.icon}</div>
-      <div style="font-size:11px;font-weight:500;color:var(--tx);line-height:1.2;">${p.name}</div>
-      <div style="font-size:11px;color:var(--mu);margin-top:2px;">€ ${p.price.toFixed(2).replace('.',',')}</div>
+    const thumb = p.image_url
+      ? `<div class="qo-thumb"><img src="${p.image_url}" alt="" onerror="this.parentElement.innerHTML='${p.icon}'"></div>`
+      : `<div class="qo-thumb">${p.icon}</div>`;
+    return `<div class="qo-row ${qty>0?'sel':''}" onclick="${qty>0?'':'qoAddItem('+p.id+')'}">
+      ${thumb}
+      <div class="qo-row-body">
+        <div class="qo-row-name">${p.name}</div>
+        <div class="qo-row-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
+      </div>
+      ${qty>0
+        ? `<div class="qo-stepper" onclick="event.stopPropagation()">
+            <button class="qo-step" onclick="qoChangeQty(${p.id},-1)">−</button>
+            <span class="qo-step-qty">${qty}</span>
+            <button class="qo-step" onclick="qoChangeQty(${p.id},1)">+</button>
+          </div>`
+        : `<div class="qo-add" onclick="event.stopPropagation();qoAddItem(${p.id})">+</div>`}
     </div>`;
   }).join('');
 }
 
 function qoAddItem(id) {
   qoCart[id] = (qoCart[id] || 0) + 1;
+  renderQoGrid(); renderQoCart();
+}
+
+function qoChangeQty(id, d) {
+  qoCart[id] = Math.max(0, (qoCart[id] || 0) + d);
+  if (qoCart[id] === 0) delete qoCart[id];
   renderQoGrid(); renderQoCart();
 }
 
@@ -667,7 +765,9 @@ async function submitQuickOrder() {
       phone: '',
     });
     closeQuickOrder();
-    toast('✅ Bestelling toegevoegd');
+    toast(qoPayMethod === 'cash'
+      ? '✅ Bestelling toegevoegd — staat op "te betalen"'
+      : '✅ Bestelling toegevoegd');
   } catch(e) {
     toast('Fout: ' + e.message);
     btn.disabled = false; btn.textContent = 'Bestelling plaatsen';

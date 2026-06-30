@@ -818,15 +818,22 @@ app.post('/api/orders', async (req, res) => {
   let molliePaymentId = null;
   let mollieCheckoutUrl = null;
 
-  // Alle bestellingen worden online betaald (geen cash meer via de app)
-  const payMethod = method || getSetting('payProvider') || 'mollie';
-  const status = 'pending'; // wacht op online betaling
+  // Cash = bar-bestelling: meteen op het bord (paid) maar nog niet fysiek betaald (cash_paid=0)
+  // Online (mollie/sumup) = wacht op betaling
+  const isCash = method === 'cash';
+  const payMethod = isCash ? 'cash' : (method || getSetting('payProvider') || 'mollie');
+  const status = isCash ? 'paid' : 'pending';
 
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount);
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, 0);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
+
+  // Cash: trek de voorraad meteen af (de bestelling is geplaatst)
+  if (isCash) {
+    deductStock(items.map(i => ({...i})), id);
+  }
 
   // Create Mollie Bancontact payment
   let paymentError = null;
