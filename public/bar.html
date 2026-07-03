@@ -129,6 +129,8 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 
 /* Betaal modal */
 .pay-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;align-items:flex-end;justify-content:center;}
+.qo-cat-heading{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--sun-t);margin:10px 2px 2px;padding-bottom:4px;border-bottom:2px solid var(--sun);}
+.qo-cat-heading:first-child{margin-top:0;}
 .qo-row{display:flex;align-items:center;gap:11px;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:8px;cursor:pointer;transition:all .12s;}
 .qo-row.sel{background:var(--sun-l);border-color:var(--sun);}
 .qo-thumb{flex:0 0 42px;width:42px;height:42px;border-radius:9px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;border:0.5px solid var(--bd);}
@@ -165,9 +167,39 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 <header>
   <div><div class="logo">☀️ Bar-dashboard</div><div class="logo-sub" id="hdr-clock">--:--:--</div></div>
   <div class="hdr-r">
+    <button onclick="openTabsOverlay()" style="padding:9px 16px;font-size:14px;font-weight:700;background:var(--sun-t);color:var(--sun);border:none;border-radius:20px;cursor:pointer;display:flex;align-items:center;gap:6px;">📋 Rekeningen <span id="tabs-count-badge" style="display:none;background:var(--sun);color:var(--sun-t);font-size:12px;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;"></span></button>
     <div class="pill err" id="conn"><div class="dot" id="conn-dot" style="background:var(--sun-d)"></div><span id="conn-lbl">…</span></div>
   </div>
 </header>
+
+<!-- Rekeningen overlay -->
+<div id="tabs-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55;align-items:flex-end;justify-content:center;">
+  <div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;">
+    <div style="width:36px;height:4px;background:var(--bd);border-radius:2px;margin:0 auto 16px;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:18px;font-weight:700;color:var(--tx);">📋 Open rekeningen</div>
+      <button onclick="closeTabsOverlay()" style="background:none;border:none;font-size:22px;color:var(--mu);cursor:pointer;">✕</button>
+    </div>
+    <div id="tabs-list"></div>
+    <!-- Factuurformulier (verschijnt bij klik op Factuur) -->
+    <div id="tab-invoice-form" style="display:none;margin-top:14px;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px;">
+      <div style="font-size:15px;font-weight:700;color:var(--tx);margin-bottom:10px;">🧾 Factuur via Billit — <span id="inv-tab-name"></span></div>
+      <input id="inv-name" placeholder="Bedrijfs-/klantnaam *" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);margin-bottom:8px;">
+      <input id="inv-vat" placeholder="BTW-nummer (BE0…)" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);margin-bottom:8px;">
+      <input id="inv-email" type="email" placeholder="E-mailadres (voor verzending)" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);margin-bottom:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input id="inv-address" placeholder="Straat + nr" style="flex:2;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);">
+        <input id="inv-zip" placeholder="Postcode" style="flex:1;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);">
+      </div>
+      <input id="inv-city" placeholder="Gemeente" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx);margin-bottom:12px;cursor:pointer;">
+        <input type="checkbox" id="inv-send" checked style="width:18px;height:18px;"> Meteen verzenden via Billit (e-mail)
+      </label>
+      <button id="inv-submit" onclick="submitTabInvoice()" style="width:100%;padding:13px;font-size:15px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;margin-bottom:6px;">🧾 Factuur aanmaken & rekening sluiten</button>
+      <button onclick="hideInvoiceForm()" style="width:100%;padding:10px;font-size:13px;background:none;border:none;color:var(--mu);cursor:pointer;">Annuleren</button>
+    </div>
+  </div>
+</div>
 
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('orders',this)"><span>📋</span>Bestellingen</button>
@@ -249,14 +281,29 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 
     <input id="qo-note" type="text" placeholder="Opmerking (optioneel)" style="width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:10px;">
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-      <div id="qo-pm-cash" class="method-btn" onclick="qoSelPay('cash')" style="padding:12px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);cursor:pointer;text-align:center;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div id="qo-pm-cash" class="method-btn" onclick="qoSelPay('cash')" style="padding:12px 6px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);cursor:pointer;text-align:center;">
         <div style="font-size:20px;margin-bottom:4px;">💶</div>
-        <div style="font-size:13px;font-weight:600;color:var(--sun-t);">Cash</div>
+        <div style="font-size:12px;font-weight:600;color:var(--sun-t);">Cash</div>
       </div>
-      <div id="qo-pm-mollie" class="method-btn" onclick="qoSelPay('mollie')" style="padding:12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
+      <div id="qo-pm-mollie" class="method-btn" onclick="qoSelPay('mollie')" style="padding:12px 6px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
         <div style="font-size:20px;margin-bottom:4px;">🏦</div>
-        <div style="font-size:13px;font-weight:600;color:var(--tx);">Bancontact</div>
+        <div style="font-size:12px;font-weight:600;color:var(--tx);">Bancontact</div>
+      </div>
+      <div id="qo-pm-tab" class="method-btn" onclick="qoSelPay('tab')" style="padding:12px 6px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
+        <div style="font-size:20px;margin-bottom:4px;">📋</div>
+        <div style="font-size:12px;font-weight:600;color:var(--tx);">Op rekening</div>
+      </div>
+    </div>
+
+    <!-- Rekening kiezen/aanmaken (enkel bij Op rekening) -->
+    <div id="qo-tab-select" style="display:none;margin-bottom:10px;">
+      <select id="qo-tab-dropdown" style="width:100%;font-size:14px;padding:11px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:8px;">
+        <option value="">— Kies een rekening —</option>
+      </select>
+      <div style="display:flex;gap:8px;">
+        <input id="qo-tab-new" type="text" placeholder="Of nieuwe rekening (bv. Tafel Jef)" style="flex:1;font-size:13px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);">
+        <button onclick="qoCreateTab()" style="padding:10px 16px;font-size:13px;font-weight:600;background:var(--sun);color:var(--sun-t);border:none;border-radius:var(--rm);cursor:pointer;">+ Maak</button>
       </div>
     </div>
 
@@ -399,6 +446,7 @@ function renderBoard(){
 
 function cardHTML(o){
   const isCash = o.method === 'cash';
+  const isTab = o.method === 'tab';
   const isMollie = o.method === 'mollie';
   const isSumupOnline = o.method === 'sumup';
   const isOnline = isMollie || isSumupOnline;
@@ -413,6 +461,12 @@ function cardHTML(o){
       badgeCls = 'badge-paid'; badgeTxt = '✅ Cash betaald'; cardCls = 'is-paid';
     } else {
       badgeCls = 'badge-cash-open'; badgeTxt = '💶 Cash — nog te betalen'; cardCls = 'is-cash-open';
+    }
+  } else if (o.status === 'paid' && isTab) {
+    if (o.cash_paid) {
+      badgeCls = 'badge-paid'; badgeTxt = '✅ Rekening betaald'; cardCls = 'is-paid';
+    } else {
+      badgeCls = 'badge-cash-open'; badgeTxt = '📋 Op rekening'; cardCls = 'is-cash-open';
     }
   } else if (o.status === 'paid') {
     badgeCls = 'badge-paid'; badgeTxt = '✅ Betaald'; cardCls = 'is-paid';
@@ -517,7 +571,7 @@ function cardHTML(o){
     </div>
     <div class="card-items">${items}</div>
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
-    <div class="card-method">${isCash?(o.cash_paid?'💶 Cash ✅':'💶 Cash'):isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
+    <div class="card-method">${isCash?(o.cash_paid?'💶 Cash ✅':'💶 Cash'):isTab?(o.cash_paid?'📋 Rekening ✅':'📋 Op rekening'):isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
     ${actions}
   </div>`;
 }
@@ -563,7 +617,9 @@ function openPayModal(orderId, amtFmt, orderNum) {
   document.getElementById('pay-modal-order').textContent = `Bestelling #${orderNum}`;
   document.getElementById('pm-cash-modal').classList.add('sel');
   document.getElementById('pm-sumup-modal').classList.remove('sel');
-  // Reset wisselgeld
+  // Reset wisselgeld + knop (fix voor vastlopende knop)
+  const cbtn = document.getElementById('pay-modal-confirm');
+  cbtn.disabled = false; cbtn.textContent = '✅ Cash ontvangen';
   document.getElementById('cash-given').value = '';
   document.getElementById('change-result').style.display = 'none';
   document.getElementById('change-short').style.display = 'none';
@@ -575,6 +631,7 @@ function openPayModal(orderId, amtFmt, orderNum) {
 function closePayModal() {
   document.getElementById('pay-modal-bg').classList.remove('show');
   payModalOrderId = null;
+  settleTabId = null;
 }
 
 function selPayModal(m) {
@@ -628,23 +685,145 @@ function calcChange() {
   }
 }
 
-async function confirmCashPayment() {
-  if (!payModalOrderId) return;
-  const btn = document.getElementById('pay-modal-confirm');
-  const o = orders[payModalOrderId];
-  btn.disabled = true; btn.textContent = 'Verwerken…';
+// ── Rekeningen (tabs) ────────────────────────────────────────────
+let openTabs = [], invoiceTabId = null, settleTabId = null;
+
+async function openTabsOverlay() {
+  document.getElementById('tabs-overlay').style.display = 'flex';
+  hideInvoiceForm();
+  await renderTabsList();
+}
+function closeTabsOverlay() {
+  document.getElementById('tabs-overlay').style.display = 'none';
+}
+
+async function renderTabsList() {
+  const el = document.getElementById('tabs-list');
+  el.innerHTML = '<div style="color:var(--mu);font-size:13px;padding:12px;">Laden…</div>';
   try {
-    // Registreer de betaling (zet cash_paid + methode)
-    await API.orders.registerPayment(payModalOrderId, payModalMethod);
-    // Als de bestelling al klaar is om op te halen → meteen afronden
-    if (o && o.status === 'ready') {
-      await API.orders.setStatus(payModalOrderId, 'collected');
+    openTabs = await API.tabs.list();
+    updateTabsBadge();
+    if (!openTabs.length) {
+      el.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:20px;text-align:center;">Geen open rekeningen.<br><span style="font-size:12px;">Maak er een via + Nieuwe bestelling → Op rekening.</span></div>';
+      return;
     }
-    toast(`✅ Betaling geregistreerd — ${payModalMethod === 'sumup' ? 'SumUp kaart' : 'cash'}`);
-    closePayModal();
+    el.innerHTML = openTabs.map(t => `
+      <div style="background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:17px;font-weight:700;color:var(--tx);">📋 ${t.name}</div>
+          <div style="font-size:20px;font-weight:700;color:var(--sun-d);">€ ${t.open_amount.toFixed(2).replace('.',',')}</div>
+        </div>
+        <div style="font-size:13px;color:var(--mu);margin-bottom:10px;">
+          ${t.items.map(i => `${i.icon||''} ${i.qty}× ${i.name}`).join(' · ') || 'Nog geen items'}
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="settleTab(${t.id})" style="flex:2;padding:11px;font-size:14px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;">💶 Afrekenen</button>
+          <button onclick="showInvoiceForm(${t.id})" style="flex:1;padding:11px;font-size:13px;font-weight:600;background:var(--sun-l);color:var(--sun-t);border:0.5px solid var(--sun);border-radius:var(--rm);cursor:pointer;">🧾 Factuur</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--coral-d);font-size:13px;padding:12px;">Fout: ${e.message}</div>`;
+  }
+}
+
+function updateTabsBadge() {
+  const b = document.getElementById('tabs-count-badge');
+  if (openTabs.length) { b.style.display = 'inline-flex'; b.textContent = openTabs.length; }
+  else b.style.display = 'none';
+}
+
+// Afrekenen: gebruik de betaalmodal met wisselgeld-rekenhulp
+function settleTab(tabId) {
+  const t = openTabs.find(x => x.id === tabId);
+  if (!t) return;
+  settleTabId = tabId;
+  payModalOrderId = null; // geen losse bestelling, we sluiten een rekening
+  payModalMethod = 'cash';
+  payModalAmountNum = t.open_amount;
+  document.getElementById('pay-modal-amt').textContent = '€ ' + t.open_amount.toFixed(2).replace('.',',');
+  document.getElementById('pay-modal-order').textContent = `Rekening "${t.name}"`;
+  document.getElementById('pm-cash-modal').classList.add('sel');
+  document.getElementById('pm-sumup-modal').classList.remove('sel');
+  const cbtn = document.getElementById('pay-modal-confirm');
+  cbtn.disabled = false; cbtn.textContent = '✅ Cash ontvangen';
+  document.getElementById('cash-given').value = '';
+  document.getElementById('change-result').style.display = 'none';
+  document.getElementById('change-short').style.display = 'none';
+  document.getElementById('change-calc').style.display = 'block';
+  renderCashQuickButtons();
+  closeTabsOverlay();
+  document.getElementById('pay-modal-bg').classList.add('show');
+}
+
+// Factuurformulier
+function showInvoiceForm(tabId) {
+  const t = openTabs.find(x => x.id === tabId);
+  if (!t) return;
+  invoiceTabId = tabId;
+  document.getElementById('inv-tab-name').textContent = t.name;
+  document.getElementById('tab-invoice-form').style.display = 'block';
+  document.getElementById('inv-name').focus();
+}
+function hideInvoiceForm() {
+  invoiceTabId = null;
+  document.getElementById('tab-invoice-form').style.display = 'none';
+}
+
+async function submitTabInvoice() {
+  if (!invoiceTabId) return;
+  const name = document.getElementById('inv-name').value.trim();
+  if (!name) { toast('Vul de klantnaam in'); return; }
+  const btn = document.getElementById('inv-submit');
+  btn.disabled = true; btn.textContent = 'Factuur aanmaken…';
+  try {
+    const r = await API.billitInvoice({
+      tabId: invoiceTabId,
+      customerName: name,
+      customerVat: document.getElementById('inv-vat').value.trim(),
+      customerEmail: document.getElementById('inv-email').value.trim(),
+      customerAddress: document.getElementById('inv-address').value.trim(),
+      customerZip: document.getElementById('inv-zip').value.trim(),
+      customerCity: document.getElementById('inv-city').value.trim(),
+      send: document.getElementById('inv-send').checked,
+    });
+    toast(r.sent ? '✅ Factuur aangemaakt en verzonden via Billit' : '✅ Factuur aangemaakt in Billit');
+    hideInvoiceForm();
+    await renderTabsList();
   } catch(e) {
     toast('Fout: ' + e.message);
-    btn.disabled = false; btn.textContent = '✅ Betaling bevestigen';
+  } finally {
+    btn.disabled = false; btn.textContent = '🧾 Factuur aanmaken & rekening sluiten';
+  }
+}
+
+async function confirmCashPayment() {
+  const btn = document.getElementById('pay-modal-confirm');
+  btn.disabled = true; btn.textContent = 'Verwerken…';
+  try {
+    if (settleTabId) {
+      // Rekening afsluiten: alle open bestellingen op betaald
+      await API.tabs.close(settleTabId, payModalMethod);
+      toast(`✅ Rekening afgerekend — ${payModalMethod === 'sumup' ? 'SumUp kaart' : 'cash'}`);
+      settleTabId = null;
+      closePayModal();
+      renderBoard();
+    } else if (payModalOrderId) {
+      const o = orders[payModalOrderId];
+      // Registreer de betaling (zet cash_paid + methode)
+      await API.orders.registerPayment(payModalOrderId, payModalMethod);
+      // Als de bestelling al klaar is om op te halen → meteen afronden
+      if (o && o.status === 'ready') {
+        await API.orders.setStatus(payModalOrderId, 'collected');
+      }
+      toast(`✅ Betaling geregistreerd — ${payModalMethod === 'sumup' ? 'SumUp kaart' : 'cash'}`);
+      closePayModal();
+    }
+  } catch(e) {
+    toast('Fout: ' + e.message);
+  } finally {
+    // Knop ALTIJD terug bruikbaar maken (fix: knop bleef "Verwerken…" na succes)
+    btn.disabled = false;
+    btn.textContent = payModalMethod === 'sumup' ? '💳 Betaald via SumUp' : '✅ Cash ontvangen';
   }
 }
 
@@ -680,6 +859,7 @@ function openQuickOrder() {
   qoCart = {}; qoPayMethod = 'cash';
   renderQoGrid(); renderQoCart();
   document.getElementById('qo-note').value = '';
+  qoSelPay('cash'); // reset knop-stijlen en verberg rekening-selector
   document.getElementById('quick-overlay').style.display = 'flex';
 }
 
@@ -687,8 +867,25 @@ function closeQuickOrder() {
   document.getElementById('quick-overlay').style.display = 'none';
 }
 
+function qoCatEmoji(cat) {
+  const map = {
+    'bier':'🍺','bieren':'🍺','frisdrank':'🥤','frisdranken':'🥤','water':'💧',
+    'wijn':'🍷','cocktails':'🍹','coctails':'🍹','mocktails':'🍸','alcoholvrij':'🚫',
+    'warme dranken':'☕','koffie':'☕','food':'🍔','eten':'🍔','snacks':'🍿',
+    'homemade':'🏡','aperitief':'🥂','sterke drank':'🥃'
+  };
+  return map[(cat||'').toLowerCase()] || '🍽️';
+}
+
 function renderQoGrid() {
-  document.getElementById('qo-grid').innerHTML = products.map(p => {
+  // Groepeer per categorie, zelfde stijl als de klant-bestelpagina
+  const groups = {}, order = [];
+  products.forEach(p => {
+    const cat = p.category || 'Overige';
+    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+    groups[cat].push(p);
+  });
+  const rowHtml = (p) => {
     const qty = qoCart[p.id] || 0;
     const thumb = p.image_url
       ? `<div class="qo-thumb"><img src="${p.image_url}" alt="" onerror="this.parentElement.innerHTML='${p.icon}'"></div>`
@@ -707,7 +904,11 @@ function renderQoGrid() {
           </div>`
         : `<div class="qo-add" onclick="event.stopPropagation();qoAddItem(${p.id})">+</div>`}
     </div>`;
-  }).join('');
+  };
+  document.getElementById('qo-grid').innerHTML = order.map(cat => `
+    <div class="qo-cat-heading">${qoCatEmoji(cat)} ${cat}</div>
+    ${groups[cat].map(rowHtml).join('')}
+  `).join('');
 }
 
 function qoAddItem(id) {
@@ -736,22 +937,55 @@ function renderQoCart() {
   }).join('') + `<strong style="float:right;color:var(--tx);">€ ${total.toFixed(2).replace('.',',')}</strong>`;
 }
 
+let qoTabs = [];
+
 function qoSelPay(m) {
   qoPayMethod = m;
-  const cash = document.getElementById('qo-pm-cash');
-  const mollie = document.getElementById('qo-pm-mollie');
-  if (m === 'cash') {
-    cash.style.border = '0.5px solid var(--sun)'; cash.style.background = 'var(--sun-l)';
-    mollie.style.border = '0.5px solid var(--bd)'; mollie.style.background = 'var(--bg)';
-  } else {
-    mollie.style.border = '0.5px solid var(--teal)'; mollie.style.background = 'var(--teal-l)';
-    cash.style.border = '0.5px solid var(--bd)'; cash.style.background = 'var(--bg)';
-  }
+  const btns = { cash: 'qo-pm-cash', mollie: 'qo-pm-mollie', tab: 'qo-pm-tab' };
+  Object.entries(btns).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (key === m) {
+      el.style.border = '0.5px solid var(--sun)'; el.style.background = 'var(--sun-l)';
+    } else {
+      el.style.border = '0.5px solid var(--bd)'; el.style.background = 'var(--bg)';
+    }
+  });
+  document.getElementById('qo-tab-select').style.display = m === 'tab' ? 'block' : 'none';
+  if (m === 'tab') loadQoTabs();
+}
+
+async function loadQoTabs() {
+  try {
+    qoTabs = await API.tabs.list();
+    const dd = document.getElementById('qo-tab-dropdown');
+    const cur = dd.value;
+    dd.innerHTML = '<option value="">— Kies een rekening —</option>' +
+      qoTabs.map(t => `<option value="${t.id}">${t.name} · € ${t.open_amount.toFixed(2).replace('.',',')} open</option>`).join('');
+    if (cur) dd.value = cur;
+  } catch(e) { toast('Fout: ' + e.message); }
+}
+
+async function qoCreateTab() {
+  const inp = document.getElementById('qo-tab-new');
+  const name = inp.value.trim();
+  if (!name) { toast('Geef een naam voor de rekening'); return; }
+  try {
+    const t = await API.tabs.create(name);
+    inp.value = '';
+    await loadQoTabs();
+    document.getElementById('qo-tab-dropdown').value = t.id;
+    toast(`📋 Rekening "${t.name}" aangemaakt`);
+  } catch(e) { toast('Fout: ' + e.message); }
 }
 
 async function submitQuickOrder() {
   const entries = Object.entries(qoCart).filter(([,q]) => q > 0);
   if (!entries.length) return;
+  let tabId = null;
+  if (qoPayMethod === 'tab') {
+    tabId = document.getElementById('qo-tab-dropdown').value;
+    if (!tabId) { toast('Kies of maak eerst een rekening'); return; }
+  }
   const items = entries.map(([id,qty]) => {
     const p = products.find(x=>x.id==id);
     return p ? { product_id:p.id, name:p.name, icon:p.icon, price:p.price, qty } : null;
@@ -761,15 +995,22 @@ async function submitQuickOrder() {
   try {
     await API.orders.create({
       items, method: qoPayMethod,
+      tab_id: tabId,
       note: document.getElementById('qo-note').value || '',
       phone: '',
     });
     closeQuickOrder();
-    toast(qoPayMethod === 'cash'
-      ? '✅ Bestelling toegevoegd — staat op "te betalen"'
-      : '✅ Bestelling toegevoegd');
+    if (qoPayMethod === 'tab') {
+      const t = qoTabs.find(x => x.id == tabId);
+      toast(`📋 Toegevoegd aan rekening "${t ? t.name : ''}"`);
+    } else {
+      toast(qoPayMethod === 'cash'
+        ? '✅ Bestelling toegevoegd — staat op "te betalen"'
+        : '✅ Bestelling toegevoegd');
+    }
   } catch(e) {
     toast('Fout: ' + e.message);
+  } finally {
     btn.disabled = false; btn.textContent = 'Bestelling plaatsen';
   }
 }
@@ -778,6 +1019,7 @@ async function submitQuickOrder() {
 (async()=>{
   products=await API.products.list();
   loadStats();
+  try { openTabs = await API.tabs.list(); updateTabsBadge(); } catch(_){}
 })();
 </script>
 </body>

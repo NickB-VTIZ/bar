@@ -88,6 +88,14 @@ db.exec(`
     items_json  TEXT,
     processed_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS tabs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'open',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at   TEXT
+  );
 `);
 
 // ── Database migraties ───────────────────────────────────────────
@@ -105,6 +113,7 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN hidden INTEGER DEFAULT 0`,
   `ALTER TABLE products ADD COLUMN sku TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN tab_id INTEGER`,
   `ALTER TABLE orders ADD COLUMN gift REAL DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN cash_paid INTEGER DEFAULT 0`,
 ];
@@ -819,19 +828,22 @@ app.post('/api/orders', async (req, res) => {
   let mollieCheckoutUrl = null;
 
   // Cash = bar-bestelling: meteen op het bord (paid) maar nog niet fysiek betaald (cash_paid=0)
+  // Tab = op rekening: zelfde gedrag, gekoppeld aan een rekening
   // Online (mollie/sumup) = wacht op betaling
+  const tabId = req.body.tab_id ? parseInt(req.body.tab_id) : null;
   const isCash = method === 'cash';
-  const payMethod = isCash ? 'cash' : (method || getSetting('payProvider') || 'mollie');
-  const status = isCash ? 'paid' : 'pending';
+  const isTab = method === 'tab' && tabId;
+  const payMethod = isCash ? 'cash' : isTab ? 'tab' : (method || getSetting('payProvider') || 'mollie');
+  const status = (isCash || isTab) ? 'paid' : 'pending';
 
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, 0);
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, 0, isTab ? tabId : null);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
 
-  // Cash: trek de voorraad meteen af (de bestelling is geplaatst)
-  if (isCash) {
+  // Cash/rekening: trek de voorraad meteen af (de bestelling is geplaatst)
+  if (isCash || isTab) {
     deductStock(items.map(i => ({...i})), id);
   }
 
@@ -982,6 +994,142 @@ app.patch('/api/orders/:id/register-payment', requireAuth, (req, res) => {
   res.json(order);
 });
 
+// ── Rekeningen (tabs) ────────────────────────────────────────────
+app.post('/api/tabs', requireAuth, (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Naam vereist' });
+  const r = db.prepare("INSERT INTO tabs (name) VALUES (?)").run(name.trim());
+  res.json(db.prepare('SELECT * FROM tabs WHERE id=?').get(r.lastInsertRowid));
+});
+
+function tabWithDetails(t) {
+  const orders = db.prepare('SELECT * FROM orders WHERE tab_id=? AND status NOT IN (\'cancelled\')').all(t.id);
+  const unpaid = orders.filter(o => !o.cash_paid);
+  const total = orders.reduce((s,o)=>s+o.amount,0);
+  const openAmount = unpaid.reduce((s,o)=>s+o.amount,0);
+  // Items samenvoegen per product
+  const items = {};
+  orders.forEach(o => {
+    db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id).forEach(i => {
+      const k = i.name;
+      if (!items[k]) items[k] = { name: i.name, icon: i.icon, qty: 0, total: 0, price: i.price };
+      items[k].qty += i.qty; items[k].total += i.price * i.qty;
+    });
+  });
+  return { ...t, order_count: orders.length, total, open_amount: openAmount, items: Object.values(items) };
+}
+
+app.get('/api/tabs', requireAuth, (req, res) => {
+  const status = req.query.status || 'open';
+  const tabs = db.prepare('SELECT * FROM tabs WHERE status=? ORDER BY created_at DESC').all(status);
+  res.json(tabs.map(tabWithDetails));
+});
+
+// Rekening afsluiten: alle openstaande bestellingen op betaald
+app.post('/api/tabs/:id/close', requireAuth, (req, res) => {
+  const { method } = req.body; // 'cash' | 'sumup' | 'invoice'
+  const t = db.prepare('SELECT * FROM tabs WHERE id=?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Rekening niet gevonden' });
+  const m = ['cash','sumup','invoice'].includes(method) ? method : 'cash';
+  db.prepare("UPDATE orders SET cash_paid=1, method=?, updated_at=datetime('now') WHERE tab_id=? AND cash_paid=0").run(m, t.id);
+  db.prepare("UPDATE tabs SET status='closed', closed_at=datetime('now') WHERE id=?").run(t.id);
+  const orders = db.prepare('SELECT * FROM orders WHERE tab_id=?').all(t.id);
+  orders.forEach(o => broadcast('order_updated', { order: hydrate(o) }));
+  res.json({ ok: true, tab: tabWithDetails(db.prepare('SELECT * FROM tabs WHERE id=?').get(t.id)) });
+});
+
+// ── Verkochte items per dag ──────────────────────────────────────
+app.get('/api/stats/items-sold', requireAuth, (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0,10);
+  const to = req.query.to || from;
+  const rows = db.prepare(`
+    SELECT oi.name, oi.icon, SUM(oi.qty) as qty, SUM(oi.price*oi.qty) as revenue, p.category
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    LEFT JOIN products p ON p.id = oi.product_id
+    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+      AND o.status NOT IN ('cancelled','pending')
+    GROUP BY oi.name, oi.icon, p.category
+    ORDER BY qty DESC
+  `).all(from, to);
+  const totalItems = rows.reduce((s,r)=>s+r.qty,0);
+  const totalRevenue = rows.reduce((s,r)=>s+r.revenue,0);
+  res.json({ from, to, items: rows, total_items: totalItems, total_revenue: totalRevenue });
+});
+
+// ── Vrije factuur via Billit (bv. voor een rekening/groep) ──────
+app.post('/api/billit/invoice-custom', requireAuth, async (req, res) => {
+  const { customerName, customerVat, customerEmail, customerAddress, customerCity, customerZip, lines, tabId, send } = req.body;
+  if (!customerName) return res.status(400).json({ error: 'Klantnaam vereist' });
+
+  // Lijnen: ofwel meegegeven, ofwel uit een rekening (tab) halen
+  let invoiceLines = lines;
+  if ((!invoiceLines || !invoiceLines.length) && tabId) {
+    const t = db.prepare('SELECT * FROM tabs WHERE id=?').get(tabId);
+    if (!t) return res.status(404).json({ error: 'Rekening niet gevonden' });
+    invoiceLines = tabWithDetails(t).items.map(i => ({
+      description: i.name, qty: i.qty, unit_price_incl: i.price,
+    }));
+  }
+  if (!invoiceLines || !invoiceLines.length) return res.status(400).json({ error: 'Geen factuurregels' });
+
+  const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
+  try {
+    const orderLines = invoiceLines.map(l => {
+      const vatR = l.vat_rate != null ? parseFloat(l.vat_rate) : vatDrinks;
+      const incl = parseFloat(l.unit_price_incl);
+      const excl = incl / (1 + vatR/100);
+      return {
+        Quantity: parseInt(l.qty) || 1,
+        UnitPriceExcl: parseFloat(excl.toFixed(4)),
+        Description: l.description,
+        VATPercentage: vatR,
+      };
+    });
+    const payload = {
+      OrderType: 'Invoice',
+      OrderDirection: 'Income',
+      OrderDate: new Date().toISOString().slice(0,10),
+      Customer: {
+        Name: customerName,
+        VATNumber: customerVat || undefined,
+        Contact: customerEmail ? { Email: customerEmail } : undefined,
+        Addresses: [{
+          AddressType: 'InvoiceAddress',
+          Name: customerName,
+          Street: customerAddress || '',
+          City: customerCity || '',
+          Zipcode: customerZip || '',
+          CountryCode: 'BE',
+        }],
+      },
+      OrderLines: orderLines,
+    };
+    const created = await billitRequest('POST', '/v1/orders', payload);
+    const orderId = created?.OrderID || created;
+
+    // Optioneel meteen verzenden via Billit (e-mail)
+    let sent = false;
+    if (send && customerEmail && orderId) {
+      try {
+        await billitRequest('POST', '/v1/orders/commands/send', {
+          Transporttype: 'SMTP',
+          OrderIDs: [orderId],
+        });
+        sent = true;
+      } catch(e) { /* factuur bestaat, verzenden faalde */ }
+    }
+    // Rekening afsluiten indien vanuit tab
+    if (tabId) {
+      db.prepare("UPDATE orders SET cash_paid=1, method='invoice', updated_at=datetime('now') WHERE tab_id=? AND cash_paid=0").run(tabId);
+      db.prepare("UPDATE tabs SET status='closed', closed_at=datetime('now') WHERE id=?").run(tabId);
+    }
+    res.json({ ok: true, billit_order_id: orderId, sent });
+  } catch(e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // ── Data resetten (voor live gaan) ───────────────────────────────
 // Verwijdert alle bestellingen, verkopen en boekhoud-data.
 // Producten en instellingen blijven behouden. Vereist bevestiging.
@@ -994,6 +1142,7 @@ app.post('/api/reset', requireAuth, (req, res) => {
     db.prepare('DELETE FROM orders').run();
     db.prepare('DELETE FROM stock_log').run();
     db.prepare('DELETE FROM sumup_sales').run();
+    db.prepare('DELETE FROM tabs').run();
     // Verwijder dagontvangsten/factuur-referenties uit settings
     const keys = db.prepare("SELECT key FROM settings WHERE key LIKE 'daily_receipt_%' OR key LIKE 'invoice_%'").all();
     const delSetting = db.prepare('DELETE FROM settings WHERE key=?');

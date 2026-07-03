@@ -89,6 +89,13 @@ window.API = (() => {
       save: (s) => req('POST', '/api/settings', s),
     },
     stock: { log: () => req('GET', '/api/stock/log') },
+    tabs: {
+      list:   ()        => req('GET',  '/api/tabs?status=open'),
+      create: (name)    => req('POST', '/api/tabs', { name }),
+      close:  (id, m)   => req('POST', `/api/tabs/${id}/close`, { method: m }),
+    },
+    itemsSold: (from, to) => req('GET', `/api/stats/items-sold?from=${from}&to=${to||from}`),
+    billitInvoice: (data) => req('POST', '/api/billit/invoice-custom', data),
     reset: (opts) => req('POST', '/api/reset', opts),
   };
 })();

@@ -106,6 +106,7 @@ tr:last-child td{border-bottom:none;}
 
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('cashbook',this)">📒 Kasdagboek</button>
+  <button class="nav-btn" onclick="showScreen('itemssold',this);initItemsSold()">📊 Verkochte items</button>
   <button class="nav-btn" onclick="showScreen('daily',this);initDaily()">📅 Dagontvangsten</button>
   <button class="nav-btn" onclick="showScreen('invoice',this);initInvoice()">🧾 Maandfactuur</button>
 </div>
@@ -130,6 +131,21 @@ tr:last-child td{border-bottom:none;}
     <div id="cb-content">
       <div class="empty"><div class="empty-icon">📒</div><div>Kies een periode en klik "Tonen"</div></div>
     </div>
+  </div>
+</div>
+
+<!-- Verkochte items -->
+<div id="screen-itemssold" class="screen">
+  <div class="wrap">
+    <div class="controls no-print">
+      <label>Van</label>
+      <input type="date" id="is-from">
+      <label>Tot</label>
+      <input type="date" id="is-to">
+      <button class="btn btn-primary" onclick="loadItemsSold()">Tonen</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
+    </div>
+    <div id="itemssold-content"><div style="color:var(--mu);font-size:13px;padding:20px;text-align:center;">Kies een periode en klik op Tonen.</div></div>
   </div>
 </div>
 
@@ -260,6 +276,61 @@ function renderCashbook(data){
 
 // Invoice
 // ── Dagontvangsten (Billit-categorieën overzicht) ──
+// ── Verkochte items ──
+function initItemsSold(){
+  const today = new Date().toISOString().slice(0,10);
+  if (!document.getElementById('is-from').value) document.getElementById('is-from').value = today;
+  if (!document.getElementById('is-to').value) document.getElementById('is-to').value = today;
+  loadItemsSold();
+}
+
+async function loadItemsSold(){
+  const from = document.getElementById('is-from').value;
+  const to = document.getElementById('is-to').value || from;
+  const el = document.getElementById('itemssold-content');
+  el.innerHTML = '<div style="color:var(--mu);font-size:13px;padding:20px;text-align:center;">Laden…</div>';
+  try {
+    const d = await API.itemsSold(from, to);
+    if (!d.items.length) {
+      el.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:24px;text-align:center;">Geen verkopen in deze periode.</div>';
+      return;
+    }
+    const maxQty = Math.max(...d.items.map(i=>i.qty));
+    // Groepeer per categorie
+    const groups = {}; const order = [];
+    d.items.forEach(i => {
+      const c = i.category || 'Overige';
+      if (!groups[c]) { groups[c] = []; order.push(c); }
+      groups[c].push(i);
+    });
+    let html = `<div class="cb-summary" style="margin-bottom:16px;">
+      <div class="cb-stat"><div class="cb-stat-n">${d.total_items}</div><div class="cb-stat-l">Items verkocht</div></div>
+      <div class="cb-stat"><div class="cb-stat-n">${fmt(d.total_revenue)}</div><div class="cb-stat-l">Omzet items</div></div>
+      <div class="cb-stat"><div class="cb-stat-n">${d.items.length}</div><div class="cb-stat-l">Verschillende producten</div></div>
+    </div>`;
+    order.forEach(cat => {
+      html += `<div style="font-size:14px;font-weight:700;color:var(--sun-t);margin:16px 2px 8px;padding-bottom:5px;border-bottom:2px solid var(--sun);">${cat}</div>`;
+      html += groups[cat].map(i => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:0.5px solid var(--bd);">
+          <span style="font-size:18px;">${i.icon||'🍺'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:600;color:var(--tx);">${i.name}</div>
+            <div style="height:6px;background:var(--bg);border-radius:3px;margin-top:4px;overflow:hidden;">
+              <div style="height:100%;width:${Math.max(4,(i.qty/maxQty*100))}%;background:var(--sun);border-radius:3px;"></div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:17px;font-weight:700;color:var(--sun-d);">${i.qty}×</div>
+            <div style="font-size:12px;color:var(--mu);">${fmt(i.revenue)}</div>
+          </div>
+        </div>`).join('');
+    });
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--coral-d);font-size:13px;padding:16px;">Fout: ${e.message}</div>`;
+  }
+}
+
 function initDaily(){
   const d = document.getElementById('daily-date');
   if (!d.value) d.value = new Date().toISOString().slice(0,10);
