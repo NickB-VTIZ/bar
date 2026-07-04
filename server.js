@@ -1110,23 +1110,40 @@ app.post('/api/billit/invoice-custom', requireAuth, async (req, res) => {
         VATPercentage: vatR,
       };
     });
+    // Straat en huisnummer splitsen (Billit verwacht Street + StreetNumber apart)
+    const addrRaw = (customerAddress || '').trim();
+    const addrMatch = addrRaw.match(/^(.*?)[\s,]+(\d+[a-zA-Z]?(?:\s*(?:bus|b)\s*\w+)?)$/);
+    const street = addrMatch ? addrMatch[1].trim() : addrRaw;
+    const streetNumber = addrMatch ? addrMatch[2].trim() : '';
+
+    const today = new Date();
+    const expiry = new Date(today.getTime() + 14*24*3600*1000); // 14 dagen betaaltermijn
+
+    // Customer volgens Billit Party-model: Email/PartyType rechtstreeks op het object
+    const customer = {
+      Name: customerName,
+      PartyType: 'Customer',
+      Language: 'NL',
+      Addresses: [{
+        AddressType: 'InvoiceAddress',
+        Name: customerName,
+        Street: street,
+        StreetNumber: streetNumber,
+        City: customerCity || '',
+        Zipcode: customerZip || '',
+        CountryCode: 'BE',
+      }],
+    };
+    if (customerVat) customer.VATNumber = customerVat.replace(/[\s.]/g, '');
+    if (customerEmail) customer.Email = customerEmail;
+
     const payload = {
       OrderType: 'Invoice',
       OrderDirection: 'Income',
-      OrderDate: new Date().toISOString().slice(0,10),
-      Customer: {
-        Name: customerName,
-        VATNumber: customerVat || undefined,
-        Contact: customerEmail ? { Email: customerEmail } : undefined,
-        Addresses: [{
-          AddressType: 'InvoiceAddress',
-          Name: customerName,
-          Street: customerAddress || '',
-          City: customerCity || '',
-          Zipcode: customerZip || '',
-          CountryCode: 'BE',
-        }],
-      },
+      OrderDate: today.toISOString().slice(0,10),
+      ExpiryDate: expiry.toISOString().slice(0,10),
+      Currency: 'EUR',
+      Customer: customer,
       OrderLines: orderLines,
     };
     const created = await billitRequest('POST', '/v1/orders', payload);
