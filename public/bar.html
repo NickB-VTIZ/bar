@@ -129,6 +129,26 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 
 /* Betaal modal */
 .pay-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;align-items:flex-end;justify-content:center;}
+.qo-modal{background:var(--card);border-radius:20px;padding:18px 20px;width:min(980px,96vw);height:min(640px,90vh);display:flex;flex-direction:column;box-sizing:border-box;}
+.qo-panes{display:flex;gap:16px;flex:1;min-height:0;}
+.qo-left{flex:1.7;overflow-y:auto;min-height:0;padding-right:6px;-webkit-overflow-scrolling:touch;}
+.qo-right{flex:1;max-width:300px;display:flex;flex-direction:column;gap:10px;min-height:0;}
+.qo-prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;}
+.qo-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--bg);border:0.5px solid var(--bd);border-radius:10px;padding:10px 6px 8px;cursor:pointer;text-align:center;user-select:none;transition:all .1s;}
+.qo-tile:active{transform:scale(.96);}
+.qo-tile.sel{background:var(--sun-l);border-color:var(--sun);}
+.qo-tile-icon{font-size:26px;height:30px;display:flex;align-items:center;}
+.qo-tile-name{font-size:12px;font-weight:600;color:var(--tx);line-height:1.2;max-height:2.4em;overflow:hidden;}
+.qo-tile-price{font-size:12px;font-weight:700;color:var(--sun-d);}
+.qo-tile-qty{position:absolute;top:5px;right:5px;background:var(--sun);color:var(--sun-t);font-size:12px;font-weight:800;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 4px;}
+.qo-tile-min{position:absolute;top:5px;left:5px;background:var(--coral-l);color:var(--coral-d);border:0.5px solid var(--coral);font-size:16px;font-weight:800;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;line-height:1;cursor:pointer;}
+@media(max-width:680px){
+  .qo-modal{height:92vh;padding:14px;}
+  .qo-panes{flex-direction:column;}
+  .qo-left{flex:1;}
+  .qo-right{max-width:none;flex:0 0 auto;}
+  .qo-prods{grid-template-columns:repeat(3,1fr);}
+}
 .qo-cat-heading{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--sun-t);margin:10px 2px 2px;padding-bottom:4px;border-bottom:2px solid var(--sun);}
 .qo-cat-heading:first-child{margin-top:0;}
 .qo-row{display:flex;align-items:center;gap:11px;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:8px;cursor:pointer;transition:all .12s;}
@@ -143,20 +163,25 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .qo-step{width:30px;height:30px;border:none;background:var(--sun);color:var(--sun-t);font-size:19px;font-weight:700;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;padding:0;}
 .qo-step-qty{min-width:24px;text-align:center;font-size:16px;font-weight:700;color:var(--tx);}
 .pay-modal-bg.show{display:flex;}
-.pay-modal{background:var(--card);border-radius:20px 20px 0 0;padding:22px;width:100%;max-width:480px;}
-.pay-modal-handle{width:36px;height:4px;background:var(--bd);border-radius:2px;margin:0 auto 16px;}
-.pay-modal-title{font-size:18px;font-weight:600;color:var(--tx);margin-bottom:2px;}
-.pay-modal-sub{font-size:13px;color:var(--mu);margin-bottom:4px;}
-.pay-modal-amt{font-size:48px;font-weight:700;color:var(--sun-d);text-align:center;margin:14px 0;}
-.pay-modal-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
-.pay-modal-method{padding:16px;border:0.5px solid var(--bd);border-radius:var(--r);background:var(--bg);cursor:pointer;text-align:center;transition:all .12s;}
-.pay-modal-method:active{transform:scale(.97);}
-.pay-modal-method.sel{border-color:var(--teal);background:var(--teal-l);}
-.pay-modal-method-icon{font-size:28px;margin-bottom:6px;}
-.pay-modal-method-label{font-size:14px;font-weight:600;color:var(--tx);}
-.pay-modal-method-sub{font-size:12px;color:var(--mu);margin-top:2px;}
-.pay-modal-confirm{width:100%;padding:15px;font-size:16px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--r);cursor:pointer;margin-bottom:10px;}
-.pay-modal-cancel{width:100%;padding:11px;font-size:14px;background:none;border:none;color:var(--mu);cursor:pointer;}
+.pay-modal-bg{align-items:center !important;padding:16px;}
+.pay-modal{background:var(--card);border-radius:20px;padding:20px 22px;width:min(920px,96vw);max-height:92vh;display:flex;flex-direction:column;box-sizing:border-box;}
+.pay-panes{display:flex;gap:18px;flex:1;min-height:0;margin-bottom:14px;}
+.pay-left{flex:1.1;display:flex;flex-direction:column;gap:10px;min-width:0;}
+.pay-right{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;}
+.pay-methods-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.pay-method-tile{padding:12px 8px;border:0.5px solid var(--bd);border-radius:12px;background:var(--bg);cursor:pointer;text-align:center;transition:all .12s;}
+.pay-method-tile.sel{border-color:var(--teal);background:var(--teal-l);color:var(--teal-d);}
+.pay-method-tile:active{transform:scale(.97);}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.numpad button{padding:16px 0;font-size:22px;font-weight:700;background:var(--bg);border:0.5px solid var(--bd);border-radius:10px;color:var(--tx);cursor:pointer;transition:all .1s;}
+.numpad button:active{transform:scale(.94);background:var(--sun-l);}
+.pay-modal-confirm{width:100%;padding:18px;font-size:18px;font-weight:800;background:var(--teal);color:#fff;border:none;border-radius:14px;cursor:pointer;}
+.pay-modal-confirm:disabled{opacity:.55;cursor:not-allowed;}
+/* Op smallere schermen stapelen we */
+@media(max-width:720px){
+  .pay-panes{flex-direction:column;}
+  .pay-modal{width:100%;max-width:520px;max-height:96vh;overflow-y:auto;}
+}
 
 @keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(12deg)}30%{transform:rotate(-10deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}75%{transform:rotate(4deg)}}
 .ring{animation:ring .6s ease;}
@@ -208,11 +233,11 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 
 <!-- Orders -->
 <div id="screen-orders" class="screen on">
-  <div class="stat-row">
+  <div class="stat-row" style="display:none;">
     <div class="stat s-open"><div class="stat-n" id="s-open">0</div><div class="stat-l">🔴 Nieuw</div></div>
     <div class="stat"><div class="stat-n" id="s-prep">0</div><div class="stat-l">🟡 Bezig</div></div>
     <div class="stat"><div class="stat-n" id="s-ready">0</div><div class="stat-l">✅ Klaar</div></div>
-    <div class="stat s-rev"><div class="stat-n" id="s-rev">€0</div><div class="stat-l">💶 Vandaag</div></div>
+    <div class="stat s-rev"><div class="stat-n" id="s-tabs">0</div><div class="stat-l">📋 Rekeningen</div></div>
   </div>
   <div class="stock-alert" id="stock-alert">
     <div class="stock-alert-title">⚠️ Lage stock</div>
@@ -266,94 +291,161 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 <!-- Quick order FAB -->
 <button onclick="openQuickOrder()" style="position:fixed;bottom:72px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--teal);color:#fff;font-size:24px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:30;box-shadow:0 3px 10px rgba(0,0,0,.15);" title="Nieuwe bestelling">+</button>
 
-<!-- Quick order sheet -->
-<div id="quick-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;align-items:flex-end;justify-content:center;">
-  <div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;">
-    <div style="width:36px;height:4px;background:var(--bd);border-radius:2px;margin:0 auto 16px;"></div>
-    <div style="font-size:17px;font-weight:600;margin-bottom:4px;color:var(--tx);">Snelle bestelling</div>
-    <div style="font-size:13px;color:var(--mu);margin-bottom:14px;">Voeg een bestelling toe namens de klant</div>
-
-    <!-- Products quick list -->
-    <div id="qo-grid" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-height:42vh;overflow-y:auto;"></div>
-
-    <!-- Cart summary -->
-    <div id="qo-cart" style="background:var(--bg);border-radius:var(--rm);padding:10px 12px;margin-bottom:10px;min-height:40px;font-size:13px;color:var(--mu);">Niets gekozen</div>
-
-    <input id="qo-note" type="text" placeholder="Opmerking (optioneel)" style="width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:10px;">
-
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-      <div id="qo-pm-cash" class="method-btn" onclick="qoSelPay('cash')" style="padding:12px 6px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);cursor:pointer;text-align:center;">
-        <div style="font-size:20px;margin-bottom:4px;">💶</div>
-        <div style="font-size:12px;font-weight:600;color:var(--sun-t);">Cash</div>
+<!-- Quick order sheet (twee panelen: links producten, rechts bestelling) -->
+<div id="quick-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;align-items:center;justify-content:center;padding:16px;">
+  <div class="qo-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div>
+        <div style="font-size:17px;font-weight:700;color:var(--tx);">Snelle bestelling</div>
+        <div style="font-size:12px;color:var(--mu);">Tik producten links · bevestig rechts</div>
       </div>
-      <div id="qo-pm-mollie" class="method-btn" onclick="qoSelPay('mollie')" style="padding:12px 6px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
-        <div style="font-size:20px;margin-bottom:4px;">🏦</div>
-        <div style="font-size:12px;font-weight:600;color:var(--tx);">Bancontact</div>
-      </div>
-      <div id="qo-pm-tab" class="method-btn" onclick="qoSelPay('tab')" style="padding:12px 6px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
-        <div style="font-size:20px;margin-bottom:4px;">📋</div>
-        <div style="font-size:12px;font-weight:600;color:var(--tx);">Op rekening</div>
+      <button onclick="closeQuickOrder()" style="background:none;border:none;font-size:22px;color:var(--mu);cursor:pointer;padding:4px 8px;">✕</button>
+    </div>
+    <div class="qo-panes">
+      <!-- LINKS: producten in compact raster per categorie -->
+      <div class="qo-left" id="qo-grid"></div>
+
+      <!-- RECHTS: bestelling, betaalwijze, bevestigen — altijd zichtbaar -->
+      <div class="qo-right">
+        <div style="font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;">Bestelling</div>
+        <div id="qo-cart" style="flex:1;overflow-y:auto;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:10px 12px;min-height:60px;font-size:13px;color:var(--mu);">Niets gekozen</div>
+
+        <input id="qo-note" type="text" placeholder="Opmerking (optioneel)" style="width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);box-sizing:border-box;">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+          <div id="qo-pm-cash" class="method-btn" onclick="qoSelPay('cash')" style="padding:10px 4px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);cursor:pointer;text-align:center;">
+            <div style="font-size:18px;margin-bottom:2px;">💶</div>
+            <div style="font-size:11px;font-weight:600;color:var(--sun-t);">Cash</div>
+          </div>
+          <div id="qo-pm-mollie" class="method-btn" onclick="qoSelPay('mollie')" style="padding:10px 4px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
+            <div style="font-size:18px;margin-bottom:2px;">🏦</div>
+            <div style="font-size:11px;font-weight:600;color:var(--tx);">Bancontact</div>
+          </div>
+          <div id="qo-pm-tab" class="method-btn" onclick="qoSelPay('tab')" style="padding:10px 4px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
+            <div style="font-size:18px;margin-bottom:2px;">📋</div>
+            <div style="font-size:11px;font-weight:600;color:var(--tx);">Rekening</div>
+          </div>
+        </div>
+
+        <!-- Rekening kiezen/aanmaken (enkel bij Op rekening) -->
+        <div id="qo-tab-select" style="display:none;">
+          <select id="qo-tab-dropdown" style="width:100%;font-size:13px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:6px;box-sizing:border-box;">
+            <option value="">— Kies een rekening —</option>
+          </select>
+          <div style="display:flex;gap:6px;">
+            <input id="qo-tab-new" type="text" placeholder="Nieuwe rekening" style="flex:1;min-width:0;font-size:12px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);">
+            <button onclick="qoCreateTab()" style="padding:9px 12px;font-size:12px;font-weight:600;background:var(--sun);color:var(--sun-t);border:none;border-radius:var(--rm);cursor:pointer;white-space:nowrap;">+ Maak</button>
+          </div>
+        </div>
+
+        <button onclick="submitQuickOrder()" style="width:100%;padding:14px;font-size:15px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;" id="qo-submit-btn">Bestelling plaatsen</button>
       </div>
     </div>
-
-    <!-- Rekening kiezen/aanmaken (enkel bij Op rekening) -->
-    <div id="qo-tab-select" style="display:none;margin-bottom:10px;">
-      <select id="qo-tab-dropdown" style="width:100%;font-size:14px;padding:11px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:8px;">
-        <option value="">— Kies een rekening —</option>
-      </select>
-      <div style="display:flex;gap:8px;">
-        <input id="qo-tab-new" type="text" placeholder="Of nieuwe rekening (bv. Tafel Jef)" style="flex:1;font-size:13px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);">
-        <button onclick="qoCreateTab()" style="padding:10px 16px;font-size:13px;font-weight:600;background:var(--sun);color:var(--sun-t);border:none;border-radius:var(--rm);cursor:pointer;">+ Maak</button>
-      </div>
-    </div>
-
-    <button onclick="submitQuickOrder()" style="width:100%;padding:14px;font-size:15px;font-weight:600;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;margin-bottom:8px;" id="qo-submit-btn">Bestelling plaatsen</button>
-    <button onclick="closeQuickOrder()" style="width:100%;padding:11px;font-size:14px;background:none;border:none;color:var(--mu);cursor:pointer;">Annuleren</button>
   </div>
 </div>
-<!-- Cash betaal modal -->
+<!-- Betaal modal (tablet-vriendelijk, twee panelen) -->
 <div class="pay-modal-bg" id="pay-modal-bg">
   <div class="pay-modal">
-    <div class="pay-modal-handle"></div>
-    <div class="pay-modal-title">Betaling registreren</div>
-    <div class="pay-modal-sub" id="pay-modal-order">Bestelling #—</div>
-    <div class="pay-modal-amt" id="pay-modal-amt">€ 0,00</div>
-    <div class="pay-modal-methods">
-      <div class="pay-modal-method sel" id="pm-cash-modal" onclick="selPayModal('cash')">
-        <div class="pay-modal-method-icon">💶</div>
-        <div class="pay-modal-method-label">Cash</div>
-        <div class="pay-modal-method-sub">Contant ontvangen</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:var(--tx);">Afrekenen</div>
+        <div style="font-size:13px;color:var(--mu);" id="pay-modal-order">Bestelling #—</div>
       </div>
-      <div class="pay-modal-method" id="pm-sumup-modal" onclick="selPayModal('sumup')">
-        <div class="pay-modal-method-icon">💳</div>
-        <div class="pay-modal-method-label">SumUp</div>
-        <div class="pay-modal-method-sub">Kaartlezer</div>
-      </div>
+      <button onclick="closePayModal()" style="background:none;border:none;font-size:24px;color:var(--mu);cursor:pointer;padding:4px 8px;">✕</button>
     </div>
-    <!-- Wisselgeld-rekenhulp (enkel bij cash) -->
-    <div id="change-calc" style="margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:600;color:var(--mu);margin-bottom:8px;">Wisselgeld berekenen</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <span style="font-size:14px;color:var(--mu);white-space:nowrap;">Klant geeft</span>
-        <div style="flex:1;display:flex;align-items:center;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:0 12px;">
-          <span style="font-size:18px;color:var(--mu);">€</span>
-          <input id="cash-given" type="number" inputmode="decimal" step="0.50" min="0" placeholder="0,00"
-            oninput="calcChange()" style="flex:1;border:none;background:none;font-size:20px;font-weight:600;color:var(--tx);padding:11px 6px;outline:none;width:100%;">
+
+    <div class="pay-panes">
+      <!-- LINKS: bestelling + rekenhulp -->
+      <div class="pay-left">
+        <div style="font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Bestelling</div>
+        <div id="pay-items-list" style="flex:1;overflow-y:auto;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:10px 12px;font-size:13px;color:var(--tx);min-height:80px;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 4px 4px;">
+          <span style="font-size:14px;font-weight:600;color:var(--mu);">Totaal</span>
+          <span id="pay-modal-amt" style="font-size:34px;font-weight:800;color:var(--sun-d);line-height:1;">€ 0,00</span>
+        </div>
+
+        <!-- Methodekeuze -->
+        <div class="pay-methods-row">
+          <div class="pay-method-tile sel" id="pm-cash-modal" onclick="selPayModal('cash')">
+            <div style="font-size:22px;">💶</div>
+            <div style="font-size:13px;font-weight:700;">Cash</div>
+          </div>
+          <div class="pay-method-tile" id="pm-sumup-modal" onclick="selPayModal('sumup')">
+            <div style="font-size:22px;">💳</div>
+            <div style="font-size:13px;font-weight:700;">SumUp</div>
+          </div>
         </div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;" id="cash-quick"></div>
-      <div id="change-result" style="background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--r);padding:14px;text-align:center;display:none;">
-        <div style="font-size:13px;color:var(--teal-d);">Wisselgeld terug te geven</div>
-        <div id="change-amount" style="font-size:36px;font-weight:700;color:var(--teal-d);line-height:1.1;margin-top:2px;">€ 0,00</div>
+
+      <!-- RECHTS: cash-rekenhulp (verberg bij SumUp) -->
+      <div class="pay-right" id="change-calc">
+        <div style="font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;">Klant geeft</div>
+        <div style="display:flex;align-items:center;background:var(--card);border:2px solid var(--sun);border-radius:12px;padding:0 14px;">
+          <span style="font-size:22px;color:var(--sun-d);font-weight:700;">€</span>
+          <input id="cash-given" type="text" inputmode="decimal" placeholder="0,00" readonly
+            style="flex:1;border:none;background:none;font-size:32px;font-weight:800;color:var(--tx);padding:12px 8px;outline:none;width:100%;text-align:right;">
+        </div>
+
+        <!-- Snelknoppen: gepast + volgende euro's + briefjes -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="cash-quick"></div>
+
+        <!-- Numeriek toetsenbord voor tablet-invoer -->
+        <div class="numpad">
+          <button onclick="numpadInput('1')">1</button>
+          <button onclick="numpadInput('2')">2</button>
+          <button onclick="numpadInput('3')">3</button>
+          <button onclick="numpadInput('4')">4</button>
+          <button onclick="numpadInput('5')">5</button>
+          <button onclick="numpadInput('6')">6</button>
+          <button onclick="numpadInput('7')">7</button>
+          <button onclick="numpadInput('8')">8</button>
+          <button onclick="numpadInput('9')">9</button>
+          <button onclick="numpadInput(',')" style="font-weight:800;">,</button>
+          <button onclick="numpadInput('0')">0</button>
+          <button onclick="numpadInput('back')" style="background:var(--coral-l);color:var(--coral-d);">⌫</button>
+        </div>
+
+        <!-- Resultaat wisselgeld -->
+        <div id="change-result" style="background:var(--teal-l);border:2px solid var(--teal);border-radius:12px;padding:10px 14px;text-align:center;display:none;">
+          <div style="font-size:12px;color:var(--teal-d);font-weight:600;">Wisselgeld</div>
+          <div id="change-amount" style="font-size:32px;font-weight:800;color:var(--teal-d);line-height:1.1;">€ 0,00</div>
+        </div>
+        <div id="change-short" style="background:var(--coral-l);border:1px solid var(--coral);border-radius:10px;padding:10px;text-align:center;display:none;font-size:14px;color:var(--coral-d);font-weight:700;"></div>
       </div>
-      <div id="change-short" style="background:var(--coral-l);border:0.5px solid var(--coral);border-radius:var(--r);padding:12px;text-align:center;display:none;font-size:14px;color:var(--coral-d);font-weight:600;"></div>
     </div>
-    <button class="pay-modal-confirm" id="pay-modal-confirm" onclick="confirmCashPayment()">✅ Betaling bevestigen</button>
-    <button class="pay-modal-cancel" onclick="closePayModal()">Annuleren</button>
+
+    <button class="pay-modal-confirm" id="pay-modal-confirm" onclick="confirmCashPayment()">✅ Cash ontvangen</button>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Factuur voor een losse bestelling -->
+<div id="order-invoice-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:65;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--card);border-radius:16px;padding:20px 22px;width:min(520px,96vw);max-height:92vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div>
+        <div style="font-size:17px;font-weight:800;color:var(--tx);">🧾 Factuur aanmaken</div>
+        <div style="font-size:12px;color:var(--mu);" id="oi-order-label">Bestelling #—</div>
+      </div>
+      <button onclick="closeOrderInvoice()" style="background:none;border:none;font-size:22px;color:var(--mu);cursor:pointer;">✕</button>
+    </div>
+    <div id="oi-items-preview" style="background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:10px 12px;font-size:13px;color:var(--tx);margin-bottom:12px;max-height:180px;overflow-y:auto;"></div>
+    <div style="font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Klantgegevens</div>
+    <input id="oi-name" placeholder="Bedrijfs-/klantnaam *" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:8px;box-sizing:border-box;">
+    <input id="oi-vat" placeholder="BTW-nummer (BE0…)" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:8px;box-sizing:border-box;">
+    <input id="oi-email" type="email" placeholder="E-mailadres (voor verzending)" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:8px;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input id="oi-address" placeholder="Straat + nr" style="flex:2;min-width:0;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);box-sizing:border-box;">
+      <input id="oi-zip" placeholder="Postcode" style="flex:1;min-width:0;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);box-sizing:border-box;">
+    </div>
+    <input id="oi-city" placeholder="Gemeente" style="width:100%;font-size:14px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:10px;box-sizing:border-box;">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx);margin-bottom:14px;cursor:pointer;">
+      <input type="checkbox" id="oi-send" checked style="width:18px;height:18px;"> Meteen verzenden via Billit (e-mail)
+    </label>
+    <button id="oi-submit" onclick="submitOrderInvoice()" style="width:100%;padding:14px;font-size:15px;font-weight:800;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;">🧾 Factuur aanmaken</button>
+  </div>
+</div>
 
 <script src="/api.js"></script>
 <script>
@@ -573,6 +665,15 @@ function cardHTML(o){
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
     <div class="card-method">${isCash?(o.cash_paid?'💶 Cash ✅':'💶 Cash'):isTab?(o.cash_paid?'📋 Rekening ✅':'📋 Op rekening'):isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
     ${actions}
+    ${(o.status !== 'pending' && o.status !== 'cancelled') ? `
+    <div style="border-top:0.5px solid var(--bd);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:${o.invoice_billit_id?'var(--teal-l)':'var(--bg)'};">
+      <span style="font-size:12px;color:${o.invoice_billit_id?'var(--teal-d)':'var(--mu)'};font-weight:${o.invoice_billit_id?'700':'500'};">
+        ${o.invoice_billit_id ? `🧾 Gefactureerd${o.invoice_customer_name?' — '+o.invoice_customer_name:''}` : '🧾 Nog geen factuur'}
+      </span>
+      <button onclick="openOrderInvoice('${o.id}')" style="padding:6px 12px;font-size:12px;font-weight:700;border:0.5px solid var(--sun);border-radius:12px;background:var(--sun-l);color:var(--sun-t);cursor:pointer;white-space:nowrap;">
+        ${o.invoice_billit_id ? '↻ Opnieuw' : 'Factuur maken'}
+      </button>
+    </div>` : ''}
   </div>`;
 }
 
@@ -615,6 +716,7 @@ function openPayModal(orderId, amtFmt, orderNum) {
   payModalAmountNum = o ? (o.amount || 0) : 0;
   document.getElementById('pay-modal-amt').textContent = amtFmt;
   document.getElementById('pay-modal-order').textContent = `Bestelling #${orderNum}`;
+  renderPayItems(o ? o.items : []);
   document.getElementById('pm-cash-modal').classList.add('sel');
   document.getElementById('pm-sumup-modal').classList.remove('sel');
   // Reset wisselgeld + knop (fix voor vastlopende knop)
@@ -623,9 +725,22 @@ function openPayModal(orderId, amtFmt, orderNum) {
   document.getElementById('cash-given').value = '';
   document.getElementById('change-result').style.display = 'none';
   document.getElementById('change-short').style.display = 'none';
-  document.getElementById('change-calc').style.display = 'block';
+  document.getElementById('change-calc').style.display = 'flex';
   renderCashQuickButtons();
   document.getElementById('pay-modal-bg').classList.add('show');
+}
+
+function renderPayItems(items) {
+  const el = document.getElementById('pay-items-list');
+  if (!el) return;
+  if (!items || !items.length) { el.innerHTML = '<div style="color:var(--mu);">Geen items</div>'; return; }
+  el.innerHTML = items.map(i => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--bd);">
+      <span style="font-size:18px;">${i.icon||'🍺'}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}</span>
+      <span style="font-weight:700;color:var(--sun-d);min-width:30px;text-align:right;">${i.qty}×</span>
+      <span style="color:var(--mu);min-width:64px;text-align:right;">€ ${(i.price*i.qty).toFixed(2).replace('.',',')}</span>
+    </div>`).join('');
 }
 
 function closePayModal() {
@@ -639,35 +754,50 @@ function selPayModal(m) {
   document.getElementById('pm-cash-modal').classList.toggle('sel', m==='cash');
   document.getElementById('pm-sumup-modal').classList.toggle('sel', m==='sumup');
   // Wisselgeld enkel relevant bij cash
-  document.getElementById('change-calc').style.display = m === 'cash' ? 'block' : 'none';
+  document.getElementById('change-calc').style.display = m === 'cash' ? 'flex' : 'none';
   document.getElementById('pay-modal-confirm').textContent =
     m === 'sumup' ? '💳 Betaald via SumUp' : '✅ Cash ontvangen';
+}
+
+// Numeriek toetsenbord: bouw het invulveld op
+function numpadInput(k) {
+  const input = document.getElementById('cash-given');
+  let v = input.value || '';
+  if (k === 'back') {
+    v = v.slice(0, -1);
+  } else if (k === ',') {
+    if (!v.includes(',')) v += (v ? '' : '0') + ',';
+  } else {
+    // Voorkom meer dan 2 decimalen na komma
+    if (v.includes(',') && v.split(',')[1].length >= 2) return;
+    v += k;
+  }
+  input.value = v;
+  calcChange();
 }
 
 // Snelknoppen met handige briefjes boven het te betalen bedrag
 function renderCashQuickButtons() {
   const amt = payModalAmountNum;
-  const notes = [5, 10, 20, 50];
+  const notes = [5, 10, 20, 50, 100];
   const suggestions = new Set();
-  // Gepast bedrag
-  suggestions.add(Math.ceil(amt * 100) / 100);
-  // Volgende ronde euro's
-  suggestions.add(Math.ceil(amt));
-  // Briefjes die genoeg zijn
+  suggestions.add(Math.ceil(amt * 100) / 100); // Gepast
+  suggestions.add(Math.ceil(amt));             // Volgende ronde euro
   notes.forEach(n => { if (n >= amt) suggestions.add(n); });
   const sorted = [...suggestions].filter(v => v >= amt).sort((a,b)=>a-b).slice(0,4);
   document.getElementById('cash-quick').innerHTML = sorted.map(v =>
-    `<button onclick="setCashGiven(${v})" style="flex:1;min-width:70px;padding:9px 4px;font-size:14px;font-weight:600;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);cursor:pointer;">€ ${v.toFixed(2).replace('.',',')}</button>`
+    `<button onclick="setCashGiven(${v})" style="padding:12px 8px;font-size:15px;font-weight:700;border:0.5px solid var(--bd);border-radius:10px;background:var(--sun-l);color:var(--sun-t);cursor:pointer;">€ ${v.toFixed(2).replace('.',',')}</button>`
   ).join('');
 }
 
 function setCashGiven(v) {
-  document.getElementById('cash-given').value = v.toFixed(2);
+  document.getElementById('cash-given').value = v.toFixed(2).replace('.', ',');
   calcChange();
 }
 
 function calcChange() {
-  const given = parseFloat(document.getElementById('cash-given').value.replace(',','.')) || 0;
+  const raw = document.getElementById('cash-given').value.replace(',','.').replace(/[^0-9.]/g,'');
+  const given = parseFloat(raw) || 0;
   const result = document.getElementById('change-result');
   const short = document.getElementById('change-short');
   if (given <= 0) {
@@ -730,18 +860,21 @@ function updateTabsBadge() {
   const b = document.getElementById('tabs-count-badge');
   if (openTabs.length) { b.style.display = 'inline-flex'; b.textContent = openTabs.length; }
   else b.style.display = 'none';
+  const st = document.getElementById('s-tabs');
+  if (st) st.textContent = openTabs.length;
 }
 
-// Afrekenen: gebruik de betaalmodal met wisselgeld-rekenhulp
 function settleTab(tabId) {
   const t = openTabs.find(x => x.id === tabId);
   if (!t) return;
   settleTabId = tabId;
-  payModalOrderId = null; // geen losse bestelling, we sluiten een rekening
+  payModalOrderId = null;
   payModalMethod = 'cash';
   payModalAmountNum = t.open_amount;
   document.getElementById('pay-modal-amt').textContent = '€ ' + t.open_amount.toFixed(2).replace('.',',');
   document.getElementById('pay-modal-order').textContent = `Rekening "${t.name}"`;
+  // Toon items van de rekening in het linker paneel
+  renderPayItems(t.items.map(i => ({ icon:i.icon, name:i.name, qty:i.qty, price:i.price })));
   document.getElementById('pm-cash-modal').classList.add('sel');
   document.getElementById('pm-sumup-modal').classList.remove('sel');
   const cbtn = document.getElementById('pay-modal-confirm');
@@ -749,7 +882,7 @@ function settleTab(tabId) {
   document.getElementById('cash-given').value = '';
   document.getElementById('change-result').style.display = 'none';
   document.getElementById('change-short').style.display = 'none';
-  document.getElementById('change-calc').style.display = 'block';
+  document.getElementById('change-calc').style.display = 'flex';
   renderCashQuickButtons();
   closeTabsOverlay();
   document.getElementById('pay-modal-bg').classList.add('show');
@@ -767,6 +900,77 @@ function showInvoiceForm(tabId) {
 function hideInvoiceForm() {
   invoiceTabId = null;
   document.getElementById('tab-invoice-form').style.display = 'none';
+}
+
+// ── Factuur voor een losse bestelling ──
+let invoiceOrderId = null;
+
+function openOrderInvoice(orderId) {
+  const o = orders[orderId];
+  if (!o) return;
+  invoiceOrderId = orderId;
+  document.getElementById('oi-order-label').textContent =
+    `Bestelling #${o.order_number} · ${fmtEur(o.amount)}`;
+  const items = o.items || [];
+  document.getElementById('oi-items-preview').innerHTML = items.map(i => `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--bd);">
+      <span>${i.icon||'🍺'}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}</span>
+      <span style="font-weight:700;color:var(--sun-d);">×${i.qty}</span>
+      <span style="color:var(--mu);min-width:60px;text-align:right;">${fmtEur(i.price*i.qty)}</span>
+    </div>`).join('') + `
+    <div style="display:flex;justify-content:space-between;padding-top:8px;font-size:14px;font-weight:800;">
+      <span>Totaal (incl. BTW)</span><span>${fmtEur(o.amount)}</span>
+    </div>`;
+  // Pre-fill vorige klant als deze bestelling al eens gefactureerd was
+  document.getElementById('oi-name').value = o.invoice_customer_name || '';
+  document.getElementById('oi-vat').value = '';
+  document.getElementById('oi-email').value = '';
+  document.getElementById('oi-address').value = '';
+  document.getElementById('oi-zip').value = '';
+  document.getElementById('oi-city').value = '';
+  document.getElementById('oi-send').checked = true;
+  document.getElementById('order-invoice-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('oi-name').focus(), 50);
+}
+
+function closeOrderInvoice() {
+  document.getElementById('order-invoice-overlay').style.display = 'none';
+  invoiceOrderId = null;
+}
+
+function fmtEur(n) { return '€ ' + (n||0).toFixed(2).replace('.', ','); }
+
+async function submitOrderInvoice() {
+  if (!invoiceOrderId) return;
+  const name = document.getElementById('oi-name').value.trim();
+  if (!name) { toast('Vul de klantnaam in'); return; }
+  const btn = document.getElementById('oi-submit');
+  btn.disabled = true; btn.textContent = 'Factuur aanmaken…';
+  try {
+    const r = await API.billitInvoice({
+      orderId: invoiceOrderId,
+      customerName: name,
+      customerVat: document.getElementById('oi-vat').value.trim(),
+      customerEmail: document.getElementById('oi-email').value.trim(),
+      customerAddress: document.getElementById('oi-address').value.trim(),
+      customerZip: document.getElementById('oi-zip').value.trim(),
+      customerCity: document.getElementById('oi-city').value.trim(),
+      send: document.getElementById('oi-send').checked,
+    });
+    toast(r.sent ? '✅ Factuur aangemaakt en verzonden' : '✅ Factuur aangemaakt in Billit');
+    // Lokaal bijwerken zodat de knop meteen verandert
+    if (orders[invoiceOrderId]) {
+      orders[invoiceOrderId].invoice_billit_id = String(r.billit_order_id||'ok');
+      orders[invoiceOrderId].invoice_customer_name = name;
+      renderBoard();
+    }
+    closeOrderInvoice();
+  } catch(e) {
+    toast('Fout: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🧾 Factuur aanmaken';
+  }
 }
 
 async function submitTabInvoice() {
@@ -830,7 +1034,6 @@ async function confirmCashPayment() {
 async function loadStats(){
   try{
     const s=await API.stats();
-    document.getElementById('s-rev').textContent='€'+Math.round(s.revenue||0);
     if(s.low_stock?.length) showStockAlert(s.low_stock);
   }catch(_){}
 }
@@ -878,36 +1081,26 @@ function qoCatEmoji(cat) {
 }
 
 function renderQoGrid() {
-  // Groepeer per categorie, zelfde stijl als de klant-bestelpagina
+  // Groepeer per categorie — compacte tegels in een raster (weinig scrollen op tablet)
   const groups = {}, order = [];
   products.forEach(p => {
     const cat = p.category || 'Overige';
     if (!groups[cat]) { groups[cat] = []; order.push(cat); }
     groups[cat].push(p);
   });
-  const rowHtml = (p) => {
+  const tileHtml = (p) => {
     const qty = qoCart[p.id] || 0;
-    const thumb = p.image_url
-      ? `<div class="qo-thumb"><img src="${p.image_url}" alt="" onerror="this.parentElement.innerHTML='${p.icon}'"></div>`
-      : `<div class="qo-thumb">${p.icon}</div>`;
-    return `<div class="qo-row ${qty>0?'sel':''}" onclick="${qty>0?'':'qoAddItem('+p.id+')'}">
-      ${thumb}
-      <div class="qo-row-body">
-        <div class="qo-row-name">${p.name}</div>
-        <div class="qo-row-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
-      </div>
-      ${qty>0
-        ? `<div class="qo-stepper" onclick="event.stopPropagation()">
-            <button class="qo-step" onclick="qoChangeQty(${p.id},-1)">−</button>
-            <span class="qo-step-qty">${qty}</span>
-            <button class="qo-step" onclick="qoChangeQty(${p.id},1)">+</button>
-          </div>`
-        : `<div class="qo-add" onclick="event.stopPropagation();qoAddItem(${p.id})">+</div>`}
+    return `<div class="qo-tile ${qty>0?'sel':''}" onclick="qoAddItem(${p.id})">
+      ${qty>0?`<div class="qo-tile-min" onclick="event.stopPropagation();qoChangeQty(${p.id},-1)">−</div>`:''}
+      ${qty>0?`<div class="qo-tile-qty">${qty}</div>`:''}
+      <div class="qo-tile-icon">${p.icon}</div>
+      <div class="qo-tile-name">${p.name}</div>
+      <div class="qo-tile-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
     </div>`;
   };
   document.getElementById('qo-grid').innerHTML = order.map(cat => `
     <div class="qo-cat-heading">${qoCatEmoji(cat)} ${cat}</div>
-    ${groups[cat].map(rowHtml).join('')}
+    <div class="qo-prods">${groups[cat].map(tileHtml).join('')}</div>
   `).join('');
 }
 
@@ -924,17 +1117,25 @@ function qoChangeQty(id, d) {
 
 function renderQoCart() {
   const entries = Object.entries(qoCart).filter(([,q]) => q > 0);
+  const el = document.getElementById('qo-cart');
   if (!entries.length) {
-    document.getElementById('qo-cart').textContent = 'Niets gekozen';
+    el.innerHTML = '<div style="color:var(--mu);font-size:13px;padding:8px 0;">Niets gekozen — tik links een product</div>';
     document.getElementById('qo-submit-btn').disabled = true;
     return;
   }
   document.getElementById('qo-submit-btn').disabled = false;
   const total = entries.reduce((s,[id,q]) => { const p=products.find(x=>x.id==id); return s+(p?p.price*q:0); },0);
-  document.getElementById('qo-cart').innerHTML = entries.map(([id,q]) => {
+  el.innerHTML = entries.map(([id,q]) => {
     const p = products.find(x=>x.id==id); if(!p) return '';
-    return `<span style="margin-right:10px;">${p.icon} ${p.name} ×${q}</span>`;
-  }).join('') + `<strong style="float:right;color:var(--tx);">€ ${total.toFixed(2).replace('.',',')}</strong>`;
+    return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:0.5px solid var(--bd);font-size:13px;color:var(--tx);">
+      <span>${p.icon}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name}</span>
+      <span style="font-weight:700;color:var(--sun-d);">×${q}</span>
+      <span style="color:var(--mu);min-width:52px;text-align:right;">€ ${(p.price*q).toFixed(2).replace('.',',')}</span>
+    </div>`;
+  }).join('') + `<div style="display:flex;justify-content:space-between;padding-top:8px;font-size:15px;font-weight:800;color:var(--tx);">
+    <span>Totaal</span><span>€ ${total.toFixed(2).replace('.',',')}</span>
+  </div>`;
 }
 
 let qoTabs = [];

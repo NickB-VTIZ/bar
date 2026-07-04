@@ -116,6 +116,8 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN tab_id INTEGER`,
   `ALTER TABLE orders ADD COLUMN gift REAL DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN cash_paid INTEGER DEFAULT 0`,
+  `ALTER TABLE orders ADD COLUMN invoice_billit_id TEXT`,
+  `ALTER TABLE orders ADD COLUMN invoice_customer_name TEXT`,
 ];
 
 migrations.forEach(sql => {
@@ -1059,11 +1061,23 @@ app.get('/api/stats/items-sold', requireAuth, (req, res) => {
 
 // ── Vrije factuur via Billit (bv. voor een rekening/groep) ──────
 app.post('/api/billit/invoice-custom', requireAuth, async (req, res) => {
-  const { customerName, customerVat, customerEmail, customerAddress, customerCity, customerZip, lines, tabId, send } = req.body;
+  const { customerName, customerVat, customerEmail, customerAddress, customerCity, customerZip, lines, tabId, orderId, send } = req.body;
   if (!customerName) return res.status(400).json({ error: 'Klantnaam vereist' });
 
-  // Lijnen: ofwel meegegeven, ofwel uit een rekening (tab) halen
+  // Lijnen: uit een losse bestelling, uit een rekening (tab), of expliciet meegegeven
   let invoiceLines = lines;
+  let sourceOrderId = null;
+
+  if ((!invoiceLines || !invoiceLines.length) && orderId) {
+    const o = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+    if (!o) return res.status(404).json({ error: 'Bestelling niet gevonden' });
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(orderId);
+    if (!items.length) return res.status(400).json({ error: 'Bestelling heeft geen items' });
+    invoiceLines = items.map(i => ({
+      description: i.name, qty: i.qty, unit_price_incl: i.price,
+    }));
+    sourceOrderId = orderId;
+  }
   if ((!invoiceLines || !invoiceLines.length) && tabId) {
     const t = db.prepare('SELECT * FROM tabs WHERE id=?').get(tabId);
     if (!t) return res.status(404).json({ error: 'Rekening niet gevonden' });
@@ -1106,15 +1120,15 @@ app.post('/api/billit/invoice-custom', requireAuth, async (req, res) => {
       OrderLines: orderLines,
     };
     const created = await billitRequest('POST', '/v1/orders', payload);
-    const orderId = created?.OrderID || created;
+    const billitOrderId = created?.OrderID || created;
 
     // Optioneel meteen verzenden via Billit (e-mail)
     let sent = false;
-    if (send && customerEmail && orderId) {
+    if (send && customerEmail && billitOrderId) {
       try {
         await billitRequest('POST', '/v1/orders/commands/send', {
           Transporttype: 'SMTP',
-          OrderIDs: [orderId],
+          OrderIDs: [billitOrderId],
         });
         sent = true;
       } catch(e) { /* factuur bestaat, verzenden faalde */ }
@@ -1124,7 +1138,12 @@ app.post('/api/billit/invoice-custom', requireAuth, async (req, res) => {
       db.prepare("UPDATE orders SET cash_paid=1, method='invoice', updated_at=datetime('now') WHERE tab_id=? AND cash_paid=0").run(tabId);
       db.prepare("UPDATE tabs SET status='closed', closed_at=datetime('now') WHERE id=?").run(tabId);
     }
-    res.json({ ok: true, billit_order_id: orderId, sent });
+    // Bestelling markeren als gefactureerd
+    if (sourceOrderId) {
+      db.prepare("UPDATE orders SET invoice_billit_id=?, invoice_customer_name=?, updated_at=datetime('now') WHERE id=?")
+        .run(String(billitOrderId), customerName, sourceOrderId);
+    }
+    res.json({ ok: true, billit_order_id: billitOrderId, sent });
   } catch(e) {
     res.status(400).json({ error: e.message });
   }
