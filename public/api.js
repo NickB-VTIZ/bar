@@ -97,6 +97,13 @@ window.API = (() => {
       close:  (id, m)   => req('POST', `/api/tabs/${id}/close`, { method: m }),
     },
     itemsSold: (from, to) => req('GET', `/api/stats/items-sold?from=${from}&to=${to||from}`),
+    staffDrinks: (from, to) => req('GET', `/api/stats/staff-drinks?from=${from}&to=${to||from}`),
+    profit: (from, to) => req('GET', `/api/stats/profit?from=${from}&to=${to||from}`),
+    staff: {
+      list:   (from,to) => req('GET',    `/api/staff/shifts?from=${from}&to=${to||from}`),
+      add:    (data)    => req('POST',   '/api/staff/shifts', data),
+      remove: (id)      => req('DELETE', `/api/staff/shifts/${id}`),
+    },
     billitInvoice: (data) => req('POST', '/api/billit/invoice-custom', data),
     reset: (opts) => req('POST', '/api/reset', opts),
   };

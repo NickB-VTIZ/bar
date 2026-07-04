@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>—</title>
+<style>
+:root{
+  color-scheme: light;
+  --sun:#FFB700;--sun-d:#E09600;--sun-l:#FCEBC8;--sun-t:#391C14;
+  --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
+  --coral:#D8642F;--coral-l:#FBEADF;--coral-d:#A8431B;
+  --bg:#FDF1DB;--card:#FFFBF2;--bd:#EADBBE;
+  --tx:#391C14;--mu:#8A7256;--mu2:#B3A082;
+  --r:14px;--rm:9px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);margin:0;color:var(--tx);min-height:100vh;}
+.top{background:var(--sun-t);color:var(--sun-l);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;}
+.top .t{font-size:16px;font-weight:800;letter-spacing:.05em;}
+.top a{color:var(--sun);text-decoration:none;font-size:13px;}
+.wrap{max-width:960px;margin:20px auto;padding:0 16px 60px;}
+.card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:14px;}
+.ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+input[type=date]{font-size:14px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);}
+.btn{padding:10px 16px;font-size:14px;font-weight:700;border:none;border-radius:20px;cursor:pointer;}
+.btn-primary{background:var(--sun-t);color:var(--sun);}
+.btn-danger{background:var(--coral);color:#fff;}
+.btn-ghost{background:var(--bg);color:var(--mu);border:0.5px solid var(--bd);}
+.summary{background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--r);padding:14px 16px;font-size:14px;color:var(--sun-t);margin-bottom:16px;}
+.summary strong{font-size:22px;color:var(--sun-d);}
+.order-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:0.5px solid var(--bd);}
+.order-row:last-child{border-bottom:none;}
+.order-row input[type=checkbox]{width:20px;height:20px;flex:0 0 20px;}
+.order-info{flex:1;min-width:0;}
+.order-num{font-size:14px;font-weight:700;color:var(--sun-d);}
+.order-meta{font-size:12px;color:var(--mu);margin-top:2px;}
+.order-items{font-size:12px;color:var(--tx);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.order-amt{font-size:16px;font-weight:800;color:var(--tx);white-space:nowrap;}
+.warn{background:var(--coral-l);border:1px solid var(--coral);border-radius:var(--rm);padding:12px 14px;font-size:13px;color:var(--coral-d);margin-bottom:14px;line-height:1.5;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A1917;color:#F7F6F2;font-size:13px;padding:11px 20px;border-radius:24px;opacity:0;transition:all .25s;z-index:100;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="t">🌑 —</div>
+  <a href="/bar">↩ terug</a>
+</div>
+<div class="wrap" id="login-screen" style="display:none;">
+  <div class="card">
+    <div style="font-size:14px;color:var(--mu);margin-bottom:10px;">Aanmelden vereist.</div>
+    <input id="pw" type="password" placeholder="Wachtwoord" style="width:100%;font-size:15px;padding:11px 14px;border:0.5px solid var(--bd);border-radius:var(--rm);box-sizing:border-box;margin-bottom:10px;">
+    <button class="btn btn-primary" style="width:100%;" onclick="login()">Aanmelden</button>
+  </div>
+</div>
+<div class="wrap" id="main-screen" style="display:none;">
+  <div class="warn">
+    ⚠️ Deze pagina laat toe om cash-bestellingen <strong>permanent</strong> uit het systeem te schrappen.
+    Ze verdwijnen uit alle overzichten (kasdagboek, dagontvangsten, statistieken, historiek) alsof ze nooit hebben bestaan.
+    De voorraad blijft afgetrokken. Deze actie kan niet ongedaan gemaakt worden.
+  </div>
+  <div class="ctrl">
+    <input type="date" id="from-date" onchange="loadOrders()">
+    <span style="color:var(--mu);">tot</span>
+    <input type="date" id="to-date" onchange="loadOrders()">
+    <button class="btn btn-ghost" onclick="setYesterday()">Gisteren</button>
+    <button class="btn btn-ghost" onclick="setToday()">Vandaag</button>
+    <div style="flex:1;"></div>
+    <button class="btn btn-ghost" onclick="toggleAll()">Alles aan/uit</button>
+  </div>
+  <div id="summary" class="summary" style="display:none;"></div>
+  <div class="card" id="orders-container">
+    <div style="color:var(--mu);font-size:14px;padding:20px;text-align:center;">Laden…</div>
+  </div>
+  <button class="btn btn-danger" id="purge-btn" style="width:100%;margin-top:12px;display:none;" onclick="purgeSelected()">🗑 Geselecteerde bestellingen definitief verwijderen</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/api.js"></script>
+<script>
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>t.classList.remove('show'),2400);}
+function fmt(n){return '€ '+(n||0).toFixed(2).replace('.',',');}
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function yesterdayStr(){const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
+function setYesterday(){const y=yesterdayStr();document.getElementById('from-date').value=y;document.getElementById('to-date').value=y;loadOrders();}
+function setToday(){const t=todayStr();document.getElementById('from-date').value=t;document.getElementById('to-date').value=t;loadOrders();}
+
+async function login(){
+  const pw=document.getElementById('pw').value;
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    const d=await r.json();
+    if(d.token){localStorage.setItem('zb_token',d.token);init();}else toast('❌ Fout wachtwoord');
+  }catch(e){toast('Fout: '+e.message);}
+}
+
+let currentOrders=[];
+
+async function loadOrders(){
+  const from=document.getElementById('from-date').value;
+  const to=document.getElementById('to-date').value||from;
+  const el=document.getElementById('orders-container');
+  el.innerHTML='<div style="color:var(--mu);font-size:14px;padding:20px;text-align:center;">Laden…</div>';
+  try{
+    const r=await fetch(`/api/zwartgeld/list?from=${from}&to=${to}`,{headers:{'x-admin-token':localStorage.getItem('zb_token')}});
+    if(r.status===401){document.getElementById('main-screen').style.display='none';document.getElementById('login-screen').style.display='block';return;}
+    const d=await r.json();
+    currentOrders=d.orders;
+    document.getElementById('summary').style.display='block';
+    document.getElementById('summary').innerHTML=`Periode: ${from} → ${to} · <strong>${d.orders.length}</strong> cash-bestellingen · totaal <strong>${fmt(d.total)}</strong>`;
+    if(!d.orders.length){
+      el.innerHTML='<div style="color:var(--mu);font-size:14px;padding:20px;text-align:center;">Geen cash-bestellingen in deze periode.</div>';
+      document.getElementById('purge-btn').style.display='none';
+      return;
+    }
+    el.innerHTML=d.orders.map(o=>{
+      const time=new Date(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      const items=(o.items||[]).map(i=>`${i.qty}× ${i.name}`).join(', ');
+      return `<div class="order-row">
+        <input type="checkbox" data-id="${o.id}" onchange="updateSelection()">
+        <div class="order-info">
+          <div class="order-num">#${o.order_number} · ${time}</div>
+          <div class="order-items">${items}</div>
+          <div class="order-meta">${o.status}${o.note?' · '+o.note:''}</div>
+        </div>
+        <div class="order-amt">${fmt(o.amount)}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('purge-btn').style.display='block';
+    updateSelection();
+  }catch(e){el.innerHTML=`<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`;}
+}
+
+function toggleAll(){
+  const cbs=document.querySelectorAll('input[type=checkbox][data-id]');
+  const anyOff=[...cbs].some(c=>!c.checked);
+  cbs.forEach(c=>c.checked=anyOff);
+  updateSelection();
+}
+
+function updateSelection(){
+  const selected=[...document.querySelectorAll('input[type=checkbox][data-id]:checked')];
+  const btn=document.getElementById('purge-btn');
+  if(!selected.length){btn.textContent='🗑 Selecteer bestellingen om te verwijderen';btn.disabled=true;return;}
+  const total=selected.reduce((s,c)=>{const o=currentOrders.find(x=>x.id===c.dataset.id);return s+(o?o.amount:0);},0);
+  btn.disabled=false;
+  btn.textContent=`🗑 ${selected.length} bestelling(en) definitief verwijderen (${fmt(total)})`;
+}
+
+async function purgeSelected(){
+  const ids=[...document.querySelectorAll('input[type=checkbox][data-id]:checked')].map(c=>c.dataset.id);
+  if(!ids.length)return;
+  if(!confirm(`${ids.length} bestelling(en) definitief verwijderen?\n\nDeze actie kan niet ongedaan gemaakt worden.\nDe bestellingen verdwijnen uit ALLE overzichten en boekhouding.`))return;
+  try{
+    const r=await fetch('/api/zwartgeld/purge',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':localStorage.getItem('zb_token')},body:JSON.stringify({ids})});
+    const d=await r.json();
+    if(d.ok){toast(`✅ ${d.deleted} bestelling(en) verwijderd`);loadOrders();}
+    else toast('Fout: '+(d.error||'onbekend'));
+  }catch(e){toast('Fout: '+e.message);}
+}
+
+async function init(){
+  const t=localStorage.getItem('zb_token');
+  if(!t){document.getElementById('login-screen').style.display='block';return;}
+  // Check token
+  const r=await fetch('/api/zwartgeld/list?from='+todayStr(),{headers:{'x-admin-token':t}});
+  if(r.status===401){localStorage.removeItem('zb_token');document.getElementById('login-screen').style.display='block';return;}
+  document.getElementById('main-screen').style.display='block';
+  setToday();
+}
+init();
+</script>
+</body>
+</html>

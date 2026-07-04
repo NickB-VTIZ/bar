@@ -107,6 +107,8 @@ tr:last-child td{border-bottom:none;}
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('cashbook',this)">📒 Kasdagboek</button>
   <button class="nav-btn" onclick="showScreen('itemssold',this);initItemsSold()">📊 Verkochte items</button>
+  <button class="nav-btn" onclick="showScreen('staffdrinks',this);initStaffDrinks()">🧑‍🍳 Personeel</button>
+  <button class="nav-btn" onclick="showScreen('profit',this);initProfit()">💰 Winst</button>
   <button class="nav-btn" onclick="showScreen('daily',this);initDaily()">📅 Dagontvangsten</button>
   <button class="nav-btn" onclick="showScreen('invoice',this);initInvoice()">🧾 Maandfactuur</button>
 </div>
@@ -119,6 +121,9 @@ tr:last-child td{border-bottom:none;}
       <input type="date" id="cb-from">
       <label>Tot</label>
       <input type="date" id="cb-to">
+      <button class="btn btn-ghost" onclick="setPeriodOn('cb','yesterday')">Gisteren</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('cb','today')">Vandaag</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('cb','week')">Deze week</button>
       <button class="btn btn-primary" onclick="loadCashbook()">Tonen</button>
       <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
     </div>
@@ -142,10 +147,76 @@ tr:last-child td{border-bottom:none;}
       <input type="date" id="is-from">
       <label>Tot</label>
       <input type="date" id="is-to">
+      <button class="btn btn-ghost" onclick="setPeriodOn('is','yesterday')">Gisteren</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('is','today')">Vandaag</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('is','week')">Deze week</button>
       <button class="btn btn-primary" onclick="loadItemsSold()">Tonen</button>
       <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
     </div>
     <div id="itemssold-content"><div style="color:var(--mu);font-size:13px;padding:20px;text-align:center;">Kies een periode en klik op Tonen.</div></div>
+  </div>
+</div>
+
+<!-- Personeel: drankjes + shiften -->
+<div id="screen-staffdrinks" class="screen">
+  <div class="wrap">
+    <div class="controls no-print">
+      <label>Van</label>
+      <input type="date" id="sd-from">
+      <label>Tot</label>
+      <input type="date" id="sd-to">
+      <button class="btn btn-ghost" onclick="setPeriodOn('sd', 'yesterday')">Gisteren</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('sd', 'today')">Vandaag</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('sd', 'week')">Deze week</button>
+      <button class="btn btn-primary" onclick="loadStaffDrinks()">Tonen</button>
+    </div>
+    <div id="staffdrinks-content" style="margin-bottom:24px;">
+      <div style="color:var(--mu);font-size:13px;padding:20px;text-align:center;">Kies een periode en klik op Tonen.</div>
+    </div>
+
+    <div class="sec-title" style="font-size:16px;font-weight:800;color:var(--tx);margin:24px 0 12px;border-top:2px solid var(--sun);padding-top:16px;">👷 Jobstudenten-shiften</div>
+    <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:600;color:var(--mu);margin-bottom:10px;">Standaard uurloon (wordt gebruikt bij nieuwe shift)</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:16px;color:var(--sun-d);font-weight:700;">€</span>
+        <input id="staff-default-rate" type="number" step="0.10" placeholder="14,00" style="flex:1;font-size:14px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <span style="font-size:13px;color:var(--mu);">/uur</span>
+        <button class="btn btn-primary" onclick="saveDefaultRate()">Opslaan</button>
+      </div>
+    </div>
+
+    <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:600;color:var(--mu);margin-bottom:10px;">Shift toevoegen</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr 1fr 1fr auto;gap:8px;align-items:center;">
+        <input id="ss-date" type="date" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <input id="ss-name" type="text" placeholder="Naam" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <input id="ss-hours" type="number" step="0.25" placeholder="Uren" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <input id="ss-rate" type="number" step="0.10" placeholder="Uurloon (€)" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <button class="btn btn-primary" onclick="addShift()">+ Voeg toe</button>
+      </div>
+    </div>
+    <div id="shifts-list"></div>
+  </div>
+</div>
+
+<!-- Winst -->
+<div id="screen-profit" class="screen">
+  <div class="wrap">
+    <div class="controls no-print">
+      <label>Van</label>
+      <input type="date" id="pf-from">
+      <label>Tot</label>
+      <input type="date" id="pf-to">
+      <button class="btn btn-ghost" onclick="setPeriodOn('pf', 'yesterday')">Gisteren</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('pf', 'today')">Vandaag</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('pf', 'week')">Deze week</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('pf', 'month')">Deze maand</button>
+      <button class="btn btn-primary" onclick="loadProfit()">Berekenen</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
+    </div>
+    <div id="profit-content">
+      <div style="color:var(--mu);font-size:13px;padding:20px;text-align:center;">Kies een periode en klik op Berekenen.</div>
+    </div>
   </div>
 </div>
 
@@ -155,6 +226,8 @@ tr:last-child td{border-bottom:none;}
     <div class="controls no-print">
       <label>Dag</label>
       <input type="date" id="daily-date" onchange="loadDailyOverview()">
+      <button class="btn btn-ghost" onclick="document.getElementById('daily-date').value=new Date(Date.now()-864e5).toISOString().slice(0,10);loadDailyOverview()">Gisteren</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('daily-date').value=new Date().toISOString().slice(0,10);loadDailyOverview()">Vandaag</button>
       <button class="btn btn-primary" onclick="loadDailyOverview()">Tonen</button>
     </div>
     <div class="print-header">
@@ -196,6 +269,188 @@ tr:last-child td{border-bottom:none;}
 const monthNames=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
 const fmt=n=>'€ '+(n||0).toFixed(2).replace('.',',');
 const fmtDate=s=>new Date(s).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+// Snelknoppen voor datumperiode — werkt op om het even welk paar 'PREFIX-from/to'
+function setPeriodOn(prefix, period){
+  const now = new Date();
+  let from, to;
+  const y = new Date(now); y.setDate(y.getDate()-1);
+  if (period === 'today')     { from = to = now.toISOString().slice(0,10); }
+  else if (period === 'yesterday') { from = to = y.toISOString().slice(0,10); }
+  else if (period === 'week') {
+    // Deze week (maandag → vandaag)
+    const dow = (now.getDay()+6)%7; // maandag = 0
+    const mon = new Date(now); mon.setDate(now.getDate()-dow);
+    from = mon.toISOString().slice(0,10); to = now.toISOString().slice(0,10);
+  }
+  else if (period === 'month') {
+    const m = new Date(now.getFullYear(), now.getMonth(), 1);
+    from = m.toISOString().slice(0,10); to = now.toISOString().slice(0,10);
+  }
+  const f = document.getElementById(prefix+'-from');
+  const t = document.getElementById(prefix+'-to');
+  if (f) f.value = from; if (t) t.value = to;
+  // Automatisch tonen na klik
+  if (prefix === 'sd') loadStaffDrinks();
+  else if (prefix === 'pf') loadProfit();
+  else if (prefix === 'is') loadItemsSold();
+  else if (prefix === 'cb') loadCashbook();
+}
+
+// ── Personeel: drankjes ──
+function initStaffDrinks(){
+  const t = new Date().toISOString().slice(0,10);
+  if (!document.getElementById('sd-from').value) document.getElementById('sd-from').value = t;
+  if (!document.getElementById('sd-to').value) document.getElementById('sd-to').value = t;
+  if (!document.getElementById('ss-date').value) document.getElementById('ss-date').value = t;
+  loadStaffDrinks();
+  loadShifts();
+  loadDefaultRate();
+}
+
+async function loadStaffDrinks(){
+  const from = document.getElementById('sd-from').value;
+  const to = document.getElementById('sd-to').value || from;
+  const el = document.getElementById('staffdrinks-content');
+  el.innerHTML = '<div style="color:var(--mu);padding:16px;text-align:center;">Laden…</div>';
+  try {
+    const d = await API.staffDrinks(from, to);
+    if (!d.items.length && !d.per_person.length) {
+      el.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:24px;text-align:center;background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);">Geen personeelsdrankjes in deze periode.</div>';
+      return;
+    }
+    let html = `<div class="cb-summary" style="margin-bottom:16px;">
+      <div class="cb-stat"><div class="cb-stat-n">${d.total_qty}</div><div class="cb-stat-l">Drankjes</div></div>
+      <div class="cb-stat"><div class="cb-stat-n">${fmt(d.total_value)}</div><div class="cb-stat-l">Waarde (retail)</div></div>
+      <div class="cb-stat"><div class="cb-stat-n">${d.per_person.length}</div><div class="cb-stat-l">Personeelsleden</div></div>
+    </div>`;
+    if (d.per_person.length) {
+      html += '<div style="font-size:14px;font-weight:800;color:var(--sun-t);margin:16px 2px 8px;padding-bottom:5px;border-bottom:2px solid var(--sun);">Per persoon</div>';
+      html += d.per_person.map(p => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:0.5px solid var(--bd);">
+          <span style="font-size:18px;">🧑‍🍳</span>
+          <div style="flex:1;font-size:14px;font-weight:600;color:var(--tx);">${p.person}</div>
+          <div style="text-align:right;"><div style="font-size:15px;font-weight:700;color:var(--sun-d);">${p.orders}×</div><div style="font-size:12px;color:var(--mu);">${fmt(p.value)}</div></div>
+        </div>`).join('');
+    }
+    if (d.items.length) {
+      html += '<div style="font-size:14px;font-weight:800;color:var(--sun-t);margin:16px 2px 8px;padding-bottom:5px;border-bottom:2px solid var(--sun);">Per drankje</div>';
+      const maxQty = Math.max(...d.items.map(i=>i.qty));
+      html += d.items.map(i => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:0.5px solid var(--bd);">
+          <span style="font-size:18px;">${i.icon||'🍺'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:600;color:var(--tx);">${i.name}</div>
+            <div style="height:6px;background:var(--bg);border-radius:3px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:${Math.max(4,i.qty/maxQty*100)}%;background:var(--sun);border-radius:3px;"></div></div>
+          </div>
+          <div style="text-align:right;"><div style="font-size:15px;font-weight:700;color:var(--sun-d);">${i.qty}×</div><div style="font-size:12px;color:var(--mu);">${fmt(i.value_lost)}</div></div>
+        </div>`).join('');
+    }
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`; }
+}
+
+// ── Personeel: shiften ──
+async function loadDefaultRate(){
+  try {
+    const s = await API.settings.get();
+    if (s.staffHourlyRate) document.getElementById('staff-default-rate').value = s.staffHourlyRate;
+  } catch(_){}
+}
+
+async function saveDefaultRate(){
+  const r = document.getElementById('staff-default-rate').value;
+  await API.settings.save({ staffHourlyRate: r });
+  toast('✅ Standaard uurloon opgeslagen');
+}
+
+async function addShift(){
+  const date = document.getElementById('ss-date').value;
+  const name = document.getElementById('ss-name').value.trim();
+  const hours = document.getElementById('ss-hours').value;
+  const rate = document.getElementById('ss-rate').value;
+  if (!date || !name || !hours) { toast('Vul datum, naam en uren in'); return; }
+  try {
+    await API.staff.add({ date, name, hours, hourly_rate: rate });
+    document.getElementById('ss-name').value = '';
+    document.getElementById('ss-hours').value = '';
+    document.getElementById('ss-rate').value = '';
+    toast('✅ Shift toegevoegd');
+    loadShifts();
+  } catch(e) { toast('Fout: ' + e.message); }
+}
+
+async function loadShifts(){
+  // Toon shiften van dezelfde periode als de drankjes
+  const from = document.getElementById('sd-from').value;
+  const to = document.getElementById('sd-to').value || from;
+  const el = document.getElementById('shifts-list');
+  try {
+    const d = await API.staff.list(from, to);
+    if (!d.shifts.length) { el.innerHTML = '<div style="color:var(--mu);font-size:13px;padding:20px;text-align:center;">Geen shiften in deze periode.</div>'; return; }
+    el.innerHTML = `<div class="cb-summary" style="margin-bottom:12px;">
+      <div class="cb-stat"><div class="cb-stat-n">${d.total_hours.toFixed(1).replace('.',',')} u</div><div class="cb-stat-l">Totaal uren</div></div>
+      <div class="cb-stat"><div class="cb-stat-n">${fmt(d.total_cost)}</div><div class="cb-stat-l">Loonkost</div></div>
+    </div>` +
+    d.shifts.map(s => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:0.5px solid var(--bd);">
+        <div style="font-size:12px;color:var(--mu);min-width:90px;">${s.date}</div>
+        <div style="flex:1;font-size:14px;font-weight:600;">${s.name}</div>
+        <div style="font-size:13px;color:var(--tx);">${s.hours.toFixed(2).replace('.',',')} u × ${fmt(s.hourly_rate)}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--sun-d);min-width:70px;text-align:right;">${fmt(s.hours*s.hourly_rate)}</div>
+        <button onclick="removeShift(${s.id})" style="background:none;border:none;color:var(--coral-d);cursor:pointer;font-size:16px;">✕</button>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = `<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`; }
+}
+
+async function removeShift(id){
+  if (!confirm('Deze shift verwijderen?')) return;
+  try { await API.staff.remove(id); loadShifts(); toast('✅ Verwijderd'); }
+  catch(e) { toast('Fout: ' + e.message); }
+}
+
+// ── Winst ──
+function initProfit(){
+  const t = new Date().toISOString().slice(0,10);
+  if (!document.getElementById('pf-from').value) document.getElementById('pf-from').value = t;
+  if (!document.getElementById('pf-to').value) document.getElementById('pf-to').value = t;
+  loadProfit();
+}
+
+async function loadProfit(){
+  const from = document.getElementById('pf-from').value;
+  const to = document.getElementById('pf-to').value || from;
+  const el = document.getElementById('profit-content');
+  el.innerHTML = '<div style="color:var(--mu);padding:16px;text-align:center;">Berekenen…</div>';
+  try {
+    const p = await API.profit(from, to);
+    el.innerHTML = `
+      <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:14px;">
+        <div style="font-size:14px;color:var(--mu);margin-bottom:4px;">Periode: ${from} → ${to}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:15px;">
+          <tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;">Omzet (incl. cadeaus ${fmt(p.gifts)})</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--teal-d);">${fmt(p.revenue)}</td></tr>
+          <tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Inkoopkost goederen (${p.items_sold} items)</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.cogs)}</td></tr>
+          <tr style="border-bottom:2px solid var(--sun);background:var(--sun-l);"><td style="padding:12px 4px;font-weight:700;">= Bruto marge</td><td style="text-align:right;padding:12px 4px;font-weight:800;font-size:18px;color:var(--sun-d);">${fmt(p.gross_margin)}</td></tr>
+          <tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Loonkost (${p.labor_hours.toFixed(1).replace('.',',')} u)</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.labor_cost)}</td></tr>
+          <tr style="background:${p.net_profit>=0?'var(--teal-l)':'var(--coral-l)'};"><td style="padding:14px 4px;font-weight:800;font-size:17px;">= Netto winst</td><td style="text-align:right;padding:14px 4px;font-weight:800;font-size:22px;color:${p.net_profit>=0?'var(--teal-d)':'var(--coral-d)'};">${fmt(p.net_profit)}</td></tr>
+        </table>
+      </div>
+      <div style="background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--r);padding:12px 14px;font-size:12px;color:var(--mu);line-height:1.6;">
+        <strong>Toelichting:</strong> omzet = alles wat via kassa/kaart/online betaald werd (excl. geannuleerd, personeel en onbetaalde bestellingen).
+        Inkoopkost = aankoopprijs × aantal verkochte items (voor producten waar een aankoopprijs is ingegeven).
+        Loonkost = uren × uurloon van geregistreerde shiften.
+      </div>`;
+  } catch(e) { el.innerHTML = `<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`; }
+}
+
+function toast(msg){
+  let t = document.getElementById('bk-toast');
+  if (!t) { t = document.createElement('div'); t.id='bk-toast';
+    t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1A1917;color:#F7F6F2;font-size:13px;padding:11px 20px;border-radius:24px;z-index:100;transition:opacity .2s;';
+    document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity='1';
+  clearTimeout(window._bkt); window._bkt=setTimeout(()=>t.style.opacity='0', 2400);
+}
 
 function showScreen(name,btn){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));

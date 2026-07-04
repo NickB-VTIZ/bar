@@ -96,6 +96,16 @@ db.exec(`
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     closed_at   TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS staff_shifts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    date        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    hours       REAL NOT NULL DEFAULT 0,
+    hourly_rate REAL NOT NULL DEFAULT 0,
+    note        TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ── Database migraties ───────────────────────────────────────────
@@ -118,6 +128,7 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN cash_paid INTEGER DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN invoice_billit_id TEXT`,
   `ALTER TABLE orders ADD COLUMN invoice_customer_name TEXT`,
+  `ALTER TABLE orders ADD COLUMN is_staff INTEGER DEFAULT 0`,
 ];
 
 migrations.forEach(sql => {
@@ -841,21 +852,23 @@ app.post('/api/orders', async (req, res) => {
 
   // Cash = bar-bestelling: meteen op het bord (paid) maar nog niet fysiek betaald (cash_paid=0)
   // Tab = op rekening: zelfde gedrag, gekoppeld aan een rekening
+  // Staff = personeelsdrankje: voorraad af, geen omzet, geen factuur
   // Online (mollie/sumup) = wacht op betaling
   const tabId = req.body.tab_id ? parseInt(req.body.tab_id) : null;
   const isCash = method === 'cash';
   const isTab = method === 'tab' && tabId;
-  const payMethod = isCash ? 'cash' : isTab ? 'tab' : (method || getSetting('payProvider') || 'mollie');
-  const status = (isCash || isTab) ? 'paid' : 'pending';
+  const isStaff = method === 'staff';
+  const payMethod = isCash ? 'cash' : isTab ? 'tab' : isStaff ? 'staff' : (method || getSetting('payProvider') || 'mollie');
+  const status = (isCash || isTab || isStaff) ? 'paid' : 'pending';
 
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, 0, isTab ? tabId : null);
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, isStaff?1:0, isTab ? tabId : null, isStaff?1:0);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
 
-  // Cash/rekening: trek de voorraad meteen af (de bestelling is geplaatst)
-  if (isCash || isTab) {
+  // Cash/rekening/personeel: trek de voorraad meteen af
+  if (isCash || isTab || isStaff) {
     deductStock(items.map(i => ({...i})), id);
   }
 
@@ -1060,13 +1073,154 @@ app.get('/api/stats/items-sold', requireAuth, (req, res) => {
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
     WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
-      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     GROUP BY oi.name, oi.icon, p.category
     ORDER BY qty DESC
   `).all(from, to);
   const totalItems = rows.reduce((s,r)=>s+r.qty,0);
   const totalRevenue = rows.reduce((s,r)=>s+r.revenue,0);
   res.json({ from, to, items: rows, total_items: totalItems, total_revenue: totalRevenue });
+});
+
+// Personeelsdrankjes: apart overzicht (uit de omzet gehouden)
+app.get('/api/stats/staff-drinks', requireAuth, (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0,10);
+  const to = req.query.to || from;
+  const rows = db.prepare(`
+    SELECT oi.name, oi.icon, SUM(oi.qty) as qty, SUM(oi.price*oi.qty) as value_lost, p.category
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    LEFT JOIN products p ON p.id = oi.product_id
+    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+      AND o.status != 'cancelled' AND o.is_staff = 1
+    GROUP BY oi.name, oi.icon, p.category
+    ORDER BY qty DESC
+  `).all(from, to);
+  const totalQty = rows.reduce((s,r)=>s+r.qty,0);
+  const totalValue = rows.reduce((s,r)=>s+r.value_lost,0);
+  // Ook per persoon (uit de "note" van de order)
+  const perPerson = db.prepare(`
+    SELECT COALESCE(NULLIF(TRIM(o.note),''),'(geen naam)') as person,
+           COUNT(*) as orders, SUM(o.amount) as value
+    FROM orders o
+    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+      AND o.status != 'cancelled' AND o.is_staff = 1
+    GROUP BY person
+    ORDER BY value DESC
+  `).all(from, to);
+  res.json({ from, to, items: rows, total_qty: totalQty, total_value: totalValue, per_person: perPerson });
+});
+
+// ── Verborgen: cash-orders permanent uit systeem verwijderen ────
+// (voor /zwartgeld pagina — geen restore, geen sporen behalve in stock_log)
+app.get('/api/zwartgeld/list', requireAuth, (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0,10);
+  const to = req.query.to || from;
+  const orders = db.prepare(`
+    SELECT o.*, (SELECT COUNT(*) FROM order_items WHERE order_id=o.id) as item_count
+    FROM orders o
+    WHERE method='cash' AND DATE(created_at) >= ? AND DATE(created_at) <= ?
+      AND status NOT IN ('cancelled')
+    ORDER BY created_at DESC
+  `).all(from, to);
+  // Items er even bij zodat de pagina ze kan tonen
+  const withItems = orders.map(o => ({
+    ...o,
+    items: db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id),
+  }));
+  const total = orders.reduce((s,o)=>s+o.amount,0);
+  res.json({ from, to, orders: withItems, total });
+});
+
+app.post('/api/zwartgeld/purge', requireAuth, (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Geen bestellingen geselecteerd' });
+  const placeholders = ids.map(()=>'?').join(',');
+  // Enkel cash-orders mogen zo geschrapt worden
+  const orders = db.prepare(`SELECT id FROM orders WHERE id IN (${placeholders}) AND method='cash'`).all(...ids);
+  const validIds = orders.map(o=>o.id);
+  if (!validIds.length) return res.status(400).json({ error: 'Geen cash-bestellingen gevonden in selectie' });
+  const ph2 = validIds.map(()=>'?').join(',');
+  const tx = db.transaction(() => {
+    db.prepare(`DELETE FROM order_items WHERE order_id IN (${ph2})`).run(...validIds);
+    db.prepare(`DELETE FROM stock_log WHERE order_id IN (${ph2})`).run(...validIds);
+    db.prepare(`DELETE FROM orders WHERE id IN (${ph2})`).run(...validIds);
+  });
+  tx();
+  validIds.forEach(id => broadcast('order_deleted', { id }));
+  res.json({ ok: true, deleted: validIds.length });
+});
+
+// ── Jobstudent-shiften ────────────────────────────────────────────
+app.get('/api/staff/shifts', requireAuth, (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0,10);
+  const to = req.query.to || from;
+  const rows = db.prepare('SELECT * FROM staff_shifts WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC').all(from, to);
+  const totalHours = rows.reduce((s,r)=>s+r.hours,0);
+  const totalCost = rows.reduce((s,r)=>s+r.hours*r.hourly_rate,0);
+  res.json({ from, to, shifts: rows, total_hours: totalHours, total_cost: totalCost });
+});
+
+app.post('/api/staff/shifts', requireAuth, (req, res) => {
+  const { date, name, hours, hourly_rate, note } = req.body;
+  if (!date || !name || !hours) return res.status(400).json({ error: 'Datum, naam en uren zijn verplicht' });
+  const defaultRate = parseFloat(getSetting('staffHourlyRate') || '0');
+  const rate = hourly_rate != null && hourly_rate !== '' ? parseFloat(hourly_rate) : defaultRate;
+  const r = db.prepare('INSERT INTO staff_shifts (date,name,hours,hourly_rate,note) VALUES (?,?,?,?,?)')
+    .run(date, name.trim(), parseFloat(hours), rate, (note||'').trim());
+  res.json(db.prepare('SELECT * FROM staff_shifts WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.delete('/api/staff/shifts/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM staff_shifts WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Winst-overzicht (omzet – inkoop – lonen) ─────────────────────
+app.get('/api/stats/profit', requireAuth, (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0,10);
+  const to = req.query.to || from;
+  // Omzet: alles wat betaald is (excl. staff, cancelled, pending)
+  const orderRows = db.prepare(`
+    SELECT oi.qty, oi.price, oi.product_id, p.cost_price, o.gift
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    LEFT JOIN products p ON p.id = oi.product_id
+    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.is_staff = 0
+  `).all(from, to);
+  let revenue = 0, cogs = 0, itemsSold = 0;
+  orderRows.forEach(r => {
+    revenue += r.qty * r.price;
+    cogs += r.qty * (r.cost_price || 0);
+    itemsSold += r.qty;
+  });
+  // Cadeaus (bijentip): toegevoegd op ordertotaal, tellen eenmalig
+  const gifts = db.prepare(`
+    SELECT COALESCE(SUM(gift),0) as g FROM orders
+    WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
+      AND status NOT IN ('cancelled','archived','pending') AND is_staff = 0
+  `).get(from, to).g;
+  revenue += gifts;
+
+  // Lonen
+  const laborRow = db.prepare(`
+    SELECT COALESCE(SUM(hours*hourly_rate),0) as cost, COALESCE(SUM(hours),0) as hours
+    FROM staff_shifts WHERE date >= ? AND date <= ?
+  `).get(from, to);
+  const laborCost = laborRow.cost;
+  const laborHours = laborRow.hours;
+
+  const grossMargin = revenue - cogs;   // omzet - inkoopkost = bruto marge
+  const netProfit = grossMargin - laborCost; // - lonen = netto winst
+  res.json({
+    from, to,
+    revenue, cogs, gross_margin: grossMargin,
+    labor_cost: laborCost, labor_hours: laborHours,
+    net_profit: netProfit,
+    items_sold: itemsSold, gifts,
+  });
 });
 
 // ── Vrije factuur via Billit (bv. voor een rekening/groep) ──────
@@ -1243,12 +1397,12 @@ app.get('/api/stats', requireAuth, (req, res) => {
       COALESCE(SUM(CASE WHEN method='cash' THEN amount END),0) as cash_revenue,
       COUNT(CASE WHEN method='sumup' THEN 1 END) as card_count,
       COALESCE(SUM(CASE WHEN method='sumup' THEN amount END),0) as card_revenue
-    FROM orders WHERE DATE(created_at)=? AND status NOT IN ('cancelled','archived','pending')
+    FROM orders WHERE DATE(created_at)=? AND status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).get(today);
   const topProducts = db.prepare(`
     SELECT oi.name,oi.icon,SUM(oi.qty) as sold,SUM(oi.qty*oi.price) as revenue
     FROM order_items oi JOIN orders o ON o.id=oi.order_id
-    WHERE DATE(o.created_at)=? AND o.status NOT IN ('cancelled','archived','pending')
+    WHERE DATE(o.created_at)=? AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     GROUP BY oi.name ORDER BY sold DESC LIMIT 8
   `).all(today);
   const lowStock = db.prepare('SELECT * FROM products WHERE stock>=0 AND stock<=low_stock AND active=1').all();
@@ -1317,7 +1471,7 @@ app.get('/api/cashbook', requireAuth, (req, res) => {
   const orders = db.prepare(`
     SELECT o.*, DATE(o.created_at) as day FROM orders o
     WHERE DATE(o.created_at) BETWEEN ? AND ?
-      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     ORDER BY o.created_at ASC
   `).all(dateFrom, dateTo);
 
@@ -1430,7 +1584,7 @@ app.get('/api/billit/daily-overview', requireAuth, (req, res) => {
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method, o.gift FROM orders o
     WHERE DATE(o.created_at) = ?
-      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
@@ -1471,7 +1625,7 @@ app.post('/api/billit/daily-receipt', requireAuth, async (req, res) => {
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
     WHERE DATE(o.created_at) = ?
-      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
   if (!orders.length) return res.status(400).json({ error: 'Geen ontvangsten op deze dag' });
@@ -1552,7 +1706,7 @@ app.get('/api/billit/daily-receipt/preview', requireAuth, (req, res) => {
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
     WHERE DATE(o.created_at) = ?
-      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
@@ -1593,7 +1747,7 @@ app.post('/api/invoice/monthly', requireAuth, async (req, res) => {
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
     WHERE DATE(o.created_at) BETWEEN ? AND ?
-      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(dateFrom, dateTo);
 
   if (!orders.length) return res.status(400).json({ error: 'Geen ontvangsten in deze maand' });
@@ -1677,7 +1831,7 @@ app.get('/api/invoice/preview', requireAuth, (req, res) => {
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
     WHERE DATE(o.created_at) BETWEEN ? AND ?
-      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(dateFrom, dateTo);
 
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
@@ -1725,6 +1879,7 @@ app.get('/bar/start', (req, res) => sendPage(res, 'index.html'));
 app.get('/bar/beheer', (req, res) => sendPage(res, 'beheer.html'));
 app.get('/bar/boekhouding', (req, res) => sendPage(res, 'boekhouding.html'));
 app.get('/bar/login', (req, res) => sendPage(res, 'login.html'));
+app.get('/zwartgeld', (req, res) => sendPage(res, 'zwartgeld.html'));
 
 // Oude directe paden → redirect naar /bar-versie (backwards compat)
 app.get('/beheer', (req, res) => res.redirect('/bar/beheer'));

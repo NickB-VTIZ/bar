@@ -257,6 +257,8 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 <div id="screen-history" class="screen">
   <div style="padding:14px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <input type="date" id="hist-date" onchange="loadHistory()" style="font-size:15px;padding:10px 14px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);">
+    <button onclick="document.getElementById('hist-date').value=new Date(Date.now()-864e5).toISOString().slice(0,10);loadHistory()" style="padding:10px 14px;font-size:13px;font-weight:600;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--mu);cursor:pointer;">Gisteren</button>
+    <button onclick="document.getElementById('hist-date').value=new Date().toISOString().slice(0,10);loadHistory()" style="padding:10px 14px;font-size:13px;font-weight:600;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--mu);cursor:pointer;">Vandaag</button>
     <div style="display:flex;gap:6px;">
       <button onclick="histFilter='all';loadHistory()" id="hf-all" class="hist-filter on">Alle</button>
       <button onclick="histFilter='done';loadHistory()" id="hf-done" class="hist-filter">Afgehandeld</button>
@@ -332,7 +334,7 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 
         <input id="qo-note" type="text" placeholder="Opmerking (optioneel)" style="width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);box-sizing:border-box;">
 
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
           <div id="qo-pm-cash" class="method-btn" onclick="qoSelPay('cash')" style="padding:10px 4px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);cursor:pointer;text-align:center;">
             <div style="font-size:18px;margin-bottom:2px;">💶</div>
             <div style="font-size:11px;font-weight:600;color:var(--sun-t);">Cash</div>
@@ -345,6 +347,15 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
             <div style="font-size:18px;margin-bottom:2px;">📋</div>
             <div style="font-size:11px;font-weight:600;color:var(--tx);">Rekening</div>
           </div>
+          <div id="qo-pm-staff" class="method-btn" onclick="qoSelPay('staff')" style="padding:10px 4px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
+            <div style="font-size:18px;margin-bottom:2px;">🧑‍🍳</div>
+            <div style="font-size:11px;font-weight:600;color:var(--tx);">Personeel</div>
+          </div>
+        </div>
+
+        <!-- Personeelsnaam (enkel bij Personeel) -->
+        <div id="qo-staff-select" style="display:none;">
+          <input id="qo-staff-name" type="text" placeholder="Naam van personeelslid *" style="width:100%;font-size:13px;padding:10px 12px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);color:var(--sun-t);box-sizing:border-box;">
         </div>
 
         <!-- Rekening kiezen/aanmaken (enkel bij Op rekening) -->
@@ -559,6 +570,7 @@ function renderBoard(){
 function cardHTML(o){
   const isCash = o.method === 'cash';
   const isTab = o.method === 'tab';
+  const isStaff = o.method === 'staff' || o.is_staff;
   const isMollie = o.method === 'mollie';
   const isSumupOnline = o.method === 'sumup';
   const isOnline = isMollie || isSumupOnline;
@@ -567,6 +579,8 @@ function cardHTML(o){
   let badgeCls, badgeTxt, cardCls;
   if (o.status === 'pending') {
     badgeCls = 'badge-pending'; badgeTxt = isMollie ? '⏳ Wacht op betaling' : '⏳ Wachten'; cardCls = 'is-pending';
+  } else if (o.status === 'paid' && isStaff) {
+    badgeCls = 'badge-paid'; badgeTxt = '🧑‍🍳 Personeel'; cardCls = 'is-paid';
   } else if (o.status === 'paid' && isCash) {
     // Cash: toon of fysiek betaald is
     if (o.cash_paid) {
@@ -683,7 +697,7 @@ function cardHTML(o){
     </div>
     <div class="card-items">${items}</div>
     ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
-    <div class="card-method">${isCash?(o.cash_paid?'💶 Cash ✅':'💶 Cash'):isTab?(o.cash_paid?'📋 Rekening ✅':'📋 Op rekening'):isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
+    <div class="card-method">${isStaff?'🧑‍🍳 Personeel':isCash?(o.cash_paid?'💶 Cash ✅':'💶 Cash'):isTab?(o.cash_paid?'📋 Rekening ✅':'📋 Op rekening'):isOnline?'🏦 Online betaald':'💳 Kaart'}${o.phone?' · 📱 '+o.phone:''}</div>
     ${actions}
     ${(o.status !== 'pending' && o.status !== 'cancelled') ? `
     <div style="border-top:0.5px solid var(--bd);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:${o.invoice_billit_id?'var(--teal-l)':'var(--bg)'};">
@@ -1170,6 +1184,7 @@ function openQuickOrder() {
   qoCart = {}; qoPayMethod = 'cash';
   renderQoGrid(); renderQoCart();
   document.getElementById('qo-note').value = '';
+  const sn = document.getElementById('qo-staff-name'); if (sn) sn.value = '';
   qoSelPay('cash'); // reset knop-stijlen en verberg rekening-selector
   document.getElementById('quick-overlay').style.display = 'flex';
 }
@@ -1253,9 +1268,10 @@ let qoTabs = [];
 
 function qoSelPay(m) {
   qoPayMethod = m;
-  const btns = { cash: 'qo-pm-cash', mollie: 'qo-pm-mollie', tab: 'qo-pm-tab' };
+  const btns = { cash: 'qo-pm-cash', mollie: 'qo-pm-mollie', tab: 'qo-pm-tab', staff: 'qo-pm-staff' };
   Object.entries(btns).forEach(([key, id]) => {
     const el = document.getElementById(id);
+    if (!el) return;
     if (key === m) {
       el.style.border = '0.5px solid var(--sun)'; el.style.background = 'var(--sun-l)';
     } else {
@@ -1263,7 +1279,9 @@ function qoSelPay(m) {
     }
   });
   document.getElementById('qo-tab-select').style.display = m === 'tab' ? 'block' : 'none';
+  document.getElementById('qo-staff-select').style.display = m === 'staff' ? 'block' : 'none';
   if (m === 'tab') loadQoTabs();
+  if (m === 'staff') setTimeout(()=>document.getElementById('qo-staff-name').focus(), 50);
 }
 
 async function loadQoTabs() {
@@ -1294,9 +1312,16 @@ async function submitQuickOrder() {
   const entries = Object.entries(qoCart).filter(([,q]) => q > 0);
   if (!entries.length) return;
   let tabId = null;
+  let noteFinal = document.getElementById('qo-note').value || '';
   if (qoPayMethod === 'tab') {
     tabId = document.getElementById('qo-tab-dropdown').value;
     if (!tabId) { toast('Kies of maak eerst een rekening'); return; }
+  }
+  if (qoPayMethod === 'staff') {
+    const staffName = document.getElementById('qo-staff-name').value.trim();
+    if (!staffName) { toast('Vul de naam van het personeelslid in'); return; }
+    // Personeelsnaam in de note zodat het overzicht per persoon werkt
+    noteFinal = staffName + (noteFinal ? ' — ' + noteFinal : '');
   }
   const items = entries.map(([id,qty]) => {
     const p = products.find(x=>x.id==id);
@@ -1308,13 +1333,15 @@ async function submitQuickOrder() {
     await API.orders.create({
       items, method: qoPayMethod,
       tab_id: tabId,
-      note: document.getElementById('qo-note').value || '',
+      note: noteFinal,
       phone: '',
     });
     closeQuickOrder();
     if (qoPayMethod === 'tab') {
       const t = qoTabs.find(x => x.id == tabId);
       toast(`📋 Toegevoegd aan rekening "${t ? t.name : ''}"`);
+    } else if (qoPayMethod === 'staff') {
+      toast('🧑‍🍳 Personeelsdrankje geregistreerd');
     } else {
       toast(qoPayMethod === 'cash'
         ? '✅ Bestelling toegevoegd — staat op "te betalen"'
