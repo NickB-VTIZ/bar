@@ -1,7 +1,8 @@
 FROM node:20-alpine
 
-# Native build tools voor better-sqlite3
-RUN apk add --no-cache python3 make g++
+# Native build tools voor better-sqlite3 + tijdzonebestanden
+RUN apk add --no-cache python3 make g++ tzdata
+ENV TZ=Europe/Brussels
 
 WORKDIR /app
 

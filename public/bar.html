@@ -547,8 +547,20 @@ function showScreen(name,btn){
   if(btn)btn.classList.add('on');
 }
 
+// SQLite datetime('now') schrijft UTC zonder tijdzone-marker.
+// Zonder 'Z' interpreteert JavaScript de string als lokale tijd → 2u verschil in de zomer.
+// Deze helper voegt de UTC-marker toe zodat JS correct parseert naar lokale tijd.
+function parseDbDate(ts){
+  if (!ts) return new Date(NaN);
+  // Als er al een timezone-marker inzit (Z of +/-hh:mm), gebruik zoals is.
+  if (/Z|[+\-]\d{2}:?\d{2}$/.test(ts)) return new Date(ts);
+  // SQLite formaat: "YYYY-MM-DD HH:MM:SS" → maak er ISO van + Z.
+  return new Date(ts.replace(' ', 'T') + 'Z');
+}
+
 function timeAgo(ts){
-  const d=Math.floor((Date.now()-new Date(ts).getTime())/1000);
+  const d=Math.floor((Date.now()-parseDbDate(ts).getTime())/1000);
+  if(d<0)return 'net';
   if(d<60)return d+'s';if(d<3600)return Math.floor(d/60)+' min';return Math.floor(d/3600)+' u';
 }
 
@@ -556,7 +568,7 @@ function renderBoard(){
   const priority={paid:0,preparing:1,ready:2,pending:3};
   const list=Object.values(orders)
     .filter(o=>o.status!=='collected'&&o.status!=='archived')
-    .sort((a,b)=>(priority[a.status]??9)-(priority[b.status]??9)||new Date(a.created_at)-new Date(b.created_at));
+    .sort((a,b)=>(priority[a.status]??9)-(priority[b.status]??9)||parseDbDate(a.created_at)-parseDbDate(b.created_at));
   document.getElementById('s-open').textContent=list.filter(o=>o.status==='paid').length;
   document.getElementById('s-prep').textContent=list.filter(o=>o.status==='preparing').length;
   document.getElementById('s-ready').textContent=list.filter(o=>o.status==='ready').length;
@@ -975,7 +987,7 @@ async function loadHistory() {
     }
     listEl.innerHTML = list.map(o => {
       const amtFmt = fmtEur(o.amount);
-      const time = new Date(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      const time = parseDbDate(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
       const items = (o.items||[]).map(i => `
         <div class="item-row" style="font-size:15px;padding:5px 0;">
           <span class="item-icon" style="font-size:18px;">${i.icon||'🍺'}</span>

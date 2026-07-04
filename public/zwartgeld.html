@@ -81,6 +81,11 @@ input[type=date]{font-size:14px;padding:9px 12px;border:0.5px solid var(--bd);bo
 <script>
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>t.classList.remove('show'),2400);}
 function fmt(n){return '€ '+(n||0).toFixed(2).replace('.',',');}
+function parseDbDate(ts){
+  if (!ts) return new Date(NaN);
+  if (/Z|[+\-]\d{2}:?\d{2}$/.test(ts)) return new Date(ts);
+  return new Date(ts.replace(' ','T')+'Z');
+}
 function todayStr(){return new Date().toISOString().slice(0,10);}
 function yesterdayStr(){const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
 function setYesterday(){const y=yesterdayStr();document.getElementById('from-date').value=y;document.getElementById('to-date').value=y;loadOrders();}
@@ -115,7 +120,7 @@ async function loadOrders(){
       return;
     }
     el.innerHTML=d.orders.map(o=>{
-      const time=new Date(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      const time=parseDbDate(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
       const items=(o.items||[]).map(i=>`${i.qty}× ${i.name}`).join(', ');
       return `<div class="order-row">
         <input type="checkbox" data-id="${o.id}" onchange="updateSelection()">

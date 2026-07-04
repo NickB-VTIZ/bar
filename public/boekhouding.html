@@ -175,25 +175,44 @@ tr:last-child td{border-bottom:none;}
     </div>
 
     <div class="sec-title" style="font-size:16px;font-weight:800;color:var(--tx);margin:24px 0 12px;border-top:2px solid var(--sun);padding-top:16px;">👷 Jobstudenten-shiften</div>
+
+    <!-- Barema-instellingen -->
     <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;">
-      <div style="font-size:13px;font-weight:600;color:var(--mu);margin-bottom:10px;">Standaard uurloon (wordt gebruikt bij nieuwe shift)</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span style="font-size:16px;color:var(--sun-d);font-weight:700;">€</span>
-        <input id="staff-default-rate" type="number" step="0.10" placeholder="14,00" style="flex:1;font-size:14px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
-        <span style="font-size:13px;color:var(--mu);">/uur</span>
-        <button class="btn btn-primary" onclick="saveDefaultRate()">Opslaan</button>
+      <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:4px;">📋 Barema jobstudent (PC 302)</div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5;">Bruto uurloon per leeftijd. De kost per uur = bruto × coëfficiënt + Dimona-kost.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div><div style="font-size:11px;color:var(--mu);margin-bottom:3px;font-weight:600;">15 jaar</div><div style="display:flex;align-items:center;gap:4px;"><span style="font-size:13px;color:var(--mu);">€</span><input id="js-w15" type="number" step="0.0001" placeholder="10.7084" style="flex:1;min-width:0;font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);"></div></div>
+        <div><div style="font-size:11px;color:var(--mu);margin-bottom:3px;font-weight:600;">16 jaar</div><div style="display:flex;align-items:center;gap:4px;"><span style="font-size:13px;color:var(--mu);">€</span><input id="js-w16" type="number" step="0.0001" placeholder="12.2382" style="flex:1;min-width:0;font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);"></div></div>
+        <div><div style="font-size:11px;color:var(--mu);margin-bottom:3px;font-weight:600;">17 jaar</div><div style="display:flex;align-items:center;gap:4px;"><span style="font-size:13px;color:var(--mu);">€</span><input id="js-w17" type="number" step="0.0001" placeholder="13.7679" style="flex:1;min-width:0;font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);"></div></div>
+        <div><div style="font-size:11px;color:var(--mu);margin-bottom:3px;font-weight:600;">18+ jaar</div><div style="display:flex;align-items:center;gap:4px;"><span style="font-size:13px;color:var(--mu);">€</span><input id="js-w18" type="number" step="0.0001" placeholder="15.2977" style="flex:1;min-width:0;font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);"></div></div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
+        <div><div style="font-size:11px;color:var(--mu);margin-bottom:3px;font-weight:600;">Coëfficiënt</div><input id="js-coeff" type="number" step="0.001" placeholder="1.25" style="width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);box-sizing:border-box;"></div>
+        <div><div style="font-size:11px;color:var(--mu);margin-bottom:3px;font-weight:600;">Dimona/uur</div><div style="display:flex;align-items:center;gap:4px;"><span style="font-size:13px;color:var(--mu);">€</span><input id="js-dimona" type="number" step="0.01" placeholder="0.50" style="flex:1;min-width:0;font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);"></div></div>
+        <button class="btn btn-primary" onclick="saveBarema()">Opslaan</button>
+      </div>
+      <!-- Berekende kost per leeftijd tonen -->
+      <div id="js-rates-preview" style="margin-top:12px;padding:10px 12px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);font-size:12px;color:var(--sun-t);line-height:1.7;"></div>
     </div>
 
+    <!-- Shift toevoegen -->
     <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;">
       <div style="font-size:13px;font-weight:600;color:var(--mu);margin-bottom:10px;">Shift toevoegen</div>
-      <div style="display:grid;grid-template-columns:1fr 2fr 1fr 1fr auto;gap:8px;align-items:center;">
+      <div style="display:grid;grid-template-columns:1.1fr 1.8fr .9fr .9fr 1.1fr auto;gap:8px;align-items:center;">
         <input id="ss-date" type="date" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
         <input id="ss-name" type="text" placeholder="Naam" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
-        <input id="ss-hours" type="number" step="0.25" placeholder="Uren" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
-        <input id="ss-rate" type="number" step="0.10" placeholder="Uurloon (€)" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <select id="ss-age" onchange="autoFillRate()" style="font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);">
+          <option value="">Leeftijd</option>
+          <option value="15">15 jaar</option>
+          <option value="16">16 jaar</option>
+          <option value="17">17 jaar</option>
+          <option value="18">18+ jaar</option>
+        </select>
+        <input id="ss-hours" type="number" step="0.25" placeholder="Uren" oninput="autoFillRate()" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <input id="ss-rate" type="number" step="0.0001" placeholder="Uurloon" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
         <button class="btn btn-primary" onclick="addShift()">+ Voeg toe</button>
       </div>
+      <div id="ss-calc-info" style="margin-top:8px;font-size:12px;color:var(--mu);display:none;"></div>
     </div>
     <div id="shifts-list"></div>
   </div>
@@ -270,6 +289,13 @@ const monthNames=['januari','februari','maart','april','mei','juni','juli','augu
 const fmt=n=>'€ '+(n||0).toFixed(2).replace('.',',');
 const fmtDate=s=>new Date(s).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
+// SQLite datetime('now') geeft UTC zonder tijdzone-marker → append 'Z' zodat JS lokaal parseert.
+function parseDbDate(ts){
+  if (!ts) return new Date(NaN);
+  if (/Z|[+\-]\d{2}:?\d{2}$/.test(ts)) return new Date(ts);
+  return new Date(ts.replace(' ', 'T') + 'Z');
+}
+
 // Snelknoppen voor datumperiode — werkt op om het even welk paar 'PREFIX-from/to'
 function setPeriodOn(prefix, period){
   const now = new Date();
@@ -305,7 +331,7 @@ function initStaffDrinks(){
   if (!document.getElementById('ss-date').value) document.getElementById('ss-date').value = t;
   loadStaffDrinks();
   loadShifts();
-  loadDefaultRate();
+  loadBarema();
 }
 
 async function loadStaffDrinks(){
@@ -350,18 +376,89 @@ async function loadStaffDrinks(){
   } catch(e) { el.innerHTML = `<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`; }
 }
 
-// ── Personeel: shiften ──
-async function loadDefaultRate(){
+// ── Personeel: barema en uurloon-berekening ──
+// Standaardwaarden (PC 302 barema, kunnen aangepast worden in de instellingen)
+const DEFAULT_BAREMA = {
+  jsWage15: 10.7084, jsWage16: 12.2382, jsWage17: 13.7679, jsWage18: 15.2977,
+  jsCoefficient: 1.25, jsDimona: 0.50,
+};
+
+function getBarema(){
+  const g = id => parseFloat(document.getElementById(id).value);
+  return {
+    wages: { 15: g('js-w15'), 16: g('js-w16'), 17: g('js-w17'), 18: g('js-w18') },
+    coeff: g('js-coeff'),
+    dimona: g('js-dimona'),
+  };
+}
+
+function calcHourlyRate(age, b){
+  const bar = b || getBarema();
+  const a = parseInt(age);
+  if (!(a>=15) || isNaN(bar.coeff) || isNaN(bar.dimona)) return null;
+  const w = a >= 18 ? bar.wages[18] : bar.wages[a] ?? bar.wages[18];
+  if (isNaN(w)) return null;
+  return w * bar.coeff + bar.dimona;
+}
+
+function renderBaremaPreview(){
+  const b = getBarema();
+  if (isNaN(b.coeff) || isNaN(b.dimona)) return;
+  const el = document.getElementById('js-rates-preview');
+  const lines = [15,16,17,18].map(age => {
+    const w = b.wages[age];
+    if (isNaN(w)) return null;
+    const total = w * b.coeff + b.dimona;
+    return `<strong>${age}${age===18?'+':''} jaar:</strong> €${w.toFixed(4)} × ${b.coeff} + €${b.dimona.toFixed(2)} = <strong style="color:var(--sun-d);">€${total.toFixed(2)}/u</strong>`;
+  }).filter(Boolean);
+  el.innerHTML = '💡 Berekende kost per uur (excl. 21% aftrekbare btw):<br>' + lines.join(' · ');
+}
+
+async function loadBarema(){
   try {
     const s = await API.settings.get();
-    if (s.staffHourlyRate) document.getElementById('staff-default-rate').value = s.staffHourlyRate;
+    const set = (id, key, def) => {
+      const v = s[key] != null && s[key] !== '' ? parseFloat(s[key]) : def;
+      document.getElementById(id).value = v;
+    };
+    set('js-w15','jsWage15',DEFAULT_BAREMA.jsWage15);
+    set('js-w16','jsWage16',DEFAULT_BAREMA.jsWage16);
+    set('js-w17','jsWage17',DEFAULT_BAREMA.jsWage17);
+    set('js-w18','jsWage18',DEFAULT_BAREMA.jsWage18);
+    set('js-coeff','jsCoefficient',DEFAULT_BAREMA.jsCoefficient);
+    set('js-dimona','jsDimona',DEFAULT_BAREMA.jsDimona);
+    renderBaremaPreview();
+    ['js-w15','js-w16','js-w17','js-w18','js-coeff','js-dimona'].forEach(id =>
+      document.getElementById(id).addEventListener('input', ()=>{ renderBaremaPreview(); autoFillRate(); }));
   } catch(_){}
 }
 
-async function saveDefaultRate(){
-  const r = document.getElementById('staff-default-rate').value;
-  await API.settings.save({ staffHourlyRate: r });
-  toast('✅ Standaard uurloon opgeslagen');
+async function saveBarema(){
+  const g = id => document.getElementById(id).value;
+  await API.settings.save({
+    jsWage15: g('js-w15'), jsWage16: g('js-w16'),
+    jsWage17: g('js-w17'), jsWage18: g('js-w18'),
+    jsCoefficient: g('js-coeff'), jsDimona: g('js-dimona'),
+  });
+  toast('✅ Barema opgeslagen');
+  renderBaremaPreview();
+}
+
+// Vult het uurloon in op basis van gekozen leeftijd, en toont de opbouw + totale kost
+function autoFillRate(){
+  const age = document.getElementById('ss-age').value;
+  const info = document.getElementById('ss-calc-info');
+  if (!age) { info.style.display='none'; return; }
+  const b = getBarema();
+  const rate = calcHourlyRate(age, b);
+  if (rate == null) { info.style.display='none'; return; }
+  document.getElementById('ss-rate').value = rate.toFixed(4);
+  const hours = parseFloat(document.getElementById('ss-hours').value) || 0;
+  const w = age >= 18 ? b.wages[18] : b.wages[age];
+  let msg = `${age}${age==='18'?'+':''}j: €${w.toFixed(4)} × ${b.coeff} + €${b.dimona.toFixed(2)} = <strong>€${rate.toFixed(4)}/u</strong>`;
+  if (hours > 0) msg += ` — ${hours.toFixed(2).replace('.',',')} u × €${rate.toFixed(4)} = <strong style="color:var(--sun-d);">€${(hours*rate).toFixed(2).replace('.',',')}</strong>`;
+  info.innerHTML = msg;
+  info.style.display = 'block';
 }
 
 async function addShift(){
@@ -375,6 +472,8 @@ async function addShift(){
     document.getElementById('ss-name').value = '';
     document.getElementById('ss-hours').value = '';
     document.getElementById('ss-rate').value = '';
+    document.getElementById('ss-age').value = '';
+    document.getElementById('ss-calc-info').style.display = 'none';
     toast('✅ Shift toegevoegd');
     loadShifts();
   } catch(e) { toast('Fout: ' + e.message); }
@@ -497,7 +596,7 @@ function renderCashbook(data){
         <thead><tr><th>Bestelling</th><th>Methode</th><th class="txt-right">Bedrag</th></tr></thead>
         <tbody>
         ${d.orders.map(o=>`<tr>
-          <td>#${o.order_number} <span style="color:var(--mu)">· ${new Date(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}</span></td>
+          <td>#${o.order_number} <span style="color:var(--mu)">· ${parseDbDate(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}</span></td>
           <td><span class="method-tag ${o.method==='cash'?'tag-cash':'tag-card'}">${o.method==='cash'?'Cash':'Kaart'}</span></td>
           <td class="txt-right">${fmt(o.amount)}</td>
         </tr>`).join('')}

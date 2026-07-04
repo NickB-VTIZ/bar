@@ -12,6 +12,7 @@ services:
       - DB_PATH=/data/zomerbar.db
       - NODE_ENV=production
       - ADMIN_PASSWORD=zomerbar2025
+      - TZ=Europe/Brussels
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.zomerbar.rule=Host(`bar.boerderbij.be`) || Host(`nbotech.cloud`)"

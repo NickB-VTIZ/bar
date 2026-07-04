@@ -817,7 +817,7 @@ app.get('/api/orders', (req, res) => res.json(getActiveOrders()));
 app.get('/api/orders/history', requireAuth, (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0,10);
   const orders = db.prepare(`
-    SELECT * FROM orders WHERE DATE(created_at)=? ORDER BY created_at DESC LIMIT 300
+    SELECT * FROM orders WHERE DATE(created_at,'localtime')=? ORDER BY created_at DESC LIMIT 300
   `).all(date);
   res.json(orders.map(hydrate));
 });
@@ -1072,7 +1072,7 @@ app.get('/api/stats/items-sold', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     GROUP BY oi.name, oi.icon, p.category
     ORDER BY qty DESC
@@ -1091,7 +1091,7 @@ app.get('/api/stats/staff-drinks', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
       AND o.status != 'cancelled' AND o.is_staff = 1
     GROUP BY oi.name, oi.icon, p.category
     ORDER BY qty DESC
@@ -1103,7 +1103,7 @@ app.get('/api/stats/staff-drinks', requireAuth, (req, res) => {
     SELECT COALESCE(NULLIF(TRIM(o.note),''),'(geen naam)') as person,
            COUNT(*) as orders, SUM(o.amount) as value
     FROM orders o
-    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
       AND o.status != 'cancelled' AND o.is_staff = 1
     GROUP BY person
     ORDER BY value DESC
@@ -1119,7 +1119,7 @@ app.get('/api/zwartgeld/list', requireAuth, (req, res) => {
   const orders = db.prepare(`
     SELECT o.*, (SELECT COUNT(*) FROM order_items WHERE order_id=o.id) as item_count
     FROM orders o
-    WHERE method='cash' AND DATE(created_at) >= ? AND DATE(created_at) <= ?
+    WHERE method='cash' AND DATE(created_at,'localtime') >= ? AND DATE(created_at,'localtime') <= ?
       AND status NOT IN ('cancelled')
     ORDER BY created_at DESC
   `).all(from, to);
@@ -1186,7 +1186,7 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
       AND o.status NOT IN ('cancelled','archived','pending')
       AND o.is_staff = 0
   `).all(from, to);
@@ -1199,7 +1199,7 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
   // Cadeaus (bijentip): toegevoegd op ordertotaal, tellen eenmalig
   const gifts = db.prepare(`
     SELECT COALESCE(SUM(gift),0) as g FROM orders
-    WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
+    WHERE DATE(created_at,'localtime') >= ? AND DATE(created_at,'localtime') <= ?
       AND status NOT IN ('cancelled','archived','pending') AND is_staff = 0
   `).get(from, to).g;
   revenue += gifts;
@@ -1397,12 +1397,12 @@ app.get('/api/stats', requireAuth, (req, res) => {
       COALESCE(SUM(CASE WHEN method='cash' THEN amount END),0) as cash_revenue,
       COUNT(CASE WHEN method='sumup' THEN 1 END) as card_count,
       COALESCE(SUM(CASE WHEN method='sumup' THEN amount END),0) as card_revenue
-    FROM orders WHERE DATE(created_at)=? AND status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
+    FROM orders WHERE DATE(created_at,'localtime')=? AND status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).get(today);
   const topProducts = db.prepare(`
     SELECT oi.name,oi.icon,SUM(oi.qty) as sold,SUM(oi.qty*oi.price) as revenue
     FROM order_items oi JOIN orders o ON o.id=oi.order_id
-    WHERE DATE(o.created_at)=? AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
+    WHERE DATE(o.created_at,'localtime')=? AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     GROUP BY oi.name ORDER BY sold DESC LIMIT 8
   `).all(today);
   const lowStock = db.prepare('SELECT * FROM products WHERE stock>=0 AND stock<=low_stock AND active=1').all();
@@ -1469,8 +1469,8 @@ app.get('/api/cashbook', requireAuth, (req, res) => {
   const dateTo = to || dateFrom;
 
   const orders = db.prepare(`
-    SELECT o.*, DATE(o.created_at) as day FROM orders o
-    WHERE DATE(o.created_at) BETWEEN ? AND ?
+    SELECT o.*, DATE(o.created_at,'localtime') as day FROM orders o
+    WHERE DATE(o.created_at,'localtime') BETWEEN ? AND ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     ORDER BY o.created_at ASC
   `).all(dateFrom, dateTo);
@@ -1583,7 +1583,7 @@ app.get('/api/billit/daily-overview', requireAuth, (req, res) => {
   const day = req.query.date || new Date().toISOString().slice(0,10);
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method, o.gift FROM orders o
-    WHERE DATE(o.created_at) = ?
+    WHERE DATE(o.created_at,'localtime') = ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
@@ -1624,7 +1624,7 @@ app.post('/api/billit/daily-receipt', requireAuth, async (req, res) => {
 
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at) = ?
+    WHERE DATE(o.created_at,'localtime') = ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
@@ -1705,7 +1705,7 @@ app.get('/api/billit/daily-receipt/preview', requireAuth, (req, res) => {
   const day = req.query.date || new Date().toISOString().slice(0,10);
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at) = ?
+    WHERE DATE(o.created_at,'localtime') = ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
@@ -1746,7 +1746,7 @@ app.post('/api/invoice/monthly', requireAuth, async (req, res) => {
   // Gather paid orders for the month
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at) BETWEEN ? AND ?
+    WHERE DATE(o.created_at,'localtime') BETWEEN ? AND ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(dateFrom, dateTo);
 
@@ -1830,7 +1830,7 @@ app.get('/api/invoice/preview', requireAuth, (req, res) => {
 
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at) BETWEEN ? AND ?
+    WHERE DATE(o.created_at,'localtime') BETWEEN ? AND ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(dateFrom, dateTo);
 
