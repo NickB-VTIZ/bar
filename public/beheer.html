@@ -392,12 +392,18 @@ select.inp{cursor:pointer;}
     <div class="sec">
       <div class="sec-title">Billit Facturatie</div>
       <div class="card">
-        <div class="row"><div><div class="row-label">API-sleutel</div><div class="row-sub">Te vinden in je Billit-account</div></div><input class="inp" id="s-billit-key" type="password" placeholder="apiKey…"></div>
+        <div class="row"><div><div class="row-label">API-sleutel</div><div class="row-sub">Te vinden in je Billit-account onder Instellingen → API</div></div><input class="inp" id="s-billit-key" type="password" placeholder="apiKey…"></div>
+        <div class="row"><div><div class="row-label">PartyID <span style="color:var(--coral-d);">*</span></div><div class="row-sub">Cijferwaarde van je Billit-bedrijf. Zonder dit komt de factuur niet aan.</div></div><input class="inp" id="s-billit-party" placeholder="bv. 123456"></div>
         <div class="row"><div class="row-label">Omgeving</div><select class="inp" id="s-billit-env"><option value="sandbox">Sandbox (testen)</option><option value="production">Productie</option></select></div>
         <div class="row"><div class="row-label">Naam bar</div><input class="inp" id="s-bar-name" placeholder="Zomerbar"></div>
         <div class="row"><div><div class="row-label">BTW-nummer bar</div><div class="row-sub">BE + 10 cijfers</div></div><input class="inp" id="s-bar-vat" placeholder="BE0000000000"></div>
       </div>
       <button class="btn btn-teal btn-full" onclick="saveBillit()">Opslaan</button>
+      <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="testBillit()">🔌 Verbinding testen</button>
+      <div id="billit-test-result" style="margin-top:10px;font-size:13px;display:none;"></div>
+      <div style="margin-top:10px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--sun-t);line-height:1.6;">
+        <strong>PartyID vinden?</strong> Log in op MyBillit, ga naar <em>Instellingen → API</em>. Daar staan zowel je API-sleutel als je PartyID. Klik na het opslaan op <em>🔌 Verbinding testen</em> om te bevestigen dat de facturen in het juiste bedrijf terechtkomen.
+      </div>
     </div>
   </div>
 </div>
@@ -731,6 +737,7 @@ function loadSettingsToForm() {
   if(s.twilioMessagingServiceSid) document.getElementById('s-twilio-msid').value=s.twilioMessagingServiceSid;
   if(s.billitApiKey) document.getElementById('s-billit-key').value=s.billitApiKey;
   if(s.billitEnv)    document.getElementById('s-billit-env').value=s.billitEnv;
+  if(s.billitPartyId)document.getElementById('s-billit-party').value=s.billitPartyId;
   if(s.barName)      document.getElementById('s-bar-name').value=s.barName;
   if(s.barVat)       document.getElementById('s-bar-vat').value=s.barVat;
   if(s.vatDrinks)    document.getElementById('s-vat-drinks').value=s.vatDrinks;
@@ -1119,8 +1126,35 @@ async function testSms() {
 }
 
 async function saveBillit() {
-  await API.settings.save({ billitApiKey: document.getElementById('s-billit-key').value, billitEnv: document.getElementById('s-billit-env').value, barName: document.getElementById('s-bar-name').value, barVat: document.getElementById('s-bar-vat').value });
-  toast('✅ Billit instellingen opgeslagen');
+  await API.settings.save({
+    billitApiKey: document.getElementById('s-billit-key').value,
+    billitPartyId: document.getElementById('s-billit-party').value,
+    billitEnv: document.getElementById('s-billit-env').value,
+    barName: document.getElementById('s-bar-name').value,
+    barVat: document.getElementById('s-bar-vat').value,
+  });
+  toast('✅ Billit-instellingen opgeslagen');
+}
+
+async function testBillit() {
+  const el = document.getElementById('billit-test-result');
+  el.style.display = 'block';
+  el.style.color = 'var(--mu)';
+  el.textContent = 'Verbinding testen…';
+  try {
+    const r = await fetch('/api/billit/test', { headers: { 'x-admin-token': API.getToken() } });
+    const d = await r.json();
+    if (d.ok) {
+      el.style.color = 'var(--teal-d)';
+      el.innerHTML = `✅ Verbonden met Billit ${d.env} — bedrijf: <strong>${d.company_name||'(onbekend)'}</strong> (PartyID ${d.party_id})`;
+    } else {
+      el.style.color = 'var(--coral-d)';
+      el.textContent = '❌ ' + (d.error || 'Verbinding mislukt');
+    }
+  } catch(e) {
+    el.style.color = 'var(--coral-d)';
+    el.textContent = '❌ ' + e.message;
+  }
 }
 
 async function saveVat() {

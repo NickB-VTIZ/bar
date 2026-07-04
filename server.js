@@ -1371,18 +1371,54 @@ app.get('/api/cashbook', requireAuth, (req, res) => {
 async function billitRequest(method, apiPath, body) {
   const env = getSetting('billitEnv') || 'sandbox';
   const apiKey = getSetting('billitApiKey');
+  const partyId = getSetting('billitPartyId');
   if (!apiKey) throw new Error('Geen Billit API-sleutel ingesteld');
+  if (!partyId) throw new Error('Geen Billit PartyID ingesteld (nodig zodat de factuur in jouw bedrijf terechtkomt)');
   const base = env === 'production' ? 'https://api.billit.be' : 'https://api.sandbox.billit.be';
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'apiKey': apiKey,
+    'partyID': String(partyId),
+  };
   const r = await fetch(base + apiPath, {
     method,
-    headers: { 'Content-Type': 'application/json', 'apiKey': apiKey },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await r.text();
   let data; try { data = JSON.parse(text); } catch { data = text; }
-  if (!r.ok) throw new Error((data && data.errors) ? JSON.stringify(data.errors) : (data.Description || 'Billit fout ' + r.status));
+  if (!r.ok) {
+    console.error('Billit error', r.status, apiPath, '→', text.slice(0, 400));
+    const msg = (data && data.errors) ? JSON.stringify(data.errors)
+              : (data && data.Description) ? data.Description
+              : (typeof data === 'string' && data) ? data
+              : ('Billit fout ' + r.status);
+    throw new Error(msg);
+  }
   return data;
 }
+
+// Billit-verbinding testen: haalt bedrijfsinfo op zodat de gebruiker
+// meteen ziet in welke Billit-account de facturen zullen landen.
+app.get('/api/billit/test', requireAuth, async (req, res) => {
+  const env = getSetting('billitEnv') || 'sandbox';
+  const partyId = getSetting('billitPartyId');
+  try {
+    // /v1/parties/me → info over de aangesloten party
+    let company_name = null;
+    try {
+      const me = await billitRequest('GET', '/v1/parties/me');
+      company_name = me?.Name || me?.CommercialName || null;
+    } catch(_) {
+      // Fallback: gewoon een lege lijst opvragen om te verifiëren dat auth werkt
+      await billitRequest('GET', '/v1/orders?$top=1');
+    }
+    res.json({ ok: true, env, party_id: partyId, company_name });
+  } catch(e) {
+    res.status(400).json({ ok: false, error: e.message, env, party_id: partyId });
+  }
+});
 
 // ── Dagontvangsten naar Billit ───────────────────────────────────
 // Stuurt de ontvangsten van één dag als een DailyRevenue document naar Billit
