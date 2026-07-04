@@ -801,6 +801,16 @@ app.post('/api/products/sync-sumup', requireAuth, async (req, res) => {
 // Orders
 app.get('/api/orders', (req, res) => res.json(getActiveOrders()));
 
+// Historiek: alle bestellingen van een dag (incl. afgehandeld/geannuleerd)
+// LET OP: moet vóór /api/orders/:id staan
+app.get('/api/orders/history', requireAuth, (req, res) => {
+  const date = req.query.date || new Date().toISOString().slice(0,10);
+  const orders = db.prepare(`
+    SELECT * FROM orders WHERE DATE(created_at)=? ORDER BY created_at DESC LIMIT 300
+  `).all(date);
+  res.json(orders.map(hydrate));
+});
+
 app.get('/api/orders/:id', (req, res) => {
   const o = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Niet gevonden' });
@@ -1050,7 +1060,7 @@ app.get('/api/stats/items-sold', requireAuth, (req, res) => {
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
     WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
-      AND o.status NOT IN ('cancelled','pending')
+      AND o.status NOT IN ('cancelled','archived','pending')
     GROUP BY oi.name, oi.icon, p.category
     ORDER BY qty DESC
   `).all(from, to);
@@ -1181,6 +1191,31 @@ app.delete('/api/orders/:id', requireAuth, (req, res) => {
   broadcast('order_deleted', { id: req.params.id });
   res.json({ ok: true });
 });
+
+// Bestelling volledig annuleren: voorraad terugzetten + uit alle statistieken
+app.post('/api/orders/:id/cancel', requireAuth, (req, res) => {
+  const o = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Bestelling niet gevonden' });
+  if (o.status === 'cancelled') return res.json({ ok: true, already: true });
+
+  // Voorraad terugzetten als die eerder was afgetrokken
+  // (cash/tab: bij aanmaak; online: bij betaling → dus alles behalve 'pending')
+  const stockWasDeducted = o.status !== 'pending';
+  if (stockWasDeducted) {
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
+    const restore = db.prepare('UPDATE products SET stock = stock + ? WHERE id=? AND stock >= 0');
+    const logStock = db.prepare("INSERT INTO stock_log (product_id,delta,reason,order_id) VALUES (?,?,'cancel_restore',?)");
+    items.forEach(i => {
+      if (i.product_id) { restore.run(i.qty, i.product_id); logStock.run(i.product_id, i.qty, o.id); }
+    });
+  }
+  db.prepare("UPDATE orders SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(o.id);
+  broadcast('order_deleted', { id: o.id });
+  broadcast('products_updated', {});
+  res.json({ ok: true, stock_restored: stockWasDeducted });
+});
+
+// Historiek staat hierboven geregistreerd (vóór /api/orders/:id)
 
 // Stats
 app.get('/api/stats', requireAuth, (req, res) => {

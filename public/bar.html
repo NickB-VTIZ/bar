@@ -138,6 +138,9 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .qo-tile:active{transform:scale(.96);}
 .qo-tile.sel{background:var(--sun-l);border-color:var(--sun);}
 .qo-tile-icon{font-size:26px;height:30px;display:flex;align-items:center;}
+.qo-tile-img{width:56px;height:56px;border-radius:10px;background:#fff;border:0.5px solid var(--bd);display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:2px;}
+.qo-tile-img img{width:100%;height:100%;object-fit:cover;}
+.qo-tile-img.qo-tile-img-fb{background:var(--sun-l);font-size:26px;}
 .qo-tile-name{font-size:12px;font-weight:600;color:var(--tx);line-height:1.2;max-height:2.4em;overflow:hidden;}
 .qo-tile-price{font-size:12px;font-weight:700;color:var(--sun-d);}
 .qo-tile-qty{position:absolute;top:5px;right:5px;background:var(--sun);color:var(--sun-t);font-size:12px;font-weight:800;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 4px;}
@@ -150,6 +153,8 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
   .qo-prods{grid-template-columns:repeat(3,1fr);}
 }
 .qo-cat-heading{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--sun-t);margin:10px 2px 2px;padding-bottom:4px;border-bottom:2px solid var(--sun);}
+.hist-filter{padding:9px 16px;font-size:13px;font-weight:600;border:0.5px solid var(--bd);border-radius:18px;background:var(--card);color:var(--mu);cursor:pointer;}
+.hist-filter.on{background:var(--sun-l);border-color:var(--sun);color:var(--sun-t);}
 .qo-cat-heading:first-child{margin-top:0;}
 .qo-row{display:flex;align-items:center;gap:11px;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:8px;cursor:pointer;transition:all .12s;}
 .qo-row.sel{background:var(--sun-l);border-color:var(--sun);}
@@ -228,6 +233,7 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('orders',this)"><span>📋</span>Bestellingen</button>
+  <button class="nav-btn" onclick="showScreen('history',this);initHistory()"><span>🕘</span>Historiek</button>
   <button class="nav-btn" onclick="showScreen('links',this)"><span>🔗</span>Meer</button>
 </div>
 
@@ -247,6 +253,20 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 </div>
 
 <!-- Quick links -->
+<!-- Historiek -->
+<div id="screen-history" class="screen">
+  <div style="padding:14px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <input type="date" id="hist-date" onchange="loadHistory()" style="font-size:15px;padding:10px 14px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);">
+    <div style="display:flex;gap:6px;">
+      <button onclick="histFilter='all';loadHistory()" id="hf-all" class="hist-filter on">Alle</button>
+      <button onclick="histFilter='done';loadHistory()" id="hf-done" class="hist-filter">Afgehandeld</button>
+      <button onclick="histFilter='cancelled';loadHistory()" id="hf-cancelled" class="hist-filter">Geannuleerd</button>
+    </div>
+    <div id="hist-summary" style="margin-left:auto;font-size:14px;font-weight:700;color:var(--mu);"></div>
+  </div>
+  <div id="hist-list" style="padding:0 20px 40px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;"></div>
+</div>
+
 <div id="screen-links" class="screen">
   <div style="padding:16px;display:grid;gap:10px;">
     <a href="/bar/beheer" style="text-decoration:none;">
@@ -587,12 +607,12 @@ function cardHTML(o){
         <button class="act-btn" style="background:var(--teal);color:#fff;font-weight:600;font-size:13px;" onclick="checkPay('${o.id}')">🔄 Controleer betaling</button>
         <div style="display:flex;border-top:0.5px solid var(--bd);">
           <button class="act-btn btn-prep" style="flex:1;font-size:12px" onclick="markPaid('${o.id}')">✅ Toch betaald</button>
-          <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button>
+          <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="cancelOrder('${o.id}')">🚫 Annuleren</button>
         </div>
       </div>`;
     } else {
       actions = `<div class="card-actions">
-        <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="del('${o.id}')">🗑 Annuleren</button>
+        <button class="act-btn btn-del" style="flex:1;font-size:12px" onclick="cancelOrder('${o.id}')">🚫 Annuleren</button>
       </div>`;
     }
   } else if (o.status === 'paid') {
@@ -604,14 +624,14 @@ function cardHTML(o){
         </button>
         <div style="display:flex;border-top:0.5px solid var(--bd);">
           <button class="act-btn btn-prep" style="flex:2;font-size:12px" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button>
-          <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+          <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
         </div>
       </div>`;
     } else {
       // Online betaald of cash al betaald: normale flow
       actions = `<div class="card-actions">
         <button class="act-btn btn-prep" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button>
-        <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+        <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
       </div>`;
     }
   } else if (o.status === 'preparing') {
@@ -620,13 +640,13 @@ function cardHTML(o){
         <button class="act-btn btn-ready" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
         <div style="display:flex;border-top:0.5px solid var(--bd);">
           <button class="act-btn" style="flex:2;background:var(--teal);color:#fff;font-size:12px;font-weight:600;" onclick="openPayModal('${o.id}','${amtFmt}','${o.order_number}')">💶 Cash ontvangen</button>
-          <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+          <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
         </div>
       </div>`;
     } else {
       actions = `<div class="card-actions">
         <button class="act-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
-        <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+        <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
       </div>`;
     }
   } else if (o.status === 'ready') {
@@ -638,18 +658,18 @@ function cardHTML(o){
         </button>
         <div style="display:flex;border-top:0.5px solid var(--bd);">
           <button class="act-btn btn-collect" style="flex:2;font-size:12px" onclick="setStatus('${o.id}','collected')">👋 Zonder betaling opgehaald</button>
-          <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+          <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
         </div>
       </div>`;
     } else {
       actions = `<div class="card-actions">
         <button class="act-btn btn-collect" style="flex:2" onclick="setStatus('${o.id}','collected')">👋 Opgehaald</button>
-        <button class="act-btn btn-del" onclick="del('${o.id}')">✕</button>
+        <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
       </div>`;
     }
   } else {
     actions = `<div class="card-actions">
-      <button class="act-btn btn-del" style="flex:1" onclick="del('${o.id}')">🗑 Verwijderen</button>
+      <button class="act-btn btn-del" style="flex:1" onclick="cancelOrder('${o.id}')">🗑 Verwijderen</button>
     </div>`;
   }
 
@@ -902,11 +922,100 @@ function hideInvoiceForm() {
   document.getElementById('tab-invoice-form').style.display = 'none';
 }
 
+// ── Historiek ────────────────────────────────────────────────────
+let histOrders = {}, histFilter = 'all';
+
+function initHistory() {
+  const el = document.getElementById('hist-date');
+  if (!el.value) el.value = new Date().toISOString().slice(0,10);
+  loadHistory();
+}
+
+function histStatusBadge(o) {
+  if (o.status === 'cancelled') return '<span class="badge badge-done" style="background:var(--coral-l);color:var(--coral-d);border-color:var(--coral);">🚫 Geannuleerd</span>';
+  if (o.status === 'archived') return '<span class="badge badge-done">🗄 Verwijderd van bord</span>';
+  if (o.status === 'collected') return '<span class="badge badge-paid">👋 Afgehandeld</span>';
+  if (o.status === 'ready') return '<span class="badge badge-ready">🎉 Klaar</span>';
+  if (o.status === 'preparing') return '<span class="badge badge-preparing">👨‍🍳 Bezig</span>';
+  if (o.status === 'pending') return '<span class="badge badge-pending">⏳ Onbetaald</span>';
+  return '<span class="badge badge-paid">✅ Betaald</span>';
+}
+
+async function loadHistory() {
+  const date = document.getElementById('hist-date').value;
+  // Filterknoppen bijwerken
+  ['all','done','cancelled'].forEach(f => document.getElementById('hf-'+f).classList.toggle('on', histFilter===f));
+  const listEl = document.getElementById('hist-list');
+  listEl.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:20px;">Laden…</div>';
+  try {
+    let list = await API.orders.history(date);
+    histOrders = {};
+    list.forEach(o => histOrders[o.id] = o);
+    if (histFilter === 'done') list = list.filter(o => ['collected','archived','paid','preparing','ready'].includes(o.status) && o.status !== 'cancelled');
+    if (histFilter === 'cancelled') list = list.filter(o => o.status === 'cancelled');
+    const revenue = list.filter(o=>!['cancelled','pending'].includes(o.status)).reduce((s,o)=>s+o.amount,0);
+    document.getElementById('hist-summary').textContent = `${list.length} bestellingen`;
+    if (!list.length) {
+      listEl.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:24px;">Geen bestellingen op deze dag.</div>';
+      return;
+    }
+    listEl.innerHTML = list.map(o => {
+      const amtFmt = fmtEur(o.amount);
+      const time = new Date(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      const items = (o.items||[]).map(i => `
+        <div class="item-row" style="font-size:15px;padding:5px 0;">
+          <span class="item-icon" style="font-size:18px;">${i.icon||'🍺'}</span>
+          <span class="item-qty" style="font-size:15px;min-width:26px;">${i.qty}×</span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}</span>
+          <span style="color:var(--mu);font-size:13px;">${fmtEur(i.price*i.qty)}</span>
+        </div>`).join('');
+      const method = o.method==='cash'?'💶 Cash':o.method==='tab'?'📋 Rekening':o.method==='invoice'?'🧾 Factuur':'🏦 Online';
+      const canCancel = o.status !== 'cancelled';
+      const invoiced = !!o.invoice_billit_id;
+      return `<div class="card" style="${o.status==='cancelled'?'opacity:.6;':''}">
+        <div class="card-head" style="padding:12px 16px;">
+          <div>
+            <div class="order-num" style="font-size:26px;">#${o.order_number}</div>
+            <div class="order-meta">${time} · ${amtFmt} · ${method}</div>
+          </div>
+          ${histStatusBadge(o)}
+        </div>
+        <div class="card-items" style="padding:10px 16px;">${items}</div>
+        ${o.note?`<div class="card-note">"${o.note}"</div>`:''}
+        <div style="border-top:0.5px solid var(--bd);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:${invoiced?'var(--teal-l)':'var(--bg)'};">
+          <span style="font-size:12px;color:${invoiced?'var(--teal-d)':'var(--mu)'};font-weight:${invoiced?'700':'500'};">
+            ${invoiced ? `🧾 Gefactureerd${o.invoice_customer_name?' — '+o.invoice_customer_name:''}` : '🧾 Geen factuur'}
+          </span>
+          <div style="display:flex;gap:6px;">
+            ${o.status!=='cancelled' && o.status!=='pending' ? `<button onclick="openOrderInvoice('${o.id}')" style="padding:6px 12px;font-size:12px;font-weight:700;border:0.5px solid var(--sun);border-radius:12px;background:var(--sun-l);color:var(--sun-t);cursor:pointer;">${invoiced?'↻ Opnieuw':'Factuur maken'}</button>`:''}
+            ${canCancel ? `<button onclick="cancelOrder('${o.id}')" style="padding:6px 12px;font-size:12px;font-weight:700;border:0.5px solid var(--coral);border-radius:12px;background:var(--coral-l);color:var(--coral-d);cursor:pointer;">🚫 Annuleren</button>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    listEl.innerHTML = `<div style="color:var(--coral-d);font-size:13px;padding:16px;">Fout: ${e.message}</div>`;
+  }
+}
+
+async function cancelOrder(id) {
+  const o = histOrders[id] || orders[id];
+  const num = o ? '#'+o.order_number : '';
+  if (!confirm(`Bestelling ${num} volledig annuleren?\n\nDe voorraad wordt teruggezet en de bestelling telt niet meer mee in de statistieken en boekhouding.`)) return;
+  try {
+    await API.orders.cancel(id);
+    delete orders[id];
+    toast(`🚫 Bestelling ${num} geannuleerd — voorraad teruggezet`);
+    renderBoard();
+    if (document.getElementById('screen-history').classList.contains('on')) loadHistory();
+  } catch(e) { toast('Fout: ' + e.message); }
+}
+
 // ── Factuur voor een losse bestelling ──
 let invoiceOrderId = null;
 
 function openOrderInvoice(orderId) {
-  const o = orders[orderId];
+  const o = orders[orderId] || histOrders[orderId];
   if (!o) return;
   invoiceOrderId = orderId;
   document.getElementById('oi-order-label').textContent =
@@ -960,11 +1069,10 @@ async function submitOrderInvoice() {
     });
     toast(r.sent ? '✅ Factuur aangemaakt en verzonden' : '✅ Factuur aangemaakt in Billit');
     // Lokaal bijwerken zodat de knop meteen verandert
-    if (orders[invoiceOrderId]) {
-      orders[invoiceOrderId].invoice_billit_id = String(r.billit_order_id||'ok');
-      orders[invoiceOrderId].invoice_customer_name = name;
-      renderBoard();
-    }
+    const upd = (m) => { if (m[invoiceOrderId]) { m[invoiceOrderId].invoice_billit_id = String(r.billit_order_id||'ok'); m[invoiceOrderId].invoice_customer_name = name; } };
+    upd(orders); upd(histOrders);
+    renderBoard();
+    if (document.getElementById('screen-history').classList.contains('on')) loadHistory();
     closeOrderInvoice();
   } catch(e) {
     toast('Fout: ' + e.message);
@@ -1090,10 +1198,13 @@ function renderQoGrid() {
   });
   const tileHtml = (p) => {
     const qty = qoCart[p.id] || 0;
+    const visual = p.image_url
+      ? `<div class="qo-tile-img"><img src="${p.image_url}" alt="" loading="lazy" onerror="this.parentElement.classList.add('qo-tile-img-fb');this.parentElement.innerHTML='${p.icon}'"></div>`
+      : `<div class="qo-tile-img qo-tile-img-fb">${p.icon}</div>`;
     return `<div class="qo-tile ${qty>0?'sel':''}" onclick="qoAddItem(${p.id})">
       ${qty>0?`<div class="qo-tile-min" onclick="event.stopPropagation();qoChangeQty(${p.id},-1)">−</div>`:''}
       ${qty>0?`<div class="qo-tile-qty">${qty}</div>`:''}
-      <div class="qo-tile-icon">${p.icon}</div>
+      ${visual}
       <div class="qo-tile-name">${p.name}</div>
       <div class="qo-tile-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
     </div>`;
