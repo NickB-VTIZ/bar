@@ -341,24 +341,14 @@ async function loadStaffDrinks(){
   el.innerHTML = '<div style="color:var(--mu);padding:16px;text-align:center;">Laden…</div>';
   try {
     const d = await API.staffDrinks(from, to);
-    if (!d.items.length && !d.per_person.length) {
+    if (!d.items.length) {
       el.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:24px;text-align:center;background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);">Geen personeelsdrankjes in deze periode.</div>';
       return;
     }
     let html = `<div class="cb-summary" style="margin-bottom:16px;">
       <div class="cb-stat"><div class="cb-stat-n">${d.total_qty}</div><div class="cb-stat-l">Drankjes</div></div>
       <div class="cb-stat"><div class="cb-stat-n">${fmt(d.total_value)}</div><div class="cb-stat-l">Waarde (retail)</div></div>
-      <div class="cb-stat"><div class="cb-stat-n">${d.per_person.length}</div><div class="cb-stat-l">Personeelsleden</div></div>
     </div>`;
-    if (d.per_person.length) {
-      html += '<div style="font-size:14px;font-weight:800;color:var(--sun-t);margin:16px 2px 8px;padding-bottom:5px;border-bottom:2px solid var(--sun);">Per persoon</div>';
-      html += d.per_person.map(p => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:0.5px solid var(--bd);">
-          <span style="font-size:18px;">🧑‍🍳</span>
-          <div style="flex:1;font-size:14px;font-weight:600;color:var(--tx);">${p.person}</div>
-          <div style="text-align:right;"><div style="font-size:15px;font-weight:700;color:var(--sun-d);">${p.orders}×</div><div style="font-size:12px;color:var(--mu);">${fmt(p.value)}</div></div>
-        </div>`).join('');
-    }
     if (d.items.length) {
       html += '<div style="font-size:14px;font-weight:800;color:var(--sun-t);margin:16px 2px 8px;padding-bottom:5px;border-bottom:2px solid var(--sun);">Per drankje</div>';
       const maxQty = Math.max(...d.items.map(i=>i.qty));

@@ -378,11 +378,6 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
           </div>
         </div>
 
-        <!-- Personeelsnaam (enkel bij Personeel) -->
-        <div id="qo-staff-select" style="display:none;">
-          <input id="qo-staff-name" type="text" placeholder="Naam van personeelslid *" style="width:100%;font-size:13px;padding:10px 12px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);color:var(--sun-t);box-sizing:border-box;">
-        </div>
-
         <!-- Rekening kiezen/aanmaken (enkel bij Op rekening) -->
         <div id="qo-tab-select" style="display:none;">
           <select id="qo-tab-dropdown" style="width:100%;font-size:13px;padding:10px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-bottom:6px;box-sizing:border-box;">
@@ -1274,7 +1269,6 @@ function openQuickOrder() {
   qoCart = {}; qoPayMethod = 'cash';
   renderQoGrid(); renderQoCart();
   document.getElementById('qo-note').value = '';
-  const sn = document.getElementById('qo-staff-name'); if (sn) sn.value = '';
   qoSelPay('cash'); // reset knop-stijlen en verberg rekening-selector
   document.getElementById('quick-overlay').style.display = 'flex';
 }
@@ -1369,9 +1363,7 @@ function qoSelPay(m) {
     }
   });
   document.getElementById('qo-tab-select').style.display = m === 'tab' ? 'block' : 'none';
-  document.getElementById('qo-staff-select').style.display = m === 'staff' ? 'block' : 'none';
   if (m === 'tab') loadQoTabs();
-  if (m === 'staff') setTimeout(()=>document.getElementById('qo-staff-name').focus(), 50);
 }
 
 async function loadQoTabs() {
@@ -1406,12 +1398,6 @@ async function submitQuickOrder() {
   if (qoPayMethod === 'tab') {
     tabId = document.getElementById('qo-tab-dropdown').value;
     if (!tabId) { toast('Kies of maak eerst een rekening'); return; }
-  }
-  if (qoPayMethod === 'staff') {
-    const staffName = document.getElementById('qo-staff-name').value.trim();
-    if (!staffName) { toast('Vul de naam van het personeelslid in'); return; }
-    // Personeelsnaam in de note zodat het overzicht per persoon werkt
-    noteFinal = staffName + (noteFinal ? ' — ' + noteFinal : '');
   }
   const items = entries.map(([id,qty]) => {
     const p = products.find(x=>x.id==id);
