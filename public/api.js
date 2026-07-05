@@ -92,9 +92,10 @@ window.API = (() => {
     },
     stock: { log: () => req('GET', '/api/stock/log') },
     tabs: {
-      list:   ()        => req('GET',  '/api/tabs?status=open'),
-      create: (name)    => req('POST', '/api/tabs', { name }),
-      close:  (id, m)   => req('POST', `/api/tabs/${id}/close`, { method: m }),
+      list:      ()        => req('GET',  '/api/tabs?status=open'),
+      staffTab:  ()        => req('GET',  '/api/tabs/staff'),
+      create:    (name)    => req('POST', '/api/tabs', { name }),
+      close:     (id, m)   => req('POST', `/api/tabs/${id}/close`, { method: m }),
     },
     itemsSold: (from, to) => req('GET', `/api/stats/items-sold?from=${from}&to=${to||from}`),
     staffDrinks: (from, to) => req('GET', `/api/stats/staff-drinks?from=${from}&to=${to||from}`),

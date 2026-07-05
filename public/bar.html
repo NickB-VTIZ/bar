@@ -210,6 +210,30 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
       <div style="font-size:18px;font-weight:700;color:var(--tx);">📋 Open rekeningen</div>
       <button onclick="closeTabsOverlay()" style="background:none;border:none;font-size:22px;color:var(--mu);cursor:pointer;">✕</button>
     </div>
+    <!-- Personeel: doorlopende teller (nooit afgesloten) -->
+    <div id="staff-tab-card" style="display:none;background:linear-gradient(135deg,var(--sun-l) 0%,#FFF7DA 100%);border:1px solid var(--sun);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:15px;font-weight:800;color:var(--sun-t);">🧑‍🍳 Personeel <span style="font-size:11px;font-weight:500;color:var(--mu);background:var(--card);padding:2px 8px;border-radius:10px;margin-left:4px;">doorlopend</span></div>
+        <a href="/bar/boekhouding" style="font-size:12px;color:var(--sun-d);text-decoration:none;font-weight:600;">Details →</a>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div style="background:var(--card);border-radius:var(--rm);padding:8px 10px;text-align:center;">
+          <div style="font-size:11px;color:var(--mu);text-transform:uppercase;font-weight:600;">Vandaag</div>
+          <div style="font-size:16px;font-weight:800;color:var(--sun-d);" id="staff-today">€ 0,00</div>
+          <div style="font-size:11px;color:var(--mu);" id="staff-today-n">0 drankjes</div>
+        </div>
+        <div style="background:var(--card);border-radius:var(--rm);padding:8px 10px;text-align:center;">
+          <div style="font-size:11px;color:var(--mu);text-transform:uppercase;font-weight:600;">7 dagen</div>
+          <div style="font-size:16px;font-weight:800;color:var(--sun-d);" id="staff-week">€ 0,00</div>
+          <div style="font-size:11px;color:var(--mu);" id="staff-week-n">0 drankjes</div>
+        </div>
+        <div style="background:var(--card);border-radius:var(--rm);padding:8px 10px;text-align:center;">
+          <div style="font-size:11px;color:var(--mu);text-transform:uppercase;font-weight:600;">Totaal</div>
+          <div style="font-size:16px;font-weight:800;color:var(--sun-d);" id="staff-total">€ 0,00</div>
+          <div style="font-size:11px;color:var(--mu);" id="staff-total-n">0 drankjes</div>
+        </div>
+      </div>
+    </div>
     <div id="tabs-list"></div>
     <!-- Factuurformulier (verschijnt bij klik op Factuur) -->
     <div id="tab-invoice-form" style="display:none;margin-top:14px;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px;">
@@ -262,6 +286,7 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
     <div style="display:flex;gap:6px;">
       <button onclick="histFilter='all';loadHistory()" id="hf-all" class="hist-filter on">Alle</button>
       <button onclick="histFilter='done';loadHistory()" id="hf-done" class="hist-filter">Afgehandeld</button>
+      <button onclick="histFilter='tab';loadHistory()" id="hf-tab" class="hist-filter">📋 Op rekening</button>
       <button onclick="histFilter='cancelled';loadHistory()" id="hf-cancelled" class="hist-filter">Geannuleerd</button>
     </div>
     <div id="hist-summary" style="margin-left:auto;font-size:14px;font-weight:700;color:var(--mu);"></div>
@@ -867,7 +892,24 @@ let openTabs = [], invoiceTabId = null, settleTabId = null;
 async function openTabsOverlay() {
   document.getElementById('tabs-overlay').style.display = 'flex';
   hideInvoiceForm();
-  await renderTabsList();
+  await Promise.all([renderTabsList(), loadStaffTab()]);
+}
+
+async function loadStaffTab() {
+  const card = document.getElementById('staff-tab-card');
+  try {
+    const t = await API.tabs.staffTab();
+    if (!t) return;
+    card.style.display = 'block';
+    const fmtE = v => '€ ' + (v||0).toFixed(2).replace('.',',');
+    const totalItems = (t.items||[]).reduce((s,i)=>s+i.qty, 0);
+    document.getElementById('staff-today').textContent = fmtE(t.day_total);
+    document.getElementById('staff-today-n').textContent = `${t.day_orders||0} bestelling${(t.day_orders||0)===1?'':'en'}`;
+    document.getElementById('staff-week').textContent = fmtE(t.week_total);
+    document.getElementById('staff-week-n').textContent = `${t.week_orders||0} bestelling${(t.week_orders||0)===1?'':'en'}`;
+    document.getElementById('staff-total').textContent = fmtE(t.total);
+    document.getElementById('staff-total-n').textContent = `${totalItems} drankje${totalItems===1?'':'s'}`;
+  } catch(_) { card.style.display = 'none'; }
 }
 function closeTabsOverlay() {
   document.getElementById('tabs-overlay').style.display = 'none';
@@ -876,11 +918,26 @@ function closeTabsOverlay() {
 async function renderTabsList() {
   const el = document.getElementById('tabs-list');
   el.innerHTML = '<div style="color:var(--mu);font-size:13px;padding:12px;">Laden…</div>';
+
+  // Personeelsteller ophalen en tonen (parallel, faalt niet in het geheel)
+  API.tabs.staffTab().then(s => {
+    const card = document.getElementById('staff-tab-card');
+    if (!card) return;
+    card.style.display = 'block';
+    const fmt = n => '€ ' + (n||0).toFixed(2).replace('.',',');
+    document.getElementById('staff-today').textContent = fmt(s.day_total);
+    document.getElementById('staff-today-n').textContent = (s.day_orders||0) + ' drankjes';
+    document.getElementById('staff-week').textContent = fmt(s.week_total);
+    document.getElementById('staff-week-n').textContent = (s.week_orders||0) + ' drankjes';
+    document.getElementById('staff-total').textContent = fmt(s.total);
+    document.getElementById('staff-total-n').textContent = (s.order_count||0) + ' drankjes';
+  }).catch(()=>{ /* stil doorgaan bij fout — hoofdlijst blijft werken */ });
+
   try {
     openTabs = await API.tabs.list();
     updateTabsBadge();
     if (!openTabs.length) {
-      el.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:20px;text-align:center;">Geen open rekeningen.<br><span style="font-size:12px;">Maak er een via + Nieuwe bestelling → Op rekening.</span></div>';
+      el.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:20px;text-align:center;">Geen open klant-rekeningen.<br><span style="font-size:12px;">Maak er een via + Nieuwe bestelling → Op rekening.</span></div>';
       return;
     }
     el.innerHTML = openTabs.map(t => `
@@ -960,6 +1017,10 @@ function initHistory() {
 function histStatusBadge(o) {
   if (o.status === 'cancelled') return '<span class="badge badge-done" style="background:var(--coral-l);color:var(--coral-d);border-color:var(--coral);">🚫 Geannuleerd</span>';
   if (o.status === 'archived') return '<span class="badge badge-done">🗄 Verwijderd van bord</span>';
+  // Op rekening én nog niet afgesloten → aparte badge (nog open)
+  if (o.tab_id && o.tab_status !== 'closed' && !o.cash_paid) {
+    return '<span class="badge badge-cash-open">📋 Op open rekening</span>';
+  }
   if (o.status === 'collected') return '<span class="badge badge-paid">👋 Afgehandeld</span>';
   if (o.status === 'ready') return '<span class="badge badge-ready">🎉 Klaar</span>';
   if (o.status === 'preparing') return '<span class="badge badge-preparing">👨‍🍳 Bezig</span>';
@@ -970,7 +1031,7 @@ function histStatusBadge(o) {
 async function loadHistory() {
   const date = document.getElementById('hist-date').value;
   // Filterknoppen bijwerken
-  ['all','done','cancelled'].forEach(f => document.getElementById('hf-'+f).classList.toggle('on', histFilter===f));
+  ['all','done','tab','cancelled'].forEach(f => document.getElementById('hf-'+f).classList.toggle('on', histFilter===f));
   const listEl = document.getElementById('hist-list');
   listEl.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:20px;">Laden…</div>';
   try {
@@ -979,8 +1040,11 @@ async function loadHistory() {
     list.forEach(o => histOrders[o.id] = o);
     if (histFilter === 'done') list = list.filter(o => ['collected','archived','paid','preparing','ready'].includes(o.status) && o.status !== 'cancelled');
     if (histFilter === 'cancelled') list = list.filter(o => o.status === 'cancelled');
-    const revenue = list.filter(o=>!['cancelled','pending'].includes(o.status)).reduce((s,o)=>s+o.amount,0);
-    document.getElementById('hist-summary').textContent = `${list.length} bestellingen`;
+    if (histFilter === 'tab') list = list.filter(o => o.tab_id);
+    // Samenvatting: aantal + totaal + hoeveel op rekening
+    const tabCount = list.filter(o=>o.tab_id).length;
+    document.getElementById('hist-summary').textContent =
+      `${list.length} bestellingen${tabCount?` · 📋 ${tabCount} op rekening`:''}`;
     if (!list.length) {
       listEl.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:24px;">Geen bestellingen op deze dag.</div>';
       return;
@@ -995,10 +1059,24 @@ async function loadHistory() {
           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}</span>
           <span style="color:var(--mu);font-size:13px;">${fmtEur(i.price*i.qty)}</span>
         </div>`).join('');
-      const method = o.method==='cash'?'💶 Cash':o.method==='tab'?'📋 Rekening':o.method==='invoice'?'🧾 Factuur':'🏦 Online';
+      // Methode-label: tab-bestellingen krijgen altijd het rekening-label + naam,
+      // ook al is de method achteraf op cash/invoice gezet bij afsluiten
+      let method;
+      if (o.tab_id) {
+        const status = o.tab_status === 'closed' ? '✅' : (o.cash_paid ? '✅' : '');
+        method = `📋 Rekening${o.tab_name?' "'+o.tab_name+'"':''} ${status}`.trim();
+        if (o.method === 'invoice') method += ' · 🧾 factuur';
+        else if (o.method === 'cash' && o.tab_status === 'closed') method += ' · 💶 cash';
+        else if (o.method === 'sumup' && o.tab_status === 'closed') method += ' · 💳 SumUp';
+      } else if (o.method === 'cash') method = o.cash_paid ? '💶 Cash ✅' : '💶 Cash (te betalen)';
+      else if (o.method === 'staff' || o.is_staff) method = '🧑‍🍳 Personeel';
+      else if (o.method === 'invoice') method = '🧾 Factuur';
+      else method = '🏦 Online';
       const canCancel = o.status !== 'cancelled';
       const invoiced = !!o.invoice_billit_id;
-      return `<div class="card" style="${o.status==='cancelled'?'opacity:.6;':''}">
+      // Accent-kleur voor open rekening-bestellingen zodat ze opvallen
+      const tabAccent = o.tab_id && o.tab_status !== 'closed' ? 'border-left:4px solid var(--sun);' : '';
+      return `<div class="card" style="${o.status==='cancelled'?'opacity:.6;':''}${tabAccent}">
         <div class="card-head" style="padding:12px 16px;">
           <div>
             <div class="order-num" style="font-size:26px;">#${o.order_number}</div>

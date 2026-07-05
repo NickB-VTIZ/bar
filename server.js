@@ -129,6 +129,7 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN invoice_billit_id TEXT`,
   `ALTER TABLE orders ADD COLUMN invoice_customer_name TEXT`,
   `ALTER TABLE orders ADD COLUMN is_staff INTEGER DEFAULT 0`,
+  `ALTER TABLE tabs ADD COLUMN is_staff INTEGER DEFAULT 0`,
 ];
 
 migrations.forEach(sql => {
@@ -817,9 +818,17 @@ app.get('/api/orders', (req, res) => res.json(getActiveOrders()));
 app.get('/api/orders/history', requireAuth, (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0,10);
   const orders = db.prepare(`
-    SELECT * FROM orders WHERE DATE(created_at,'localtime')=? ORDER BY created_at DESC LIMIT 300
+    SELECT o.*, t.name AS tab_name, t.status AS tab_status
+    FROM orders o
+    LEFT JOIN tabs t ON t.id = o.tab_id
+    WHERE DATE(o.created_at,'localtime')=?
+    ORDER BY o.created_at DESC LIMIT 300
   `).all(date);
-  res.json(orders.map(hydrate));
+  res.json(orders.map(o => {
+    const h = hydrate(o);
+    if (o.tab_name) { h.tab_name = o.tab_name; h.tab_status = o.tab_status; }
+    return h;
+  }));
 });
 
 app.get('/api/orders/:id', (req, res) => {
@@ -852,17 +861,25 @@ app.post('/api/orders', async (req, res) => {
 
   // Cash = bar-bestelling: meteen op het bord (paid) maar nog niet fysiek betaald (cash_paid=0)
   // Tab = op rekening: zelfde gedrag, gekoppeld aan een rekening
-  // Staff = personeelsdrankje: voorraad af, geen omzet, geen factuur
+  // Staff = personeelsdrankje: gaat op de speciale "eeuwige" Personeel-rekening,
+  //   status meteen 'collected' zodat het niet op het bord komt om af te vinken
   // Online (mollie/sumup) = wacht op betaling
-  const tabId = req.body.tab_id ? parseInt(req.body.tab_id) : null;
+  let tabId = req.body.tab_id ? parseInt(req.body.tab_id) : null;
   const isCash = method === 'cash';
-  const isTab = method === 'tab' && tabId;
   const isStaff = method === 'staff';
+  const isTab = method === 'tab' && tabId;
+
+  // Staff → automatisch koppelen aan de speciale personeelsrekening
+  if (isStaff) {
+    tabId = getOrCreateStaffTab().id;
+  }
+
   const payMethod = isCash ? 'cash' : isTab ? 'tab' : isStaff ? 'staff' : (method || getSetting('payProvider') || 'mollie');
-  const status = (isCash || isTab || isStaff) ? 'paid' : 'pending';
+  // Staff-bestellingen zijn meteen 'collected' → verschijnen niet op het bord
+  const status = isStaff ? 'collected' : (isCash || isTab) ? 'paid' : 'pending';
 
   db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, isStaff?1:0, isTab ? tabId : null, isStaff?1:0);
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, isStaff?1:0, (isTab||isStaff) ? tabId : null, isStaff?1:0);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
@@ -1020,6 +1037,17 @@ app.patch('/api/orders/:id/register-payment', requireAuth, (req, res) => {
 });
 
 // ── Rekeningen (tabs) ────────────────────────────────────────────
+// Automatisch een permanente "Personeel"-rekening ophalen of aanmaken
+function getOrCreateStaffTab() {
+  let tab = db.prepare("SELECT * FROM tabs WHERE is_staff=1 LIMIT 1").get();
+  if (!tab) {
+    const r = db.prepare("INSERT INTO tabs (name, status, is_staff) VALUES (?, 'open', 1)")
+      .run('🧑‍🍳 Personeel');
+    tab = db.prepare("SELECT * FROM tabs WHERE id=?").get(r.lastInsertRowid);
+  }
+  return tab;
+}
+
 app.post('/api/tabs', requireAuth, (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Naam vereist' });
@@ -1046,8 +1074,26 @@ function tabWithDetails(t) {
 
 app.get('/api/tabs', requireAuth, (req, res) => {
   const status = req.query.status || 'open';
-  const tabs = db.prepare('SELECT * FROM tabs WHERE status=? ORDER BY created_at DESC').all(status);
+  // Personeelsrekening niet meesturen in de gewone lijst — die heeft zijn eigen endpoint
+  const tabs = db.prepare('SELECT * FROM tabs WHERE status=? AND is_staff=0 ORDER BY created_at DESC').all(status);
   res.json(tabs.map(tabWithDetails));
+});
+
+// Personeelsrekening apart ophalen (met totalen deze dag/week/all-time)
+app.get('/api/tabs/staff', requireAuth, (req, res) => {
+  const tab = getOrCreateStaffTab();
+  const details = tabWithDetails(tab);
+  const dayTotal = db.prepare(`
+    SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as n
+    FROM orders WHERE tab_id=? AND status!='cancelled'
+      AND DATE(created_at,'localtime')=DATE('now','localtime')
+  `).get(tab.id);
+  const weekTotal = db.prepare(`
+    SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as n
+    FROM orders WHERE tab_id=? AND status!='cancelled'
+      AND DATE(created_at,'localtime') >= DATE('now','localtime','-7 days')
+  `).get(tab.id);
+  res.json({ ...details, day_total: dayTotal.v, day_orders: dayTotal.n, week_total: weekTotal.v, week_orders: weekTotal.n });
 });
 
 // Rekening afsluiten: alle openstaande bestellingen op betaald
@@ -1055,6 +1101,7 @@ app.post('/api/tabs/:id/close', requireAuth, (req, res) => {
   const { method } = req.body; // 'cash' | 'sumup' | 'invoice'
   const t = db.prepare('SELECT * FROM tabs WHERE id=?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Rekening niet gevonden' });
+  if (t.is_staff) return res.status(400).json({ error: 'De Personeel-rekening kan niet worden afgesloten' });
   const m = ['cash','sumup','invoice'].includes(method) ? method : 'cash';
   db.prepare("UPDATE orders SET cash_paid=1, method=?, updated_at=datetime('now') WHERE tab_id=? AND cash_paid=0").run(m, t.id);
   db.prepare("UPDATE tabs SET status='closed', closed_at=datetime('now') WHERE id=?").run(t.id);
