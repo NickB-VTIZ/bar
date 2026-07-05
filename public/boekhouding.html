@@ -347,7 +347,8 @@ async function loadStaffDrinks(){
     }
     let html = `<div class="cb-summary" style="margin-bottom:16px;">
       <div class="cb-stat"><div class="cb-stat-n">${d.total_qty}</div><div class="cb-stat-l">Drankjes</div></div>
-      <div class="cb-stat"><div class="cb-stat-n">${fmt(d.total_value)}</div><div class="cb-stat-l">Waarde (retail)</div></div>
+      <div class="cb-stat"><div class="cb-stat-n" style="color:var(--coral-d);">${fmt(d.total_cost||0)}</div><div class="cb-stat-l">Werkelijke kost</div></div>
+      <div class="cb-stat"><div class="cb-stat-n">${fmt(d.total_value)}</div><div class="cb-stat-l">Retail-waarde</div></div>
     </div>`;
     if (d.items.length) {
       html += '<div style="font-size:14px;font-weight:800;color:var(--sun-t);margin:16px 2px 8px;padding-bottom:5px;border-bottom:2px solid var(--sun);">Per drankje</div>';
@@ -359,7 +360,11 @@ async function loadStaffDrinks(){
             <div style="font-size:14px;font-weight:600;color:var(--tx);">${i.name}</div>
             <div style="height:6px;background:var(--bg);border-radius:3px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:${Math.max(4,i.qty/maxQty*100)}%;background:var(--sun);border-radius:3px;"></div></div>
           </div>
-          <div style="text-align:right;"><div style="font-size:15px;font-weight:700;color:var(--sun-d);">${i.qty}×</div><div style="font-size:12px;color:var(--mu);">${fmt(i.value_lost)}</div></div>
+          <div style="text-align:right;">
+            <div style="font-size:15px;font-weight:700;color:var(--sun-d);">${i.qty}×</div>
+            <div style="font-size:12px;color:var(--coral-d);font-weight:600;">kost ${fmt(i.cost||0)}</div>
+            <div style="font-size:11px;color:var(--mu);">retail ${fmt(i.value_lost)}</div>
+          </div>
         </div>`).join('');
     }
     el.innerHTML = html;
@@ -520,6 +525,7 @@ async function loadProfit(){
           <tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;">Omzet (incl. cadeaus ${fmt(p.gifts)})</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--teal-d);">${fmt(p.revenue)}</td></tr>
           <tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Inkoopkost goederen (${p.items_sold} items)</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.cogs)}</td></tr>
           <tr style="border-bottom:2px solid var(--sun);background:var(--sun-l);"><td style="padding:12px 4px;font-weight:700;">= Bruto marge</td><td style="text-align:right;padding:12px 4px;font-weight:800;font-size:18px;color:var(--sun-d);">${fmt(p.gross_margin)}</td></tr>
+          ${(p.staff_qty||0) > 0 ? `<tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Personeelsdrankjes — inkoopkost (${p.staff_qty} drankjes, retail ${fmt(p.staff_retail)})</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.staff_cost)}</td></tr>` : ''}
           <tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Loonkost (${p.labor_hours.toFixed(1).replace('.',',')} u)</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.labor_cost)}</td></tr>
           <tr style="background:${p.net_profit>=0?'var(--teal-l)':'var(--coral-l)'};"><td style="padding:14px 4px;font-weight:800;font-size:17px;">= Netto winst</td><td style="text-align:right;padding:14px 4px;font-weight:800;font-size:22px;color:${p.net_profit>=0?'var(--teal-d)':'var(--coral-d)'};">${fmt(p.net_profit)}</td></tr>
         </table>
@@ -527,6 +533,7 @@ async function loadProfit(){
       <div style="background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--r);padding:12px 14px;font-size:12px;color:var(--mu);line-height:1.6;">
         <strong>Toelichting:</strong> omzet = alles wat via kassa/kaart/online betaald werd (excl. geannuleerd, personeel en onbetaalde bestellingen).
         Inkoopkost = aankoopprijs × aantal verkochte items (voor producten waar een aankoopprijs is ingegeven).
+        Personeelsdrankjes zijn niet betaald — enkel de aankoopkost wordt hier in mindering gebracht.
         Loonkost = uren × uurloon van geregistreerde shiften.
       </div>`;
   } catch(e) { el.innerHTML = `<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`; }

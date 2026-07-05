@@ -1134,7 +1134,11 @@ app.get('/api/stats/staff-drinks', requireAuth, (req, res) => {
   const from = req.query.from || new Date().toISOString().slice(0,10);
   const to = req.query.to || from;
   const rows = db.prepare(`
-    SELECT oi.name, oi.icon, SUM(oi.qty) as qty, SUM(oi.price*oi.qty) as value_lost, p.category
+    SELECT oi.name, oi.icon,
+           SUM(oi.qty) as qty,
+           SUM(oi.price*oi.qty) as value_lost,
+           SUM(oi.qty*COALESCE(p.cost_price,0)) as cost,
+           p.category
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
@@ -1145,17 +1149,8 @@ app.get('/api/stats/staff-drinks', requireAuth, (req, res) => {
   `).all(from, to);
   const totalQty = rows.reduce((s,r)=>s+r.qty,0);
   const totalValue = rows.reduce((s,r)=>s+r.value_lost,0);
-  // Ook per persoon (uit de "note" van de order)
-  const perPerson = db.prepare(`
-    SELECT COALESCE(NULLIF(TRIM(o.note),''),'(geen naam)') as person,
-           COUNT(*) as orders, SUM(o.amount) as value
-    FROM orders o
-    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
-      AND o.status != 'cancelled' AND o.is_staff = 1
-    GROUP BY person
-    ORDER BY value DESC
-  `).all(from, to);
-  res.json({ from, to, items: rows, total_qty: totalQty, total_value: totalValue, per_person: perPerson });
+  const totalCost = rows.reduce((s,r)=>s+(r.cost||0),0);
+  res.json({ from, to, items: rows, total_qty: totalQty, total_value: totalValue, total_cost: totalCost });
 });
 
 // ── Verborgen: cash-orders permanent uit systeem verwijderen ────
@@ -1251,6 +1246,21 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
   `).get(from, to).g;
   revenue += gifts;
 
+  // Personeelsdrankjes: enkel de aankoopkost (retail-waarde is niet betaald door de klant)
+  const staffRows = db.prepare(`
+    SELECT SUM(oi.qty*COALESCE(p.cost_price,0)) as cost,
+           SUM(oi.qty) as qty,
+           SUM(oi.price*oi.qty) as retail
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    LEFT JOIN products p ON p.id = oi.product_id
+    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
+      AND o.status != 'cancelled' AND o.is_staff = 1
+  `).get(from, to);
+  const staffCost = staffRows.cost || 0;
+  const staffQty = staffRows.qty || 0;
+  const staffRetail = staffRows.retail || 0;
+
   // Lonen
   const laborRow = db.prepare(`
     SELECT COALESCE(SUM(hours*hourly_rate),0) as cost, COALESCE(SUM(hours),0) as hours
@@ -1260,10 +1270,11 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
   const laborHours = laborRow.hours;
 
   const grossMargin = revenue - cogs;   // omzet - inkoopkost = bruto marge
-  const netProfit = grossMargin - laborCost; // - lonen = netto winst
+  const netProfit = grossMargin - staffCost - laborCost; // - personeel - lonen = netto winst
   res.json({
     from, to,
     revenue, cogs, gross_margin: grossMargin,
+    staff_cost: staffCost, staff_qty: staffQty, staff_retail: staffRetail,
     labor_cost: laborCost, labor_hours: laborHours,
     net_profit: netProfit,
     items_sold: itemsSold, gifts,
