@@ -107,6 +107,7 @@ tr:last-child td{border-bottom:none;}
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('cashbook',this)">📒 Kasdagboek</button>
   <button class="nav-btn" onclick="showScreen('itemssold',this);initItemsSold()">📊 Verkochte items</button>
+  <button class="nav-btn" onclick="showScreen('busyhours',this);initBusyHours()">🔥 Piekuren</button>
   <button class="nav-btn" onclick="showScreen('staffdrinks',this);initStaffDrinks()">🧑‍🍳 Personeel</button>
   <button class="nav-btn" onclick="showScreen('profit',this);initProfit()">💰 Winst</button>
   <button class="nav-btn" onclick="showScreen('daily',this);initDaily()">📅 Dagontvangsten</button>
@@ -158,6 +159,27 @@ tr:last-child td{border-bottom:none;}
 </div>
 
 <!-- Personeel: drankjes + shiften -->
+<!-- Piekuren -->
+<div id="screen-busyhours" class="screen">
+  <div class="wrap">
+    <div class="controls no-print">
+      <label>Van</label>
+      <input type="date" id="bh-from">
+      <label>Tot</label>
+      <input type="date" id="bh-to">
+      <button class="btn btn-ghost" onclick="setPeriodOn('bh','yesterday')">Gisteren</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('bh','today')">Vandaag</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('bh','week')">Deze week</button>
+      <button class="btn btn-ghost" onclick="setPeriodOn('bh','month')">Deze maand</button>
+      <button class="btn btn-primary" onclick="loadBusyHours()">Tonen</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
+    </div>
+    <div id="busyhours-content">
+      <div style="color:var(--mu);font-size:13px;padding:20px;text-align:center;">Kies een periode en klik op Tonen.</div>
+    </div>
+  </div>
+</div>
+
 <div id="screen-staffdrinks" class="screen">
   <div class="wrap">
     <div class="controls no-print">
@@ -320,6 +342,7 @@ function setPeriodOn(prefix, period){
   if (prefix === 'sd') loadStaffDrinks();
   else if (prefix === 'pf') loadProfit();
   else if (prefix === 'is') loadItemsSold();
+  else if (prefix === 'bh') loadBusyHours();
   else if (prefix === 'cb') loadCashbook();
 }
 
@@ -628,6 +651,133 @@ function renderCashbook(data){
 // Invoice
 // ── Dagontvangsten (Billit-categorieën overzicht) ──
 // ── Verkochte items ──
+// ── Piekuren ──
+function initBusyHours(){
+  const t = new Date().toISOString().slice(0,10);
+  if (!document.getElementById('bh-from').value) document.getElementById('bh-from').value = t;
+  if (!document.getElementById('bh-to').value) document.getElementById('bh-to').value = t;
+  loadBusyHours();
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+function renderHourChart(hours, activeDays){
+  // Toon enkel het bereik waar er activiteit is (met een uur marge links/rechts)
+  const withActivity = hours.filter(h => h.items > 0);
+  let firstHour = 0, lastHour = 23;
+  if (withActivity.length) {
+    firstHour = Math.max(0, withActivity[0].hour - 1);
+    lastHour = Math.min(23, withActivity[withActivity.length-1].hour + 1);
+  }
+  const range = hours.slice(firstHour, lastHour+1);
+  const maxItems = Math.max(1, ...range.map(h => h.items));
+  const peakItems = Math.max(...hours.map(h => h.items));
+
+  // SVG dimensions
+  const W = 780, H = 320;
+  const padLeft = 50, padRight = 20, padTop = 30, padBottom = 40;
+  const chartW = W - padLeft - padRight, chartH = H - padTop - padBottom;
+  const barW = chartW / range.length;
+
+  // Y-axis waarden (5 niveau's)
+  const yTicks = 5;
+  const roundUp = (v) => {
+    if (v <= 5) return Math.ceil(v);
+    const mag = Math.pow(10, Math.floor(Math.log10(v)));
+    return Math.ceil(v / mag) * mag;
+  };
+  const yMax = roundUp(maxItems);
+  const yStep = yMax / yTicks;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:360px;font-family:sans-serif;">`;
+
+  // Gridlines + y-labels
+  for (let i = 0; i <= yTicks; i++) {
+    const y = padTop + (chartH * i / yTicks);
+    const v = Math.round(yMax - (yStep * i));
+    svg += `<line x1="${padLeft}" y1="${y}" x2="${W-padRight}" y2="${y}" stroke="#EADBBE" stroke-width="0.5"/>`;
+    svg += `<text x="${padLeft-8}" y="${y+4}" text-anchor="end" font-size="11" fill="#8A7256">${v}</text>`;
+  }
+
+  // Bars
+  range.forEach((h, i) => {
+    const barHeight = (h.items / yMax) * chartH;
+    const x = padLeft + i * barW + barW * 0.15;
+    const y = padTop + chartH - barHeight;
+    const w = barW * 0.7;
+    const isPeak = h.items === peakItems && peakItems > 0;
+    const color = isPeak ? '#D8642F' : '#FFB700';
+    if (barHeight > 0) {
+      svg += `<rect x="${x}" y="${y}" width="${w}" height="${barHeight}" fill="${color}" rx="3"/>`;
+      // Waarde boven de balk
+      if (barHeight > 20 || isPeak) {
+        svg += `<text x="${x+w/2}" y="${y-6}" text-anchor="middle" font-size="11" font-weight="700" fill="${isPeak?'#A8431B':'#391C14'}">${h.items}</text>`;
+      }
+    }
+    // X-label (uur)
+    svg += `<text x="${x+w/2}" y="${H-padBottom+16}" text-anchor="middle" font-size="11" fill="#8A7256">${pad2(h.hour)}u</text>`;
+  });
+
+  // Axes
+  svg += `<line x1="${padLeft}" y1="${padTop+chartH}" x2="${W-padRight}" y2="${padTop+chartH}" stroke="#391C14" stroke-width="1"/>`;
+  svg += `<text x="${padLeft-8}" y="${padTop-8}" text-anchor="end" font-size="10" fill="#8A7256">drankjes</text>`;
+  svg += `</svg>`;
+  return svg;
+}
+
+async function loadBusyHours(){
+  const from = document.getElementById('bh-from').value;
+  const to = document.getElementById('bh-to').value || from;
+  const el = document.getElementById('busyhours-content');
+  el.innerHTML = '<div style="color:var(--mu);padding:16px;text-align:center;">Laden…</div>';
+  try {
+    const d = await API.busyHours(from, to);
+    if (!d.total_items) {
+      el.innerHTML = '<div style="color:var(--mu);font-size:14px;padding:24px;text-align:center;background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);">Geen verkoop in deze periode.</div>';
+      return;
+    }
+    const peakLabel = d.peak_items ? `${pad2(d.peak_items.hour)}:00 – ${pad2(d.peak_items.hour+1)}:00` : '—';
+    const avgPerDay = (d.total_items / d.active_days).toFixed(1).replace('.',',');
+    let html = `
+      <div class="cb-summary" style="margin-bottom:16px;">
+        <div class="cb-stat" style="background:var(--coral-l);border-color:var(--coral);">
+          <div class="cb-stat-n" style="color:var(--coral-d);">🔥 ${peakLabel}</div>
+          <div class="cb-stat-l">Piekuur (${d.peak_items?.items||0} drankjes)</div>
+        </div>
+        <div class="cb-stat"><div class="cb-stat-n">${d.total_items}</div><div class="cb-stat-l">Drankjes totaal</div></div>
+        <div class="cb-stat"><div class="cb-stat-n">${d.total_orders}</div><div class="cb-stat-l">Bestellingen</div></div>
+        <div class="cb-stat"><div class="cb-stat-n">${avgPerDay}</div><div class="cb-stat-l">Gem. per dag (${d.active_days} d)</div></div>
+      </div>
+      <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:14px;">
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:12px;">Drankjes verkocht per uur</div>
+        ${renderHourChart(d.hours, d.active_days)}
+      </div>
+      <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px;">Detail per uur</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr style="border-bottom:0.5px solid var(--bd);color:var(--mu);font-size:11px;text-transform:uppercase;">
+            <th style="text-align:left;padding:6px 4px;">Uur</th>
+            <th style="text-align:right;padding:6px 4px;">Drankjes</th>
+            <th style="text-align:right;padding:6px 4px;">Bestellingen</th>
+            <th style="text-align:right;padding:6px 4px;">Omzet</th>
+            <th style="text-align:right;padding:6px 4px;">Gem./dag</th>
+          </tr>
+          ${d.hours.filter(h => h.items>0).map(h => `
+            <tr style="border-bottom:0.5px solid var(--bd);">
+              <td style="padding:8px 4px;font-weight:600;">${pad2(h.hour)}:00 – ${pad2(h.hour+1)}:00</td>
+              <td style="text-align:right;padding:8px 4px;font-weight:700;color:var(--sun-d);">${h.items}</td>
+              <td style="text-align:right;padding:8px 4px;color:var(--mu);">${h.orders}</td>
+              <td style="text-align:right;padding:8px 4px;">${fmt(h.revenue)}</td>
+              <td style="text-align:right;padding:8px 4px;color:var(--mu);">${(h.items/d.active_days).toFixed(1).replace('.',',')}</td>
+            </tr>`).join('')}
+        </table>
+      </div>`;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`;
+  }
+}
+
 function initItemsSold(){
   const today = new Date().toISOString().slice(0,10);
   if (!document.getElementById('is-from').value) document.getElementById('is-from').value = today;

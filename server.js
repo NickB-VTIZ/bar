@@ -1129,6 +1129,54 @@ app.get('/api/stats/items-sold', requireAuth, (req, res) => {
   res.json({ from, to, items: rows, total_items: totalItems, total_revenue: totalRevenue });
 });
 
+// ── Piekuren: drukte per uur ───────────────────────────────────
+app.get('/api/stats/busy-hours', requireAuth, (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0,10);
+  const to = req.query.to || from;
+  // Per uur (lokale tijd), enkel betaalde/afgehandelde klant-bestellingen
+  const rows = db.prepare(`
+    SELECT
+      CAST(strftime('%H', o.created_at, 'localtime') AS INTEGER) as hour,
+      COUNT(DISTINCT o.id) as orders,
+      SUM(oi.qty) as items,
+      SUM(oi.price*oi.qty) as revenue
+    FROM orders o
+    JOIN order_items oi ON oi.order_id = o.id
+    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
+      AND o.status NOT IN ('cancelled','archived','pending')
+      AND o.is_staff = 0
+    GROUP BY hour
+    ORDER BY hour
+  `).all(from, to);
+  // Vul alle 24 uren aan zodat de grafiek doorloopt
+  const byHour = {};
+  rows.forEach(r => byHour[r.hour] = r);
+  const hours = [];
+  for (let h = 0; h < 24; h++) {
+    const r = byHour[h];
+    hours.push({ hour: h, orders: r?.orders||0, items: r?.items||0, revenue: r?.revenue||0 });
+  }
+  const totalOrders = rows.reduce((s,r)=>s+r.orders,0);
+  const totalItems = rows.reduce((s,r)=>s+r.items,0);
+  const totalRevenue = rows.reduce((s,r)=>s+r.revenue,0);
+  const peakByItems = rows.length ? rows.reduce((a,b)=>a.items>b.items?a:b) : null;
+  const peakByOrders = rows.length ? rows.reduce((a,b)=>a.orders>b.orders?a:b) : null;
+
+  // Aantal actieve dagen (voor gemiddelde per uur per dag)
+  const days = db.prepare(`
+    SELECT COUNT(DISTINCT DATE(created_at,'localtime')) as n FROM orders
+    WHERE DATE(created_at,'localtime') >= ? AND DATE(created_at,'localtime') <= ?
+      AND status NOT IN ('cancelled','archived','pending') AND is_staff = 0
+  `).get(from, to).n || 1;
+
+  res.json({
+    from, to, hours,
+    total_orders: totalOrders, total_items: totalItems, total_revenue: totalRevenue,
+    peak_items: peakByItems, peak_orders: peakByOrders,
+    active_days: days,
+  });
+});
+
 // Personeelsdrankjes: apart overzicht (uit de omzet gehouden)
 app.get('/api/stats/staff-drinks', requireAuth, (req, res) => {
   const from = req.query.from || new Date().toISOString().slice(0,10);

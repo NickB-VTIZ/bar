@@ -99,6 +99,7 @@ window.API = (() => {
     },
     itemsSold: (from, to) => req('GET', `/api/stats/items-sold?from=${from}&to=${to||from}`),
     staffDrinks: (from, to) => req('GET', `/api/stats/staff-drinks?from=${from}&to=${to||from}`),
+    busyHours: (from, to) => req('GET', `/api/stats/busy-hours?from=${from}&to=${to||from}`),
     profit: (from, to) => req('GET', `/api/stats/profit?from=${from}&to=${to||from}`),
     staff: {
       list:   (from,to) => req('GET',    `/api/staff/shifts?from=${from}&to=${to||from}`),
