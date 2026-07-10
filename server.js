@@ -3,6 +3,8 @@ const http = require('http');
 const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
+
+const APP_VERSION = '5.42.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -106,6 +108,16 @@ db.exec(`
     note        TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS overhead_costs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    date          TEXT NOT NULL,
+    category      TEXT NOT NULL,      -- 'elektriciteit','afval','administratie','huur','verzekering','overig'
+    description   TEXT,
+    amount_incl   REAL NOT NULL,       -- bedrag incl btw (wat je betaald hebt)
+    vat_rate      REAL NOT NULL DEFAULT 21,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ── Database migraties ───────────────────────────────────────────
@@ -123,6 +135,7 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN hidden INTEGER DEFAULT 0`,
   `ALTER TABLE products ADD COLUMN sku TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN crate_size INTEGER`,
   `ALTER TABLE orders ADD COLUMN tab_id INTEGER`,
   `ALTER TABLE orders ADD COLUMN gift REAL DEFAULT 0`,
   `ALTER TABLE orders ADD COLUMN cash_paid INTEGER DEFAULT 0`,
@@ -732,15 +745,14 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
 });
 
 app.post('/api/products', requireAuth, (req, res) => {
-  const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate } = req.body;
+  const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate, crate_size } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
-  // Determine vat_rate: explicit, or from vat_type default
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
   const vatFood = parseFloat(getSetting('vatFood') || '12');
   const finalVatRate = vat_rate != null ? parseFloat(vat_rate) : (vat_type === 'food' ? vatFood : vatDrinks);
-  const r = db.prepare(`INSERT INTO products (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, maxOrd+1);
+  const r = db.prepare(`INSERT INTO products (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,crate_size,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, crate_size||null, maxOrd+1);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -749,8 +761,8 @@ app.post('/api/products', requireAuth, (req, res) => {
 app.put('/api/products/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Product niet gevonden' });
-  const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate } = req.body;
-  db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=? WHERE id=?`)
+  const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate, crate_size } = req.body;
+  db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=?,crate_size=? WHERE id=?`)
     .run(
       name ?? existing.name,
       description != null ? description : existing.description,
@@ -763,6 +775,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
       active != null ? active : existing.active,
       cost_price != null ? parseFloat(cost_price) : existing.cost_price,
       vat_rate != null ? parseFloat(vat_rate) : existing.vat_rate,
+      crate_size !== undefined ? (crate_size||null) : existing.crate_size,
       req.params.id
     );
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
@@ -771,8 +784,16 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
 });
 
 app.patch('/api/products/:id/stock', requireAuth, (req, res) => {
-  const { stock } = req.body;
+  const { stock, reason } = req.body;
+  const existing = db.prepare('SELECT stock FROM products WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Niet gevonden' });
+  const delta = stock - existing.stock;
   db.prepare('UPDATE products SET stock=? WHERE id=?').run(stock, req.params.id);
+  // Log de aanpassing (voor leveringen en handmatige correcties)
+  if (delta !== 0) {
+    db.prepare('INSERT INTO stock_log (product_id,delta,reason) VALUES (?,?,?)')
+      .run(req.params.id, delta, reason || 'manual');
+  }
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -1266,13 +1287,22 @@ app.delete('/api/staff/shifts/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Winst-overzicht (omzet – inkoop – lonen) ─────────────────────
+// ── Winst-overzicht (omzet – inkoop – lonen – overhead) ──────────
 app.get('/api/stats/profit', requireAuth, (req, res) => {
   const from = req.query.from || new Date().toISOString().slice(0,10);
   const to = req.query.to || from;
+  const vatLiable = getSetting('vatLiable') !== 'false';   // default true
+  const vatDefault = parseFloat(getSetting('jsVat') || '21');
+
+  // Helper: bedrag omzetten naar "effectieve kost" op basis van btw-plicht
+  // - btw-plichtig: excl-btw (btw is aftrekbaar, geen kost)
+  // - niet btw-plichtig: incl-btw (btw is een echte kost)
+  // Inputbedragen bij cost_price zijn per conventie excl. btw.
+  const withVat = (excl, rate) => vatLiable ? excl : excl * (1 + (rate||vatDefault)/100);
+
   // Omzet: alles wat betaald is (excl. staff, cancelled, pending)
   const orderRows = db.prepare(`
-    SELECT oi.qty, oi.price, oi.product_id, p.cost_price, o.gift
+    SELECT oi.qty, oi.price, oi.product_id, p.cost_price, p.vat_rate as prod_vat, o.gift
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
@@ -1283,7 +1313,7 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
   let revenue = 0, cogs = 0, itemsSold = 0;
   orderRows.forEach(r => {
     revenue += r.qty * r.price;
-    cogs += r.qty * (r.cost_price || 0);
+    cogs += r.qty * withVat(r.cost_price || 0, r.prod_vat);
     itemsSold += r.qty;
   });
   // Cadeaus (bijentip): toegevoegd op ordertotaal, tellen eenmalig
@@ -1296,34 +1326,54 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
 
   // Personeelsdrankjes: enkel de aankoopkost (retail-waarde is niet betaald door de klant)
   const staffRows = db.prepare(`
-    SELECT SUM(oi.qty*COALESCE(p.cost_price,0)) as cost,
-           SUM(oi.qty) as qty,
-           SUM(oi.price*oi.qty) as retail
+    SELECT oi.qty, oi.price, p.cost_price, p.vat_rate as prod_vat
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
     WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
       AND o.status != 'cancelled' AND o.is_staff = 1
-  `).get(from, to);
-  const staffCost = staffRows.cost || 0;
-  const staffQty = staffRows.qty || 0;
-  const staffRetail = staffRows.retail || 0;
+  `).all(from, to);
+  let staffCost = 0, staffQty = 0, staffRetail = 0;
+  staffRows.forEach(r => {
+    staffCost += r.qty * withVat(r.cost_price || 0, r.prod_vat);
+    staffRetail += r.qty * r.price;
+    staffQty += r.qty;
+  });
 
-  // Lonen
+  // Lonen — btw wordt toegepast a.d.h.v. de instelling
   const laborRow = db.prepare(`
     SELECT COALESCE(SUM(hours*hourly_rate),0) as cost, COALESCE(SUM(hours),0) as hours
     FROM staff_shifts WHERE date >= ? AND date <= ?
   `).get(from, to);
-  const laborCost = laborRow.cost;
+  const laborCostExcl = laborRow.cost;
+  const laborCostIncl = laborCostExcl * (1 + vatDefault/100);
+  const laborCost = vatLiable ? laborCostExcl : laborCostIncl;
   const laborHours = laborRow.hours;
 
-  const grossMargin = revenue - cogs;   // omzet - inkoopkost = bruto marge
-  const netProfit = grossMargin - staffCost - laborCost; // - personeel - lonen = netto winst
+  // Overige kosten (elektriciteit, afval, administratie, huur, verzekering, …)
+  const overheadRows = db.prepare(`
+    SELECT category, amount_incl, vat_rate
+    FROM overhead_costs WHERE date >= ? AND date <= ?
+  `).all(from, to);
+  let overheadTotal = 0;
+  const overheadByCategory = {};
+  overheadRows.forEach(r => {
+    const excl = r.amount_incl / (1 + (r.vat_rate||0)/100);
+    const effective = vatLiable ? excl : r.amount_incl;
+    overheadTotal += effective;
+    overheadByCategory[r.category] = (overheadByCategory[r.category] || 0) + effective;
+  });
+
+  const grossMargin = revenue - cogs;
+  const netProfit = grossMargin - staffCost - laborCost - overheadTotal;
   res.json({
     from, to,
     revenue, cogs, gross_margin: grossMargin,
     staff_cost: staffCost, staff_qty: staffQty, staff_retail: staffRetail,
-    labor_cost: laborCost, labor_hours: laborHours,
+    labor_cost: laborCost, labor_cost_excl: laborCostExcl, labor_cost_incl: laborCostIncl,
+    labor_hours: laborHours,
+    overhead_total: overheadTotal, overhead_by_category: overheadByCategory,
+    vat_liable: vatLiable, vat_rate: vatDefault,
     net_profit: netProfit,
     items_sold: itemsSold, gifts,
   });
@@ -1513,6 +1563,60 @@ app.get('/api/stats', requireAuth, (req, res) => {
   `).all(today);
   const lowStock = db.prepare('SELECT * FROM products WHERE stock>=0 AND stock<=low_stock AND active=1').all();
   res.json({ ...stats, top_products: topProducts, low_stock: lowStock });
+});
+
+// Publieke versie-info (voor headers in de UI)
+app.get('/api/version', (req, res) => {
+  res.json({ version: APP_VERSION });
+});
+
+// ── WK-scorebord ────────────────────────────────────────────────
+// Wordt manueel bijgewerkt via de beheer-UI; publiek raadpleegbaar zodat het
+// bord-dashboard het live kan tonen zonder authenticatie.
+app.get('/api/scoreboard', (req, res) => {
+  const raw = getSetting('scoreboard');
+  if (!raw) return res.json({ enabled: false });
+  try {
+    const s = JSON.parse(raw);
+    res.json(s);
+  } catch { res.json({ enabled: false }); }
+});
+app.put('/api/scoreboard', requireAuth, (req, res) => {
+  const s = req.body || {};
+  db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)')
+    .run('scoreboard', JSON.stringify(s));
+  broadcast('scoreboard_updated', s);
+  res.json({ ok: true, scoreboard: s });
+});
+
+// ── Overige kosten (elektriciteit, afval, administratie …) ─────
+app.get('/api/overhead-costs', requireAuth, (req, res) => {
+  const from = req.query.from || '1970-01-01';
+  const to = req.query.to || '2999-12-31';
+  const vatLiable = getSetting('vatLiable') !== 'false';
+  const rows = db.prepare(`
+    SELECT * FROM overhead_costs
+    WHERE date >= ? AND date <= ?
+    ORDER BY date DESC, id DESC
+  `).all(from, to);
+  const totalIncl = rows.reduce((s,r)=>s+r.amount_incl,0);
+  const totalExcl = rows.reduce((s,r)=>s + r.amount_incl / (1 + (r.vat_rate||0)/100), 0);
+  // Effectief telt: incl. btw voor niet-btw-plichtig, excl. voor btw-plichtig
+  const totalEffective = vatLiable ? totalExcl : totalIncl;
+  res.json({ from, to, costs: rows, total_incl: totalIncl, total_excl: totalExcl, total_effective: totalEffective, vat_liable: vatLiable });
+});
+
+app.post('/api/overhead-costs', requireAuth, (req, res) => {
+  const { date, category, description, amount_incl, vat_rate } = req.body;
+  if (!date || !category || amount_incl == null) return res.status(400).json({ error: 'Datum, categorie en bedrag zijn verplicht' });
+  const r = db.prepare('INSERT INTO overhead_costs (date, category, description, amount_incl, vat_rate) VALUES (?,?,?,?,?)')
+    .run(date, category, description || '', parseFloat(amount_incl), vat_rate != null ? parseFloat(vat_rate) : 21);
+  res.json(db.prepare('SELECT * FROM overhead_costs WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.delete('/api/overhead-costs/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM overhead_costs WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
 });
 
 // Settings — admin only (contains secrets)

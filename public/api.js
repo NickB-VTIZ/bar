@@ -56,7 +56,7 @@ window.API = (() => {
       setHidden: (id, h)  => req('PATCH',  `/api/products/${id}/hidden`, { hidden: h }),
       add:       (p)      => req('POST',   '/api/products', p),
       update:    (id, p)  => req('PUT',    `/api/products/${id}`, p),
-      setStock:  (id, s)  => req('PATCH',  `/api/products/${id}/stock`, { stock: s }),
+      setStock:  (id, s, reason)  => req('PATCH',  `/api/products/${id}/stock`, { stock: s, reason }),
       remove:    (id)     => req('DELETE', `/api/products/${id}`),
       syncSumup: ()       => req('POST',   '/api/products/sync-sumup'),
       importSumup: (rows) => req('POST',   '/api/products/import-sumup', { rows }),
@@ -100,6 +100,16 @@ window.API = (() => {
     itemsSold: (from, to) => req('GET', `/api/stats/items-sold?from=${from}&to=${to||from}`),
     staffDrinks: (from, to) => req('GET', `/api/stats/staff-drinks?from=${from}&to=${to||from}`),
     busyHours: (from, to) => req('GET', `/api/stats/busy-hours?from=${from}&to=${to||from}`),
+    version: () => req('GET', '/api/version'),
+    scoreboard: {
+      get: () => req('GET', '/api/scoreboard'),
+      set: (data) => req('PUT', '/api/scoreboard', data),
+    },
+    overhead: {
+      list: (from, to) => req('GET', `/api/overhead-costs?from=${from||''}&to=${to||''}`),
+      add: (data) => req('POST', '/api/overhead-costs', data),
+      remove: (id) => req('DELETE', `/api/overhead-costs/${id}`),
+    },
     profit: (from, to) => req('GET', `/api/stats/profit?from=${from}&to=${to||from}`),
     staff: {
       list:   (from,to) => req('GET',    `/api/staff/shifts?from=${from}&to=${to||from}`),
