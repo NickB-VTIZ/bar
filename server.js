@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '5.45.1';
+const APP_VERSION = '5.46.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -143,6 +143,7 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN invoice_customer_name TEXT`,
   `ALTER TABLE orders ADD COLUMN is_staff INTEGER DEFAULT 0`,
   `ALTER TABLE tabs ADD COLUMN is_staff INTEGER DEFAULT 0`,
+  `ALTER TABLE overhead_costs ADD COLUMN period TEXT DEFAULT 'maand'`,
 ];
 
 migrations.forEach(sql => {
@@ -1355,18 +1356,30 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
   const laborCost = vatLiable ? laborCostExcl : laborCostIncl;
   const laborHours = laborRow.hours;
 
-  // Overige kosten (elektriciteit, afval, administratie, huur, verzekering, …)
+  // Overige kosten — geprorateerd per open dag over de dekkingsperiode van elke boeking.
+  // Bv. maandelijkse elektriciteit van €90: als de bar 13 opendagen heeft in die maand,
+  // dan is dat €6,92 per opendag. Voor de shown periode nemen we het aantal opendagen
+  // dat binnen de dekking valt.
+  const openingDays = getOpeningDays();
+  const openDaysInShown = countOpeningDays(from, to, openingDays);
   const overheadRows = db.prepare(`
-    SELECT category, amount_incl, vat_rate
-    FROM overhead_costs WHERE date >= ? AND date <= ?
-  `).all(from, to);
+    SELECT id, date, category, amount_incl, vat_rate, period FROM overhead_costs
+  `).all();
   let overheadTotal = 0;
   const overheadByCategory = {};
   overheadRows.forEach(r => {
     const excl = r.amount_incl / (1 + (r.vat_rate||0)/100);
     const effective = vatLiable ? excl : r.amount_incl;
-    overheadTotal += effective;
-    overheadByCategory[r.category] = (overheadByCategory[r.category] || 0) + effective;
+    const cov = overheadCoverage(r);
+    const inter = intersect(cov.start, cov.end, from, to);
+    if (!inter) return;
+    const openInCoverage = countOpeningDays(cov.start, cov.end, openingDays);
+    const openInIntersection = countOpeningDays(inter.start, inter.end, openingDays);
+    if (openInCoverage === 0) return;   // geen open dagen in dekking → geen kost toewijsbaar
+    const perOpenDay = effective / openInCoverage;
+    const applied = perOpenDay * openInIntersection;
+    overheadTotal += applied;
+    overheadByCategory[r.category] = (overheadByCategory[r.category] || 0) + applied;
   });
 
   const grossMargin = revenue - cogs;
@@ -1378,6 +1391,7 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
     labor_cost: laborCost, labor_cost_excl: laborCostExcl, labor_cost_incl: laborCostIncl,
     labor_hours: laborHours,
     overhead_total: overheadTotal, overhead_by_category: overheadByCategory,
+    opening_days_in_period: openDaysInShown, opening_days_setting: openingDays,
     vat_liable: vatLiable, vat_rate: vatDefault,
     net_profit: netProfit,
     items_sold: itemsSold, gifts,
@@ -1576,6 +1590,59 @@ app.get('/api/version', (req, res) => {
 });
 
 // ── Overige kosten (elektriciteit, afval, administratie …) ─────
+
+// Openingsdagen als CSV van dag-nummers (0=zo, 1=ma, …, 6=za) — standaard vr/za/zo
+function getOpeningDays() {
+  const raw = getSetting('openingDays') || '5,6,0';
+  return raw.split(',').map(s => parseInt(s.trim())).filter(n => n>=0 && n<=6);
+}
+
+function countOpeningDays(fromStr, toStr, openingDays) {
+  const set = new Set(openingDays);
+  let count = 0;
+  const d = new Date(fromStr + 'T00:00:00');
+  const end = new Date(toStr + 'T00:00:00');
+  while (d <= end) {
+    if (set.has(d.getDay())) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
+// Bepaal de dekkingsperiode van een overhead-record op basis van zijn periode-type
+function overheadCoverage(record) {
+  const d = new Date(record.date + 'T00:00:00');
+  const period = record.period || 'maand';
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const iso = dd => dd.toISOString().slice(0,10);
+  switch (period) {
+    case 'dag':      return { start: record.date, end: record.date };
+    case 'week': {
+      const dow = d.getDay();
+      const diff = dow === 0 ? -6 : 1 - dow;   // maandag = 1
+      const mon = new Date(d); mon.setDate(d.getDate() + diff);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return { start: iso(mon), end: iso(sun) };
+    }
+    case 'maand':    return { start: iso(new Date(y, m, 1)),   end: iso(new Date(y, m+1, 0)) };
+    case 'kwartaal': {
+      const q = Math.floor(m/3);
+      return { start: iso(new Date(y, q*3, 1)), end: iso(new Date(y, q*3+3, 0)) };
+    }
+    case 'jaar':     return { start: iso(new Date(y, 0, 1)),   end: iso(new Date(y, 11, 31)) };
+    default:         return { start: record.date, end: record.date };
+  }
+}
+
+// Snijding van twee periodes (yyyy-mm-dd strings). Geeft null als geen overlap.
+function intersect(aStart, aEnd, bStart, bEnd) {
+  const start = aStart > bStart ? aStart : bStart;
+  const end   = aEnd   < bEnd   ? aEnd   : bEnd;
+  if (start > end) return null;
+  return { start, end };
+}
+
 app.get('/api/overhead-costs', requireAuth, (req, res) => {
   const from = req.query.from || '1970-01-01';
   const to = req.query.to || '2999-12-31';
@@ -1587,16 +1654,17 @@ app.get('/api/overhead-costs', requireAuth, (req, res) => {
   `).all(from, to);
   const totalIncl = rows.reduce((s,r)=>s+r.amount_incl,0);
   const totalExcl = rows.reduce((s,r)=>s + r.amount_incl / (1 + (r.vat_rate||0)/100), 0);
-  // Effectief telt: incl. btw voor niet-btw-plichtig, excl. voor btw-plichtig
   const totalEffective = vatLiable ? totalExcl : totalIncl;
   res.json({ from, to, costs: rows, total_incl: totalIncl, total_excl: totalExcl, total_effective: totalEffective, vat_liable: vatLiable });
 });
 
 app.post('/api/overhead-costs', requireAuth, (req, res) => {
-  const { date, category, description, amount_incl, vat_rate } = req.body;
+  const { date, category, description, amount_incl, vat_rate, period } = req.body;
   if (!date || !category || amount_incl == null) return res.status(400).json({ error: 'Datum, categorie en bedrag zijn verplicht' });
-  const r = db.prepare('INSERT INTO overhead_costs (date, category, description, amount_incl, vat_rate) VALUES (?,?,?,?,?)')
-    .run(date, category, description || '', parseFloat(amount_incl), vat_rate != null ? parseFloat(vat_rate) : 21);
+  const validPeriods = ['dag','week','maand','kwartaal','jaar'];
+  const p = validPeriods.includes(period) ? period : 'maand';
+  const r = db.prepare('INSERT INTO overhead_costs (date, category, description, amount_incl, vat_rate, period) VALUES (?,?,?,?,?,?)')
+    .run(date, category, description || '', parseFloat(amount_incl), vat_rate != null ? parseFloat(vat_rate) : 21, p);
   res.json(db.prepare('SELECT * FROM overhead_costs WHERE id=?').get(r.lastInsertRowid));
 });
 

@@ -59,7 +59,7 @@ header{background:var(--sun);padding:8px 20px;display:flex;align-items:center;ju
 
 .oh-form-card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 18px;margin-bottom:16px;}
 .oh-form-title{font-size:13px;font-weight:700;color:var(--tx);margin-bottom:14px;letter-spacing:.02em;}
-.oh-form-grid{display:grid;grid-template-columns:130px 170px 1fr 150px 90px auto;gap:10px;align-items:end;}
+.oh-form-grid{display:grid;grid-template-columns:120px 150px 1fr 130px 80px 110px auto;gap:10px;align-items:end;}
 .oh-field{display:flex;flex-direction:column;gap:4px;min-width:0;}
 .oh-field label{font-size:10px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
 .oh-field input,.oh-field select{font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);width:100%;box-sizing:border-box;}
@@ -359,6 +359,16 @@ tr:last-child td{border-bottom:none;}
         <div class="oh-field oh-field-narrow">
           <label>BTW</label>
           <div class="oh-input-suffix"><input id="oh-vat" type="number" step="0.1" placeholder="21"><span class="oh-affix">%</span></div>
+        </div>
+        <div class="oh-field">
+          <label>Periode</label>
+          <select id="oh-period">
+            <option value="dag">Eenmalig (dag)</option>
+            <option value="week">Per week</option>
+            <option value="maand" selected>Per maand</option>
+            <option value="kwartaal">Per kwartaal</option>
+            <option value="jaar">Per jaar</option>
+          </select>
         </div>
         <button class="btn btn-primary oh-submit" onclick="addOverhead()">+ Voeg toe</button>
       </div>
@@ -678,15 +688,18 @@ async function addOverhead(){
   const description = document.getElementById('oh-desc').value.trim();
   const amount_incl = document.getElementById('oh-amount').value;
   const vat_rate = document.getElementById('oh-vat').value || 21;
+  const period = document.getElementById('oh-period').value || 'maand';
   if (!date || !category || !amount_incl) { toast('Vul datum, categorie en bedrag in'); return; }
   try {
-    await API.overhead.add({ date, category, description, amount_incl, vat_rate });
+    await API.overhead.add({ date, category, description, amount_incl, vat_rate, period });
     document.getElementById('oh-desc').value = '';
     document.getElementById('oh-amount').value = '';
     toast('✅ Kost toegevoegd');
     loadOverhead();
   } catch(e) { toast('Fout: ' + e.message); }
 }
+
+const PERIOD_LABELS = { dag:'Dag', week:'Week', maand:'Maand', kwartaal:'Kwartaal', jaar:'Jaar' };
 
 async function loadOverhead(){
   const from = document.getElementById('oh-from').value;
@@ -711,6 +724,7 @@ async function loadOverhead(){
           <th style="text-align:left;padding:10px;">Datum</th>
           <th style="text-align:left;padding:10px;">Categorie</th>
           <th style="text-align:left;padding:10px;">Omschrijving</th>
+          <th style="text-align:center;padding:10px;">Periode</th>
           <th style="text-align:right;padding:10px;">Incl. btw</th>
           <th style="text-align:right;padding:10px;">BTW %</th>
           <th style="text-align:right;padding:10px;">Effectief</th>
@@ -723,6 +737,7 @@ async function loadOverhead(){
             <td style="padding:8px 10px;color:var(--mu);">${c.date}</td>
             <td style="padding:8px 10px;font-weight:600;">${OH_CAT_LABELS[c.category] || c.category}</td>
             <td style="padding:8px 10px;">${c.description || '—'}</td>
+            <td style="padding:8px 10px;text-align:center;font-size:11px;color:var(--mu);">${PERIOD_LABELS[c.period] || c.period || 'Maand'}</td>
             <td style="padding:8px 10px;text-align:right;">${fmt(c.amount_incl)}</td>
             <td style="padding:8px 10px;text-align:right;color:var(--mu);">${c.vat_rate||0}%</td>
             <td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--coral-d);">${fmt(eff)}</td>
@@ -764,7 +779,7 @@ async function loadProfit(){
           <tr style="border-bottom:2px solid var(--sun);background:var(--sun-l);"><td style="padding:12px 4px;font-weight:700;">= Bruto marge</td><td style="text-align:right;padding:12px 4px;font-weight:800;font-size:18px;color:var(--sun-d);">${fmt(p.gross_margin)}</td></tr>
           ${(p.staff_qty||0) > 0 ? `<tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Personeelsdrankjes — inkoopkost (${p.staff_qty} drankjes, retail ${fmt(p.staff_retail)})</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.staff_cost)}</td></tr>` : ''}
           <tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Loonkost (${p.labor_hours.toFixed(1).replace('.',',')} u${p.vat_liable===false?', incl. '+p.vat_rate+'% btw (niet aftrekbaar)':''})</td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.labor_cost)}</td></tr>
-          ${(p.overhead_total||0) > 0 ? `<tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Overige kosten (${Object.keys(p.overhead_by_category||{}).length} categorieën)<div style="font-size:11px;color:var(--mu);font-weight:400;margin-top:2px;">${Object.entries(p.overhead_by_category||{}).map(([k,v])=>`${OH_CAT_LABELS[k]||k}: ${fmt(v)}`).join(' · ')}</div></td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.overhead_total)}</td></tr>` : ''}
+          ${(p.overhead_total||0) > 0 ? `<tr style="border-bottom:0.5px solid var(--bd);"><td style="padding:10px 4px;color:var(--coral-d);">− Overige kosten (${Object.keys(p.overhead_by_category||{}).length} categorieën, geprorateerd over ${p.opening_days_in_period} open dag${p.opening_days_in_period===1?'':'en'})<div style="font-size:11px;color:var(--mu);font-weight:400;margin-top:2px;">${Object.entries(p.overhead_by_category||{}).map(([k,v])=>`${OH_CAT_LABELS[k]||k}: ${fmt(v)}`).join(' · ')}</div></td><td style="text-align:right;padding:10px 4px;font-weight:700;color:var(--coral-d);">− ${fmt(p.overhead_total)}</td></tr>` : ''}
           <tr style="background:${p.net_profit>=0?'var(--teal-l)':'var(--coral-l)'};"><td style="padding:14px 4px;font-weight:800;font-size:17px;">= Netto winst</td><td style="text-align:right;padding:14px 4px;font-weight:800;font-size:22px;color:${p.net_profit>=0?'var(--teal-d)':'var(--coral-d)'};">${fmt(p.net_profit)}</td></tr>
         </table>
       </div>
@@ -773,7 +788,7 @@ async function loadProfit(){
         Inkoopkost = aankoopprijs × aantal verkochte items (voor producten waar een aankoopprijs is ingegeven).
         Personeelsdrankjes zijn niet betaald — enkel de aankoopkost wordt hier in mindering gebracht.
         Loonkost = uren × uurloon van geregistreerde shiften.
-        Overige kosten = elektriciteit, afval, administratie, huur, verzekering, … (zie tabblad "💡 Overige kosten").
+        Overige kosten = elektriciteit, afval, administratie, huur, verzekering, … (zie tabblad "💡 Kosten"). Vaste kosten worden geprorateerd per opendag: het bedrag wordt gedeeld door het aantal opendagen in de dekkingsperiode van de kost (dag/week/maand/kwartaal/jaar) en dan vermenigvuldigd met het aantal opendagen in de gekozen periode.
         <br><em>${p.vat_liable===false ? 'De bar is <strong>niet</strong> btw-plichtig — btw op alle kosten wordt meegerekend (btw = echte kost).' : 'De bar is btw-plichtig — btw is aftrekbaar en telt niet mee als kost.'}</em>
       </div>`;
   } catch(e) { el.innerHTML = `<div style="color:var(--coral-d);padding:16px;">Fout: ${e.message}</div>`; }

@@ -435,6 +435,24 @@ select.inp{cursor:pointer;}
       </div>
       <button class="btn btn-teal btn-full" onclick="saveVatLiable()">Opslaan</button>
     </div>
+
+    <div class="sec">
+      <div class="sec-title">📅 Openingsdagen</div>
+      <div class="card">
+        <div class="row"><div><div class="row-label">Welke dagen is de bar open?</div><div class="row-sub">Vaste kosten (elektriciteit, huur, verzekering, …) worden bij het berekenen van de winst per opendag verdeeld, niet per kalenderdag.</div></div>
+          <div id="open-days-picker" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;background:var(--bg);border:0.5px solid var(--bd);border-radius:14px;cursor:pointer;"><input type="checkbox" data-day="1"> Ma</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;background:var(--bg);border:0.5px solid var(--bd);border-radius:14px;cursor:pointer;"><input type="checkbox" data-day="2"> Di</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;background:var(--bg);border:0.5px solid var(--bd);border-radius:14px;cursor:pointer;"><input type="checkbox" data-day="3"> Wo</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;background:var(--bg);border:0.5px solid var(--bd);border-radius:14px;cursor:pointer;"><input type="checkbox" data-day="4"> Do</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:14px;cursor:pointer;"><input type="checkbox" data-day="5"> Vr</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:14px;cursor:pointer;"><input type="checkbox" data-day="6"> Za</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:14px;cursor:pointer;"><input type="checkbox" data-day="0"> Zo</label>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-teal btn-full" onclick="saveOpeningDays()">Opslaan</button>
+    </div>
     <div class="sec">
       <div class="sec-title">BTW-tarieven</div>
       <div class="card">
@@ -815,6 +833,12 @@ function loadSettingsToForm() {
   if(s.barVat)       document.getElementById('s-bar-vat').value=s.barVat;
   if(s.vatDrinks)    document.getElementById('s-vat-drinks').value=s.vatDrinks;
   if(s.vatLiable !== undefined) document.getElementById('s-vat-liable').value = String(s.vatLiable);
+  // Openingsdagen (standaard Vr/Za/Zo = 5,6,0)
+  const openDaysRaw = s.openingDays || '5,6,0';
+  const openSet = new Set(openDaysRaw.split(',').map(x=>parseInt(x.trim())));
+  document.querySelectorAll('#open-days-picker input[type=checkbox]').forEach(cb => {
+    cb.checked = openSet.has(parseInt(cb.dataset.day));
+  });
   if(s.vatFood)      document.getElementById('s-vat-food').value=s.vatFood;
   // SMS template
   const tpl = document.getElementById('s-sms-template');
@@ -1239,6 +1263,15 @@ async function saveVat() {
 async function saveVatLiable() {
   await API.settings.save({ vatLiable: document.getElementById('s-vat-liable').value });
   toast('✅ BTW-status opgeslagen — de winstberekening past zich aan');
+}
+
+async function saveOpeningDays() {
+  const days = [...document.querySelectorAll('#open-days-picker input[type=checkbox]:checked')]
+    .map(cb => cb.dataset.day)
+    .sort((a,b)=>a-b);
+  if (!days.length) { toast('Kies minstens één opendag'); return; }
+  await API.settings.save({ openingDays: days.join(',') });
+  toast('✅ Openingsdagen opgeslagen — vaste kosten worden vanaf nu geprorateerd');
 }
 
 
