@@ -47,6 +47,33 @@ header{background:var(--sun);padding:8px 20px;display:flex;align-items:center;ju
 
 /* Cashbook */
 .cb-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+
+/* Overige-kosten formulier */
+.oh-period{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.oh-period-dates{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.oh-period-dates label{font-size:12px;color:var(--mu);font-weight:600;}
+.oh-period-dates input{font-size:13px;padding:7px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);}
+.oh-period-preset{display:flex;gap:4px;flex-wrap:wrap;}
+.chip{padding:5px 11px;font-size:12px;font-weight:600;color:var(--mu);border:0.5px solid var(--bd);background:var(--card);border-radius:14px;cursor:pointer;transition:all .15s;}
+.chip:hover{color:var(--tx);background:var(--sun-l);border-color:var(--sun);}
+
+.oh-form-card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:16px 18px;margin-bottom:16px;}
+.oh-form-title{font-size:13px;font-weight:700;color:var(--tx);margin-bottom:14px;letter-spacing:.02em;}
+.oh-form-grid{display:grid;grid-template-columns:130px 170px 1fr 150px 90px auto;gap:10px;align-items:end;}
+.oh-field{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.oh-field label{font-size:10px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.oh-field input,.oh-field select{font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);width:100%;box-sizing:border-box;}
+.oh-input-suffix{display:flex;align-items:center;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);overflow:hidden;}
+.oh-input-suffix input{border:none;flex:1;min-width:0;padding:9px 8px;font-size:13px;background:transparent;}
+.oh-input-suffix input:focus{outline:none;}
+.oh-affix{padding:0 10px;font-size:13px;color:var(--mu);font-weight:600;}
+.oh-submit{padding:9px 14px;font-size:13px;font-weight:700;white-space:nowrap;height:38px;}
+.oh-hint{margin-top:10px;font-size:11px;color:var(--mu);line-height:1.5;}
+@media (max-width: 720px){
+  .oh-form-grid{grid-template-columns:1fr 1fr;grid-auto-rows:auto;}
+  .oh-field-wide{grid-column:1/-1;}
+  .oh-submit{grid-column:1/-1;}
+}
 .cb-stat{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:14px 16px;}
 .cb-stat-n{font-size:22px;font-weight:600;}
 .cb-stat-l{font-size:12px;color:var(--mu);margin-top:2px;}
@@ -282,42 +309,62 @@ tr:last-child td{border-bottom:none;}
 <!-- Overige kosten -->
 <div id="screen-overhead" class="screen">
   <div class="wrap">
-    <div class="controls no-print">
-      <label>Van</label>
-      <input type="date" id="oh-from">
-      <label>Tot</label>
-      <input type="date" id="oh-to">
-      <button class="btn btn-ghost" onclick="setPeriodOn('oh','yesterday')">Gisteren</button>
-      <button class="btn btn-ghost" onclick="setPeriodOn('oh','today')">Vandaag</button>
-      <button class="btn btn-ghost" onclick="setPeriodOn('oh','week')">Deze week</button>
-      <button class="btn btn-ghost" onclick="setPeriodOn('oh','month')">Deze maand</button>
-      <button class="btn btn-primary" onclick="loadOverhead()">Tonen</button>
+    <!-- Compact periode-kiezer met segmented control -->
+    <div class="oh-period no-print">
+      <div class="oh-period-dates">
+        <label>Van</label><input type="date" id="oh-from">
+        <label>Tot</label><input type="date" id="oh-to">
+        <button class="btn btn-primary" style="padding:7px 16px;" onclick="loadOverhead()">Tonen</button>
+      </div>
+      <div class="oh-period-preset">
+        <button class="chip" onclick="setPeriodOn('oh','yesterday')">Gisteren</button>
+        <button class="chip" onclick="setPeriodOn('oh','today')">Vandaag</button>
+        <button class="chip" onclick="setPeriodOn('oh','week')">Deze week</button>
+        <button class="chip" onclick="setPeriodOn('oh','month')">Deze maand</button>
+      </div>
     </div>
 
-    <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;">
-      <div style="font-size:13px;font-weight:600;color:var(--mu);margin-bottom:10px;">Kost toevoegen</div>
-      <div style="display:grid;grid-template-columns:1.1fr 1.3fr 2fr 1fr .8fr auto;gap:8px;align-items:center;">
-        <input id="oh-date" type="date" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
-        <select id="oh-category" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);color:var(--tx);">
-          <option value="elektriciteit">⚡ Elektriciteit</option>
-          <option value="afval">🗑 Afvalverwerking</option>
-          <option value="administratie">📋 Administratie</option>
-          <option value="huur">🏠 Huur</option>
-          <option value="verzekering">🛡 Verzekering</option>
-          <option value="water">💧 Water</option>
-          <option value="gas">🔥 Gas</option>
-          <option value="internet">📶 Internet/telefoon</option>
-          <option value="onderhoud">🔧 Onderhoud</option>
-          <option value="materiaal">📦 Materiaal</option>
-          <option value="overig">💼 Overig</option>
-        </select>
-        <input id="oh-desc" type="text" placeholder="Omschrijving (leverancier, factuurnummer, …)" style="font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);">
-        <div style="display:flex;align-items:center;gap:4px;"><span style="font-size:13px;color:var(--mu);">€</span><input id="oh-amount" type="number" step="0.01" placeholder="Incl. btw" style="flex:1;min-width:0;font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);"></div>
-        <div style="display:flex;align-items:center;gap:4px;"><input id="oh-vat" type="number" step="0.1" placeholder="21" style="flex:1;min-width:0;font-size:13px;padding:9px 8px;border:0.5px solid var(--bd);border-radius:var(--rm);"><span style="font-size:13px;color:var(--mu);">%</span></div>
-        <button class="btn btn-primary" onclick="addOverhead()">+ Voeg toe</button>
+    <!-- Kost toevoegen -->
+    <div class="oh-form-card">
+      <div class="oh-form-title">➕ Kost toevoegen</div>
+      <div class="oh-form-grid">
+        <div class="oh-field">
+          <label>Datum</label>
+          <input id="oh-date" type="date">
+        </div>
+        <div class="oh-field">
+          <label>Categorie</label>
+          <select id="oh-category">
+            <option value="elektriciteit">⚡ Elektriciteit</option>
+            <option value="afval">🗑 Afvalverwerking</option>
+            <option value="administratie">📋 Administratie</option>
+            <option value="huur">🏠 Huur</option>
+            <option value="verzekering">🛡 Verzekering</option>
+            <option value="water">💧 Water</option>
+            <option value="gas">🔥 Gas</option>
+            <option value="internet">📶 Internet / telefoon</option>
+            <option value="onderhoud">🔧 Onderhoud</option>
+            <option value="materiaal">📦 Materiaal</option>
+            <option value="overig">💼 Overig</option>
+          </select>
+        </div>
+        <div class="oh-field oh-field-wide">
+          <label>Omschrijving</label>
+          <input id="oh-desc" type="text" placeholder="Leverancier, factuurnummer, …">
+        </div>
+        <div class="oh-field">
+          <label>Bedrag incl. btw</label>
+          <div class="oh-input-suffix"><span class="oh-affix">€</span><input id="oh-amount" type="number" step="0.01" placeholder="0,00"></div>
+        </div>
+        <div class="oh-field oh-field-narrow">
+          <label>BTW</label>
+          <div class="oh-input-suffix"><input id="oh-vat" type="number" step="0.1" placeholder="21"><span class="oh-affix">%</span></div>
+        </div>
+        <button class="btn btn-primary oh-submit" onclick="addOverhead()">+ Voeg toe</button>
       </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--mu);">💡 Vul altijd het factuurbedrag <strong>incl. btw</strong> in. De app berekent de effectieve kost op basis van je btw-instelling (btw-plichtig = excl. btw, niet-btw-plichtig = incl. btw).</div>
+      <div class="oh-hint">💡 Vul altijd het factuurbedrag <strong>incl. btw</strong> in. De app berekent de effectieve kost op basis van je btw-instelling.</div>
     </div>
+
     <div id="overhead-list"></div>
   </div>
 </div>
