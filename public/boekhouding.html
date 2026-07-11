@@ -21,14 +21,19 @@
 
 
 body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
-header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+header{background:var(--sun);padding:8px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
 .logo{font-size:16px;font-weight:600;color:var(--sun-t);}
-.logo-sub{font-size:11px;color:#633806;}
+.logo-sub{display:none;}
 .back-link{font-size:13px;color:var(--sun-t);text-decoration:none;font-weight:500;display:flex;align-items:center;gap:4px;}
 
-.nav{display:flex;background:var(--card);border-bottom:0.5px solid var(--bd);}
-.nav-btn{flex:1;padding:11px;font-size:13px;font-weight:500;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;}
+.nav{display:flex;background:var(--card);border-bottom:0.5px solid var(--bd);overflow-x:auto;}
+.nav-btn{flex:1;padding:10px 8px;font-size:13px;font-weight:600;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;}
+.nav-btn:hover{color:var(--tx);}
 .nav-btn.on{color:var(--sun-d);border-bottom-color:var(--sun);}
+.subnav{display:flex;gap:6px;padding:10px 16px;background:var(--bg);border-bottom:0.5px solid var(--bd);overflow-x:auto;flex-wrap:wrap;justify-content:center;}
+.subnav-btn{flex:0 0 auto;padding:6px 12px;font-size:12px;font-weight:600;color:var(--mu);border:0.5px solid var(--bd);background:var(--card);cursor:pointer;border-radius:14px;white-space:nowrap;transition:all .15s;}
+.subnav-btn:hover{color:var(--tx);}
+.subnav-btn.on{color:#fff;background:var(--sun-t);border-color:var(--sun-t);}
 .screen{display:none;}.screen.on{display:block;}
 
 .wrap{max-width:760px;margin:0 auto;padding:16px;}
@@ -100,23 +105,33 @@ tr:last-child td{border-bottom:none;}
 </head>
 <body>
 <header>
-  <div><div class="logo">☀️ Kasdagboek <span id="app-version" style="font-size:10px;font-weight:500;color:#633806;background:rgba(255,255,255,.45);padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;">v—</span></div><div class="logo-sub">Boekhouding & facturatie</div></div>
+  <div><div class="logo">☀️ Kasdagboek <span id="app-version" style="font-size:10px;font-weight:500;color:#633806;background:rgba(255,255,255,.45);padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;">v—</span></div></div>
   <a class="back-link" href="/bar">← Terug naar bar</a>
 </header>
 
 <div class="nav">
-  <button class="nav-btn on" onclick="showScreen('cashbook',this)">📒 Kasdagboek</button>
-  <button class="nav-btn" onclick="showScreen('itemssold',this);initItemsSold()">📊 Verkochte items</button>
-  <button class="nav-btn" onclick="showScreen('busyhours',this);initBusyHours()">🔥 Piekuren</button>
+  <button class="nav-btn on" onclick="showScreen('profit',this);initProfit()">💰 Winst</button>
+  <button class="nav-btn" onclick="showScreen('kasboek',this);showSubTab('cashbook')">📒 Kasboek</button>
+  <button class="nav-btn" onclick="showScreen('verkoop',this);showSubTab('itemssold')">📊 Verkoop</button>
   <button class="nav-btn" onclick="showScreen('staffdrinks',this);initStaffDrinks()">🧑‍🍳 Personeel</button>
-  <button class="nav-btn" onclick="showScreen('profit',this);initProfit()">💰 Winst</button>
-  <button class="nav-btn" onclick="showScreen('overhead',this);initOverhead()">💡 Overige kosten</button>
-  <button class="nav-btn" onclick="showScreen('daily',this);initDaily()">📅 Dagontvangsten</button>
-  <button class="nav-btn" onclick="showScreen('invoice',this);initInvoice()">🧾 Maandfactuur</button>
+  <button class="nav-btn" onclick="showScreen('overhead',this);initOverhead()">💡 Kosten</button>
+</div>
+
+<!-- Sub-navigatie voor Kasboek -->
+<div id="kasboek-subnav" class="subnav" style="display:none;">
+  <button class="subnav-btn on" onclick="showSubTab('cashbook',this)">📒 Kasdagboek</button>
+  <button class="subnav-btn" onclick="showSubTab('daily',this);initDaily()">📅 Dagontvangsten</button>
+  <button class="subnav-btn" onclick="showSubTab('invoice',this);initInvoice()">🧾 Maandfactuur</button>
+</div>
+
+<!-- Sub-navigatie voor Verkoop -->
+<div id="verkoop-subnav" class="subnav" style="display:none;">
+  <button class="subnav-btn on" onclick="showSubTab('itemssold',this);initItemsSold()">🍺 Verkochte items</button>
+  <button class="subnav-btn" onclick="showSubTab('busyhours',this);initBusyHours()">🔥 Piekuren</button>
 </div>
 
 <!-- Kasdagboek -->
-<div id="screen-cashbook" class="screen on">
+<div id="screen-cashbook" class="screen">
   <div class="wrap">
     <div class="controls no-print">
       <label>Van</label>
@@ -243,7 +258,7 @@ tr:last-child td{border-bottom:none;}
 </div>
 
 <!-- Winst -->
-<div id="screen-profit" class="screen">
+<div id="screen-profit" class="screen on">
   <div class="wrap">
     <div class="controls no-print">
       <label>Van</label>
@@ -729,8 +744,29 @@ function toast(msg){
 function showScreen(name,btn){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
-  document.getElementById('screen-'+name).classList.add('on');
   if(btn)btn.classList.add('on');
+  // Beide subnavs verbergen, dan de juiste tonen
+  document.getElementById('kasboek-subnav').style.display = (name === 'kasboek') ? 'flex' : 'none';
+  document.getElementById('verkoop-subnav').style.display = (name === 'verkoop') ? 'flex' : 'none';
+  // "kasboek"/"verkoop" zijn enkel containers → geen bijhorend screen tonen; showSubTab regelt het
+  if (name === 'kasboek' || name === 'verkoop') return;
+  document.getElementById('screen-'+name).classList.add('on');
+}
+
+function showSubTab(name, btn){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.getElementById('screen-'+name).classList.add('on');
+  // Subnav-button state
+  const subnavId = ['cashbook','daily','invoice'].includes(name) ? 'kasboek-subnav' : 'verkoop-subnav';
+  document.querySelectorAll('#'+subnavId+' .subnav-btn').forEach(b=>b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  else {
+    // Autoselect eerste of juiste knop
+    const positions = { cashbook:0, daily:1, invoice:2, itemssold:0, busyhours:1 };
+    const idx = positions[name];
+    const btns = document.querySelectorAll('#'+subnavId+' .subnav-btn');
+    if (btns[idx]) btns[idx].classList.add('on');
+  }
 }
 
 // Default dates: current month
@@ -1120,7 +1156,8 @@ function toast(msg){
   setTimeout(()=>t.classList.remove('show'),3500);
 }
 
-loadCashbook();
+// Standaard-view is Winst
+initProfit();
 </script>
 </body>
 </html>

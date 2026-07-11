@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '5.42.0';
+const APP_VERSION = '5.45.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -151,6 +151,11 @@ migrations.forEach(sql => {
     if (!e.message.includes('duplicate column')) { /* negeer */ }
   }
 });
+
+// Opkuis: verwijder oude WK-scorebord instellingen (feature verwijderd in v5.44)
+try {
+  db.prepare("DELETE FROM settings WHERE key IN ('scoreboard','wkMode','wkApiKey','wkFavoriteTeam')").run();
+} catch(_) {}
 
 // Seed default products if empty
 if (!db.prepare('SELECT id FROM products LIMIT 1').get()) {
@@ -1568,25 +1573,6 @@ app.get('/api/stats', requireAuth, (req, res) => {
 // Publieke versie-info (voor headers in de UI)
 app.get('/api/version', (req, res) => {
   res.json({ version: APP_VERSION });
-});
-
-// ── WK-scorebord ────────────────────────────────────────────────
-// Wordt manueel bijgewerkt via de beheer-UI; publiek raadpleegbaar zodat het
-// bord-dashboard het live kan tonen zonder authenticatie.
-app.get('/api/scoreboard', (req, res) => {
-  const raw = getSetting('scoreboard');
-  if (!raw) return res.json({ enabled: false });
-  try {
-    const s = JSON.parse(raw);
-    res.json(s);
-  } catch { res.json({ enabled: false }); }
-});
-app.put('/api/scoreboard', requireAuth, (req, res) => {
-  const s = req.body || {};
-  db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)')
-    .run('scoreboard', JSON.stringify(s));
-  broadcast('scoreboard_updated', s);
-  res.json({ ok: true, scoreboard: s });
 });
 
 // ── Overige kosten (elektriciteit, afval, administratie …) ─────

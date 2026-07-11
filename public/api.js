@@ -101,10 +101,6 @@ window.API = (() => {
     staffDrinks: (from, to) => req('GET', `/api/stats/staff-drinks?from=${from}&to=${to||from}`),
     busyHours: (from, to) => req('GET', `/api/stats/busy-hours?from=${from}&to=${to||from}`),
     version: () => req('GET', '/api/version'),
-    scoreboard: {
-      get: () => req('GET', '/api/scoreboard'),
-      set: (data) => req('PUT', '/api/scoreboard', data),
-    },
     overhead: {
       list: (from, to) => req('GET', `/api/overhead-costs?from=${from||''}&to=${to||''}`),
       add: (data) => req('POST', '/api/overhead-costs', data),

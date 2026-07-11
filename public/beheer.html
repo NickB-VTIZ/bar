@@ -21,14 +21,19 @@
 
 
 body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:var(--tx);}
-header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+header{background:var(--sun);padding:8px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
 .logo{font-size:16px;font-weight:600;color:var(--sun-t);}
-.logo-sub{font-size:11px;color:#633806;}
+.logo-sub{display:none;}
 .back-link{font-size:13px;color:var(--sun-t);text-decoration:none;font-weight:500;}
 
 .nav{display:flex;background:var(--card);border-bottom:0.5px solid var(--bd);overflow-x:auto;}
-.nav-btn{flex:0 0 auto;padding:11px 16px;font-size:13px;font-weight:500;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+.nav-btn{flex:0 0 auto;padding:9px 14px;font-size:13px;font-weight:600;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;}
+.nav-btn:hover{color:var(--tx);}
 .nav-btn.on{color:var(--sun-d);border-bottom-color:var(--sun);}
+.subnav{display:flex;gap:6px;padding:10px 16px;background:var(--bg);border-bottom:0.5px solid var(--bd);overflow-x:auto;flex-wrap:wrap;}
+.subnav-btn{flex:0 0 auto;padding:6px 12px;font-size:12px;font-weight:600;color:var(--mu);border:0.5px solid var(--bd);background:var(--card);cursor:pointer;border-radius:14px;white-space:nowrap;transition:all .15s;}
+.subnav-btn:hover{color:var(--tx);}
+.subnav-btn.on{color:#fff;background:var(--sun-t);border-color:var(--sun-t);}
 .screen{display:none;}.screen.on{display:block;}
 
 .wrap{max-width:680px;margin:0 auto;padding:16px;}
@@ -95,20 +100,24 @@ select.inp{cursor:pointer;}
 </head>
 <body>
 <header>
-  <div><div class="logo">⚙️ Beheer <span id="app-version" style="font-size:10px;font-weight:500;color:#633806;background:rgba(255,255,255,.45);padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;">v—</span></div><div class="logo-sub">Zomerbar adminpaneel</div></div>
+  <div><div class="logo">⚙️ Beheer <span id="app-version" style="font-size:10px;font-weight:500;color:#633806;background:rgba(255,255,255,.45);padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;">v—</span></div></div>
   <a class="back-link" href="/bar">← Bar-dashboard</a>
 </header>
 
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('products',this)">🍺 Producten</button>
   <button class="nav-btn" onclick="showScreen('stock',this);renderStock()">📦 Stock</button>
-  <button class="nav-btn" onclick="showScreen('sumup',this)">🔄 SumUp</button>
-  <button class="nav-btn" onclick="showScreen('payments',this)">💳 Betalingen</button>
-  <button class="nav-btn" onclick="showScreen('sms',this)">📱 SMS</button>
-  <button class="nav-btn" onclick="showScreen('billit',this)">🧾 Billit</button>
-  <button class="nav-btn" onclick="showScreen('vat',this)">% BTW</button>
-  <button class="nav-btn" onclick="showScreen('wk',this);loadScoreboardForm()">⚽ WK</button>
+  <button class="nav-btn" onclick="showScreen('settings',this);showSetting('payments')">⚙️ Instellingen</button>
   <button class="nav-btn" onclick="showScreen('security',this)">🔒 Beveiliging</button>
+</div>
+
+<!-- Sub-navigatie enkel zichtbaar bij "Instellingen" -->
+<div id="settings-subnav" class="subnav" style="display:none;">
+  <button class="subnav-btn on" onclick="showSetting('payments',this)">💳 Betalingen</button>
+  <button class="subnav-btn" onclick="showSetting('sumup',this)">🔄 SumUp</button>
+  <button class="subnav-btn" onclick="showSetting('billit',this)">🧾 Billit</button>
+  <button class="subnav-btn" onclick="showSetting('sms',this)">📱 SMS</button>
+  <button class="subnav-btn" onclick="showSetting('vat',this)">% BTW</button>
 </div>
 
 <!-- Producten -->
@@ -452,39 +461,6 @@ select.inp{cursor:pointer;}
 </div>
 
 <!-- Beveiliging -->
-<!-- WK scorebord -->
-<div id="screen-wk" class="screen">
-  <div class="wrap">
-    <div class="sec">
-      <div class="sec-title">⚽ WK-scorebord in de bar-hoofding</div>
-      <div class="card">
-        <div class="row"><div class="row-label">Tonen</div>
-          <select class="inp" id="wk-enabled">
-            <option value="false">Uit</option>
-            <option value="true">Aan</option>
-          </select>
-        </div>
-        <div class="row"><div><div class="row-label">Thuisploeg</div><div class="row-sub">Bv. "België"</div></div><input class="inp" id="wk-i-home-name" placeholder="België"></div>
-        <div class="row"><div><div class="row-label">Vlag thuis</div><div class="row-sub">Emoji, bv. 🇧🇪</div></div><input class="inp" id="wk-i-home-flag" placeholder="🇧🇪"></div>
-        <div class="row"><div class="row-label">Score thuis</div><input class="inp" id="wk-i-home-score" type="number" min="0" placeholder="0"></div>
-        <div class="row"><div><div class="row-label">Uitploeg</div><div class="row-sub">Bv. "Argentinië"</div></div><input class="inp" id="wk-i-away-name" placeholder="Argentinië"></div>
-        <div class="row"><div><div class="row-label">Vlag uit</div><div class="row-sub">Emoji, bv. 🇦🇷</div></div><input class="inp" id="wk-i-away-flag" placeholder="🇦🇷"></div>
-        <div class="row"><div class="row-label">Score uit</div><input class="inp" id="wk-i-away-score" type="number" min="0" placeholder="0"></div>
-        <div class="row"><div><div class="row-label">Minuut</div><div class="row-sub">Bv. "78" of "HT"</div></div><input class="inp" id="wk-i-minute" placeholder="78"></div>
-        <div class="row"><div><div class="row-label">Status</div><div class="row-sub">Bv. "Live" · "Rust" · "Afgelopen" · "Finale"</div></div><input class="inp" id="wk-i-status" placeholder="Live"></div>
-        <div class="row"><div><div class="row-label">Commentaar</div><div class="row-sub">Kort tekstje dat onder de score verschijnt, bv. "Gele kaart voor De Bruyne"</div></div><input class="inp" id="wk-i-commentary" placeholder=""></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
-        <button class="btn btn-teal btn-full" onclick="saveScoreboard()">💾 Opslaan & live tonen</button>
-        <button class="btn btn-ghost btn-full" onclick="clearScoreboard()">🚫 Verbergen</button>
-      </div>
-      <div style="margin-top:12px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--sun-t);line-height:1.6;">
-        <strong>Tip:</strong> vul de velden in tijdens de match en klik op Opslaan om het scoreboard live in de bar-hoofding te tonen. Het bord-dashboard ververst automatisch elke 30 seconden. Aan het einde van de wedstrijd klik je op Verbergen om het scorebord weer op te bergen.
-      </div>
-    </div>
-  </div>
-</div>
-
 <div id="screen-security" class="screen">
   <div class="wrap">
     <div class="sec">
@@ -551,8 +527,31 @@ let products = [], settings = {};
 function showScreen(name, btn) {
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
-  document.getElementById('screen-'+name).classList.add('on');
   if(btn)btn.classList.add('on');
+  // Sub-nav voor instellingen alleen tonen als "settings" actief is
+  const subnav = document.getElementById('settings-subnav');
+  if (subnav) subnav.style.display = (name === 'settings') ? 'flex' : 'none';
+  // De "settings"-tab is enkel een container; de eigenlijke sub-screens zijn payments/sumup/billit/sms/vat
+  if (name === 'settings') return; // showSetting wordt apart aangeroepen
+  document.getElementById('screen-'+name).classList.add('on');
+}
+
+function showSetting(name, btn) {
+  // Zorg dat de 'Instellingen' hoofd-nav-btn actief is
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.subnav-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('screen-'+name).classList.add('on');
+  if (btn) {
+    btn.classList.add('on');
+  } else {
+    // Autoselect de juiste subnav-btn indien geen expliciete klik
+    const map = { payments: 0, sumup: 1, billit: 2, sms: 3, vat: 4 };
+    const idx = map[name];
+    if (idx != null) {
+      const btns = document.querySelectorAll('#settings-subnav .subnav-btn');
+      if (btns[idx]) btns[idx].classList.add('on');
+    }
+  }
 }
 
 async function init() {
@@ -1242,40 +1241,6 @@ async function saveVatLiable() {
   toast('✅ BTW-status opgeslagen — de winstberekening past zich aan');
 }
 
-// ── WK-scorebord ────
-async function loadScoreboardForm(){
-  try {
-    const s = await API.scoreboard.get();
-    document.getElementById('wk-enabled').value = s.enabled ? 'true' : 'false';
-    document.getElementById('wk-i-home-name').value = s.home_name || '';
-    document.getElementById('wk-i-home-flag').value = s.home_flag || '';
-    document.getElementById('wk-i-home-score').value = s.home_score != null ? s.home_score : '';
-    document.getElementById('wk-i-away-name').value = s.away_name || '';
-    document.getElementById('wk-i-away-flag').value = s.away_flag || '';
-    document.getElementById('wk-i-away-score').value = s.away_score != null ? s.away_score : '';
-    document.getElementById('wk-i-minute').value = s.minute || '';
-    document.getElementById('wk-i-status').value = s.status || '';
-    document.getElementById('wk-i-commentary').value = s.commentary || '';
-  } catch(_){}
-}
-
-async function saveScoreboard(){
-  const g = id => document.getElementById(id).value.trim();
-  const num = id => { const v = g(id); return v === '' ? null : parseInt(v); };
-  await API.scoreboard.set({
-    enabled: document.getElementById('wk-enabled').value === 'true',
-    home_name: g('wk-i-home-name'), home_flag: g('wk-i-home-flag'), home_score: num('wk-i-home-score'),
-    away_name: g('wk-i-away-name'), away_flag: g('wk-i-away-flag'), away_score: num('wk-i-away-score'),
-    minute: g('wk-i-minute'), status: g('wk-i-status'), commentary: g('wk-i-commentary'),
-  });
-  toast('✅ Scorebord opgeslagen');
-}
-
-async function clearScoreboard(){
-  await API.scoreboard.set({ enabled: false });
-  document.getElementById('wk-enabled').value = 'false';
-  toast('🚫 Scorebord verborgen');
-}
 
 async function resetData() {
   const confirmVal = document.getElementById('reset-confirm').value.trim();

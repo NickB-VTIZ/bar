@@ -195,19 +195,8 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 </head>
 <body>
 <header>
-  <div><div class="logo">☀️ Bar-dashboard <span id="app-version" style="font-size:10px;font-weight:500;color:#633806;background:rgba(255,255,255,.45);padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;">v—</span></div><div class="logo-sub" id="hdr-clock">--:--:--</div></div>
-  <div id="wk-widget" style="display:none;flex:0 1 auto;margin:0 12px;background:var(--sun-t);color:#fff;border-radius:14px;padding:8px 14px;font-size:13px;line-height:1.3;min-width:200px;max-width:420px;cursor:pointer;" onclick="reloadScoreboard()" title="Klik om te vernieuwen">
-    <div id="wk-teams" style="font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-      <span id="wk-home">—</span>
-      <span id="wk-score" style="font-size:16px;font-weight:900;">— : —</span>
-      <span id="wk-away">—</span>
-    </div>
-    <div id="wk-meta" style="font-size:11px;color:#FCEBC8;margin-top:2px;display:flex;justify-content:space-between;gap:6px;">
-      <span id="wk-status">—</span>
-      <span id="wk-updated" style="opacity:.65;"></span>
-    </div>
-    <div id="wk-commentary" style="font-size:11px;color:#FCEBC8;margin-top:3px;font-style:italic;"></div>
-  </div>
+  <div><div class="logo">☀️ Bar-dashboard <span id="app-version" style="font-size:10px;font-weight:500;color:#633806;background:rgba(255,255,255,.45);padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;">v—</span></div></div>
+  <div id="hdr-clock" style="font-size:42px;font-weight:800;color:var(--sun-t);letter-spacing:.05em;font-variant-numeric:tabular-nums;line-height:1;">--:--:--</div>
   <div class="hdr-r">
     <button onclick="openTabsOverlay()" style="padding:9px 16px;font-size:14px;font-weight:700;background:var(--sun-t);color:var(--sun);border:none;border-radius:20px;cursor:pointer;display:flex;align-items:center;gap:6px;">📋 Rekeningen <span id="tabs-count-badge" style="display:none;background:var(--sun);color:var(--sun-t);font-size:12px;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;"></span></button>
     <div class="pill err" id="conn"><div class="dot" id="conn-dot" style="background:var(--sun-d)"></div><span id="conn-lbl">…</span></div>
@@ -1450,42 +1439,11 @@ async function loadVersion(){
   } catch(_){}
 }
 
-// ── WK-scorebord in header ──
-function reloadScoreboard(){ loadScoreboard(true); }
-async function loadScoreboard(showToast){
-  try {
-    const s = await API.scoreboard.get();
-    const w = document.getElementById('wk-widget');
-    if (!s || s.enabled === false) { w.style.display = 'none'; return; }
-    w.style.display = 'flex';
-    w.style.flexDirection = 'column';
-    document.getElementById('wk-home').textContent = `${s.home_flag||''} ${s.home_name||'Thuis'}`.trim();
-    document.getElementById('wk-away').textContent = `${s.away_name||'Uit'} ${s.away_flag||''}`.trim();
-    const hs = s.home_score != null ? s.home_score : '—';
-    const as = s.away_score != null ? s.away_score : '—';
-    document.getElementById('wk-score').textContent = `${hs} : ${as}`;
-    let status = s.status || '';
-    if (s.minute != null && s.minute !== '') status = `${s.minute}' · ${status}`.replace(/ · $/,'');
-    document.getElementById('wk-status').textContent = status;
-    const c = document.getElementById('wk-commentary');
-    if (s.commentary && s.commentary.trim()) { c.textContent = '💬 ' + s.commentary; c.style.display = 'block'; }
-    else c.style.display = 'none';
-    const now = new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
-    document.getElementById('wk-updated').textContent = 'bijgewerkt ' + now;
-    if (showToast) toast('🔄 Score vernieuwd');
-  } catch(_){}
-}
-// Live-updates via WebSocket
-if (typeof API.on === 'function') API.on('scoreboard_updated', () => loadScoreboard(false));
-// Automatische refresh elke 30s zodat je niet moet klikken
-setInterval(() => loadScoreboard(false), 30000);
-
 // Init
 (async()=>{
   products=await API.products.list();
   loadStats();
   loadVersion();
-  loadScoreboard(false);
   try { openTabs = await API.tabs.list(); updateTabsBadge(); } catch(_){}
 })();
 </script>
