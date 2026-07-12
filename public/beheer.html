@@ -760,24 +760,40 @@ async function deleteProduct(id) {
 
 // ── Stock ────────────────────────────────────────────────────────
 function renderStock() {
-  document.getElementById('stock-list').innerHTML = products.map(p => {
-    const ul = p.stock < 0;
-    const low = !ul && p.stock <= p.low_stock;
-    const cls = ul ? 'unlimited' : low ? 'low' : 'ok';
-    const crate = p.crate_size || 24;
-    return `<div class="prod-row">
-      <span class="prod-icon">${p.icon}</span>
-      <div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-meta">${p.category} · bak = ${crate}</div></div>
-      <span class="stock-n ${cls}">${ul ? '∞' : p.stock}</span>
-      <div class="stock-ctrl">
-        <button class="sbtn" onclick="adjStock(${p.id},-1)" title="−1">−</button>
-        <button class="sbtn" onclick="adjStock(${p.id},1)" title="+1">+</button>
-        <button class="sbtn sbtn-crate" onclick="addCrates(${p.id},-1)" title="Terugsturen: −${crate}">−📦</button>
-        <button class="sbtn sbtn-crate" onclick="addCrates(${p.id},1)" title="Levering: +${crate}">+📦</button>
-        <button class="sbtn" onclick="setStockManual(${p.id})">✏️</button>
-      </div>
+  const grouped = {};
+  products.forEach(p => { if(!grouped[p.category])grouped[p.category]=[]; grouped[p.category].push(p); });
+  let html = '';
+  Object.entries(grouped).forEach(([cat, prods]) => {
+    // Kop-strook per categorie met totaal
+    const catStockTotal = prods.filter(p => p.stock >= 0).reduce((s,p)=>s+p.stock,0);
+    const hasInfinite = prods.some(p => p.stock < 0);
+    const lowCount = prods.filter(p => p.stock >= 0 && p.stock <= p.low_stock).length;
+    html += `<div style="padding:8px 14px;font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;border-bottom:0.5px solid var(--bd);background:var(--bg);display:flex;justify-content:space-between;align-items:center;">
+      <span>${cat}</span>
+      <span style="font-size:11px;text-transform:none;font-weight:500;color:var(--mu);">
+        ${prods.length} item${prods.length===1?'':'s'} · totaal ${catStockTotal}${hasInfinite?' + ∞':''}${lowCount?` · <span style="color:var(--coral-d);font-weight:600;">${lowCount} laag ⚠</span>`:''}
+      </span>
     </div>`;
-  }).join('');
+    prods.forEach(p => {
+      const ul = p.stock < 0;
+      const low = !ul && p.stock <= p.low_stock;
+      const cls = ul ? 'unlimited' : low ? 'low' : 'ok';
+      const crate = p.crate_size || 24;
+      html += `<div class="prod-row">
+        <span class="prod-icon">${p.icon}</span>
+        <div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-meta">bak = ${crate}</div></div>
+        <span class="stock-n ${cls}">${ul ? '∞' : p.stock}</span>
+        <div class="stock-ctrl">
+          <button class="sbtn" onclick="adjStock(${p.id},-1)" title="−1">−</button>
+          <button class="sbtn" onclick="adjStock(${p.id},1)" title="+1">+</button>
+          <button class="sbtn sbtn-crate" onclick="addCrates(${p.id},-1)" title="Terugsturen: −${crate}">−📦</button>
+          <button class="sbtn sbtn-crate" onclick="addCrates(${p.id},1)" title="Levering: +${crate}">+📦</button>
+          <button class="sbtn" onclick="setStockManual(${p.id})">✏️</button>
+        </div>
+      </div>`;
+    });
+  });
+  document.getElementById('stock-list').innerHTML = html;
 }
 
 async function adjStock(id, delta) {
