@@ -74,6 +74,16 @@ header{background:var(--sun);padding:8px 20px;display:flex;align-items:center;ju
   .oh-field-wide{grid-column:1/-1;}
   .oh-submit{grid-column:1/-1;}
 }
+
+/* Dagkasboek */
+.dcb-block{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;}
+.dcb-block-title{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px;}
+.dcb-total{font-size:15px;font-weight:800;color:var(--teal-d);}
+.dcb-summary{background:var(--sun-l);border-color:var(--sun);}
+.dcb-entry-form{display:flex;gap:8px;align-items:center;padding-top:8px;border-top:0.5px dashed var(--bd);}
+.dcb-entry-form input[type=text]{flex:1;min-width:0;font-size:13px;padding:8px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);}
+.dcb-x{background:none;border:none;color:var(--coral-d);cursor:pointer;font-size:15px;padding:2px 6px;}
+.dcb-x:hover{color:var(--coral);}
 .cb-stat{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--rm);padding:14px 16px;}
 .cb-stat-n{font-size:22px;font-weight:600;}
 .cb-stat-l{font-size:12px;color:var(--mu);margin-top:2px;}
@@ -147,7 +157,7 @@ tr:last-child td{border-bottom:none;}
 <!-- Sub-navigatie voor Kasboek -->
 <div id="kasboek-subnav" class="subnav" style="display:none;">
   <button class="subnav-btn on" onclick="showSubTab('cashbook',this)">📒 Kasdagboek</button>
-  <button class="subnav-btn" onclick="showSubTab('daily',this);initDaily()">📅 Dagontvangsten</button>
+  <button class="subnav-btn" onclick="showSubTab('daycashbook',this);initDayCashbook()">📔 Dagkasboek</button>
   <button class="subnav-btn" onclick="showSubTab('invoice',this);initInvoice()">🧾 Maandfactuur</button>
 </div>
 
@@ -379,20 +389,23 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
-<div id="screen-daily" class="screen">
+<!-- Dagkasboek: uitgebreid met startbedrag, uitgaven en Billit-samenvatting -->
+<div id="screen-daycashbook" class="screen">
   <div class="wrap">
-    <div class="controls no-print">
-      <label>Dag</label>
-      <input type="date" id="daily-date" onchange="loadDailyOverview()">
-      <button class="btn btn-ghost" onclick="document.getElementById('daily-date').value=new Date(Date.now()-864e5).toISOString().slice(0,10);loadDailyOverview()">Gisteren</button>
-      <button class="btn btn-ghost" onclick="document.getElementById('daily-date').value=new Date().toISOString().slice(0,10);loadDailyOverview()">Vandaag</button>
-      <button class="btn btn-primary" onclick="loadDailyOverview()">Tonen</button>
+    <div class="controls no-print" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <label style="font-size:12px;color:var(--mu);font-weight:600;">Dag</label>
+      <input type="date" id="dcb-date" style="font-size:13px;padding:7px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);">
+      <button class="chip" onclick="dcbSetDate(-1)">← Vorige</button>
+      <button class="chip" onclick="dcbSetDate(0)">Vandaag</button>
+      <button class="chip" onclick="dcbSetDate(1)">Volgende →</button>
+      <button class="btn btn-primary" style="padding:7px 16px;" onclick="loadDayCashbook()">Tonen</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
     </div>
     <div class="print-header">
-      <h1>☀️ Zomerbar — Dagontvangsten</h1>
+      <h1>☀️ Zomerbar — Dagkasboek <span id="dcb-print-date"></span></h1>
     </div>
-    <div id="daily-content">
-      <div class="empty"><div class="empty-icon">📅</div><div>Kies een dag voor het dagontvangsten-overzicht</div></div>
+    <div id="daycashbook-content">
+      <div class="empty" style="text-align:center;color:var(--mu);padding:40px;">Kies een dag om het kasboek te bekijken.</div>
     </div>
   </div>
 </div>
@@ -819,12 +832,12 @@ function showSubTab(name, btn){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.getElementById('screen-'+name).classList.add('on');
   // Subnav-button state
-  const subnavId = ['cashbook','daily','invoice'].includes(name) ? 'kasboek-subnav' : 'verkoop-subnav';
+  const subnavId = ['cashbook','daycashbook','invoice'].includes(name) ? 'kasboek-subnav' : 'verkoop-subnav';
   document.querySelectorAll('#'+subnavId+' .subnav-btn').forEach(b=>b.classList.remove('on'));
   if (btn) btn.classList.add('on');
   else {
     // Autoselect eerste of juiste knop
-    const positions = { cashbook:0, daily:1, invoice:2, itemssold:0, busyhours:1 };
+    const positions = { cashbook:0, daycashbook:1, invoice:2, itemssold:0, busyhours:1 };
     const idx = positions[name];
     const btns = document.querySelectorAll('#'+subnavId+' .subnav-btn');
     if (btns[idx]) btns[idx].classList.add('on');
@@ -1089,6 +1102,180 @@ function initDaily(){
   const d = document.getElementById('daily-date');
   if (!d.value) d.value = new Date().toISOString().slice(0,10);
   loadDailyOverview();
+}
+
+// ── Uitgebreid Dagkasboek ──
+function initDayCashbook(){
+  const el = document.getElementById('dcb-date');
+  if (!el.value) el.value = new Date().toISOString().slice(0,10);
+  loadDayCashbook();
+}
+
+function dcbSetDate(delta){
+  const el = document.getElementById('dcb-date');
+  const d = el.value ? new Date(el.value+'T00:00:00') : new Date();
+  if (delta === 0) el.value = new Date().toISOString().slice(0,10);
+  else { d.setDate(d.getDate()+delta); el.value = d.toISOString().slice(0,10); }
+  loadDayCashbook();
+}
+
+async function loadDayCashbook(){
+  const date = document.getElementById('dcb-date').value;
+  if (!date) return;
+  const el = document.getElementById('daycashbook-content');
+  el.innerHTML = '<div style="color:var(--mu);padding:20px;text-align:center;">Laden…</div>';
+  try {
+    const d = await API.cashbook.day(date);
+    document.getElementById('dcb-print-date').textContent = ' — ' + new Date(date).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    renderDayCashbook(d);
+  } catch(e) { el.innerHTML = `<div style="color:var(--coral-d);padding:20px;">Fout: ${e.message}</div>`; }
+}
+
+function renderDayCashbook(d){
+  const el = document.getElementById('daycashbook-content');
+  const dateStr = new Date(d.date).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  // Startbedrag
+  const startBlock = `
+    <div class="dcb-block">
+      <div class="dcb-block-title">💶 Startbedrag in de kas</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:14px;color:var(--mu);">Beginsaldo op ${dateStr}:</span>
+        <span style="font-size:14px;color:var(--mu);">€</span>
+        <input id="dcb-start" type="number" step="0.01" value="${d.start_amount||''}" placeholder="0,00" style="width:120px;font-size:14px;padding:8px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);">
+        <button class="btn btn-primary" style="padding:8px 14px;" onclick="saveStartAmount()">Opslaan</button>
+      </div>
+    </div>`;
+
+  // Cash-bestellingen (inkomsten uit verkoop)
+  const ordersRows = d.orders.length ? d.orders.map(o => {
+    const time = parseDbDate(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+    const tab = o.tab_id ? ` · 📋 rekening "${o.tab_name||''}"` : '';
+    return `<tr>
+      <td style="padding:6px 10px;color:var(--mu);font-size:12px;">${time}</td>
+      <td style="padding:6px 10px;font-weight:600;">#${o.order_number}</td>
+      <td style="padding:6px 10px;font-size:12px;color:var(--mu);">${(o.note||'').substring(0,40)}${tab}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:700;color:var(--teal-d);">${fmt(o.amount)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--mu);font-size:13px;">Geen cash-bestellingen op deze dag.</td></tr>`;
+
+  const ordersBlock = `
+    <div class="dcb-block">
+      <div class="dcb-block-title">➕ Cash-inkomsten uit verkoop <span class="dcb-total">${fmt(d.orders_total)}</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">${ordersRows}</table>
+    </div>`;
+
+  // Extra manuele inkomsten (fooi, andere)
+  const incomesRows = d.incomes.length ? d.incomes.map(e => `
+    <tr>
+      <td style="padding:6px 10px;font-size:13px;">${e.description||'—'}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:600;color:var(--teal-d);">${fmt(e.amount)}</td>
+      <td style="padding:6px 10px;text-align:right;"><button class="dcb-x" onclick="removeCashEntry(${e.id})">✕</button></td>
+    </tr>`).join('') : '';
+
+  const incomesBlock = `
+    <div class="dcb-block">
+      <div class="dcb-block-title">➕ Andere cash-inkomsten <span class="dcb-total">${fmt(d.income_total)}</span></div>
+      ${incomesRows ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">${incomesRows}</table>` : ''}
+      <div class="dcb-entry-form no-print">
+        <input id="dcb-in-desc" type="text" placeholder="Omschrijving (bv. fooi)">
+        <div class="oh-input-suffix" style="max-width:130px;"><span class="oh-affix">€</span><input id="dcb-in-amt" type="number" step="0.01" placeholder="0,00"></div>
+        <button class="btn btn-primary" onclick="addCashEntry('income')">+ Voeg toe</button>
+      </div>
+    </div>`;
+
+  // Uitgaven
+  const expensesRows = d.expenses.length ? d.expenses.map(e => `
+    <tr>
+      <td style="padding:6px 10px;font-size:13px;">${e.description||'—'}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:600;color:var(--coral-d);">− ${fmt(e.amount)}</td>
+      <td style="padding:6px 10px;text-align:right;"><button class="dcb-x" onclick="removeCashEntry(${e.id})">✕</button></td>
+    </tr>`).join('') : '';
+
+  const expensesBlock = `
+    <div class="dcb-block">
+      <div class="dcb-block-title">➖ Cash-uitgaven <span class="dcb-total" style="color:var(--coral-d);">− ${fmt(d.expense_total)}</span></div>
+      ${expensesRows ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">${expensesRows}</table>` : ''}
+      <div class="dcb-entry-form no-print">
+        <input id="dcb-ex-desc" type="text" placeholder="Omschrijving (bv. inkoop Delhaize)">
+        <div class="oh-input-suffix" style="max-width:130px;"><span class="oh-affix">€</span><input id="dcb-ex-amt" type="number" step="0.01" placeholder="0,00"></div>
+        <button class="btn btn-primary" onclick="addCashEntry('expense')">+ Voeg toe</button>
+      </div>
+    </div>`;
+
+  // Overzicht + Billit
+  const summaryBlock = `
+    <div class="dcb-block dcb-summary">
+      <div class="dcb-block-title">📊 Saldo einde dag</div>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <tr><td style="padding:6px 4px;">Startbedrag</td><td style="text-align:right;padding:6px 4px;">${fmt(d.start_amount)}</td></tr>
+        <tr><td style="padding:6px 4px;color:var(--teal-d);">+ Cash uit verkoop</td><td style="text-align:right;padding:6px 4px;font-weight:600;color:var(--teal-d);">${fmt(d.orders_total)}</td></tr>
+        ${d.income_total>0 ? `<tr><td style="padding:6px 4px;color:var(--teal-d);">+ Andere inkomsten</td><td style="text-align:right;padding:6px 4px;font-weight:600;color:var(--teal-d);">${fmt(d.income_total)}</td></tr>`:''}
+        ${d.expense_total>0 ? `<tr><td style="padding:6px 4px;color:var(--coral-d);">− Uitgaven</td><td style="text-align:right;padding:6px 4px;font-weight:600;color:var(--coral-d);">− ${fmt(d.expense_total)}</td></tr>`:''}
+        <tr style="border-top:2px solid var(--sun);background:var(--sun-l);"><td style="padding:12px 4px;font-weight:800;">= Eindsaldo in de kas</td><td style="text-align:right;padding:12px 4px;font-weight:800;font-size:20px;color:var(--sun-d);">${fmt(d.end_balance)}</td></tr>
+      </table>
+    </div>`;
+
+  // Billit-samenvatting
+  let billitBlock = '';
+  if (d.orders_total > 0) {
+    let billitRows = '';
+    if (d.vat_liable) {
+      billitRows = d.vat_split.map(v => `
+        <tr>
+          <td style="padding:8px 10px;">Dagontvangst ${v.rate}% btw</td>
+          <td style="text-align:right;padding:8px 10px;color:var(--mu);">excl. ${fmt(v.excl)}</td>
+          <td style="text-align:right;padding:8px 10px;color:var(--mu);">btw ${fmt(v.vat)}</td>
+          <td style="text-align:right;padding:8px 10px;font-weight:700;">${fmt(v.gross)}</td>
+        </tr>`).join('');
+    } else {
+      billitRows = `<tr><td style="padding:8px 10px;">Dagontvangst (vrijstellingsregeling — geen btw)</td><td colspan="2"></td><td style="text-align:right;padding:8px 10px;font-weight:700;">${fmt(d.orders_total)}</td></tr>`;
+    }
+    billitBlock = `
+      <div class="dcb-block" style="background:var(--sun-l);border-color:var(--sun);">
+        <div class="dcb-block-title" style="color:var(--sun-t);">🧾 Klaar voor Billit — dagontvangst ${dateStr}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">${billitRows}
+          <tr style="border-top:1px solid var(--sun);"><td style="padding:10px;font-weight:700;">Totaal cash</td><td colspan="2"></td><td style="text-align:right;padding:10px;font-weight:800;color:var(--sun-d);">${fmt(d.orders_total)}</td></tr>
+        </table>
+        <div style="margin-top:10px;font-size:12px;color:var(--sun-t);line-height:1.5;">
+          💡 Tik deze regel(s) over in Billit → Dagontvangstenboek. Alleen cash-bestellingen zijn opgenomen; bestellingen die je via <em>/zwartgeld</em> hebt verwijderd verschijnen niet.
+        </div>
+      </div>`;
+  }
+
+  el.innerHTML = startBlock + ordersBlock + incomesBlock + expensesBlock + summaryBlock + billitBlock;
+}
+
+async function saveStartAmount(){
+  const date = document.getElementById('dcb-date').value;
+  const amount = parseFloat(document.getElementById('dcb-start').value) || 0;
+  try {
+    await API.cashbook.addEntry({ date, type:'start', amount, description:'Startbedrag' });
+    toast('✅ Startbedrag opgeslagen');
+    loadDayCashbook();
+  } catch(e) { toast('Fout: '+e.message); }
+}
+
+async function addCashEntry(type){
+  const date = document.getElementById('dcb-date').value;
+  const descId = type === 'income' ? 'dcb-in-desc' : 'dcb-ex-desc';
+  const amtId = type === 'income' ? 'dcb-in-amt' : 'dcb-ex-amt';
+  const description = document.getElementById(descId).value.trim();
+  const amount = parseFloat(document.getElementById(amtId).value);
+  if (!description || isNaN(amount) || amount <= 0) { toast('Vul omschrijving en bedrag in'); return; }
+  try {
+    await API.cashbook.addEntry({ date, type, description, amount });
+    document.getElementById(descId).value = '';
+    document.getElementById(amtId).value = '';
+    toast('✅ Toegevoegd');
+    loadDayCashbook();
+  } catch(e) { toast('Fout: '+e.message); }
+}
+
+async function removeCashEntry(id){
+  if (!confirm('Deze boeking verwijderen?')) return;
+  try { await API.cashbook.removeEntry(id); loadDayCashbook(); toast('✅ Verwijderd'); }
+  catch(e) { toast('Fout: '+e.message); }
 }
 
 async function loadDailyOverview(){

@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '5.46.1';
+const APP_VERSION = '5.47.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -118,6 +118,17 @@ db.exec(`
     vat_rate      REAL NOT NULL DEFAULT 21,
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Dagkasboek: startbedragen, manuele cash uitgaven en extra inkomsten
+  CREATE TABLE IF NOT EXISTS cash_journal_entries (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    date          TEXT NOT NULL,
+    type          TEXT NOT NULL,      -- 'start' (startbedrag) | 'expense' (cash uitgave) | 'income' (extra cash-inkomst)
+    description   TEXT DEFAULT '',
+    amount        REAL NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_cash_journal_date ON cash_journal_entries(date);
 `);
 
 // ── Database migraties ───────────────────────────────────────────
@@ -1670,6 +1681,105 @@ app.post('/api/overhead-costs', requireAuth, (req, res) => {
 
 app.delete('/api/overhead-costs/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM overhead_costs WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Dagkasboek ─────────────────────────────────────────────────
+// Alle cash-transacties per dag, met startbedrag, cash uitgaven en Billit-samenvatting.
+// Respecteert het zwartgeld-principe: bestellingen die via /zwartgeld gewist zijn,
+// verschijnen automatisch niet meer (ze zitten niet meer in de database).
+app.get('/api/cashbook/day', requireAuth, (req, res) => {
+  const date = req.query.date || new Date().toISOString().slice(0,10);
+  const vatLiable = getSetting('vatLiable') !== 'false';
+
+  // Cash bestellingen (klant en rekening-afsluiting via cash): enkel echt betaalde
+  const orders = db.prepare(`
+    SELECT o.id, o.order_number, o.created_at, o.amount, o.note, o.cash_paid, o.tab_id, t.name AS tab_name
+    FROM orders o LEFT JOIN tabs t ON t.id = o.tab_id
+    WHERE DATE(o.created_at,'localtime') = ?
+      AND o.method = 'cash'
+      AND o.status NOT IN ('cancelled','pending','archived')
+      AND o.is_staff = 0
+      AND o.cash_paid = 1
+    ORDER BY o.created_at
+  `).all(date);
+
+  const ordersTotal = orders.reduce((s,o)=>s+o.amount,0);
+
+  // Handmatige entries: startbedrag, extra inkomsten, uitgaven
+  const entries = db.prepare(`
+    SELECT * FROM cash_journal_entries WHERE date=? ORDER BY type, id
+  `).all(date);
+  const startEntry = entries.find(e => e.type === 'start');
+  const startAmount = startEntry ? startEntry.amount : 0;
+  const incomes = entries.filter(e => e.type === 'income');
+  const expenses = entries.filter(e => e.type === 'expense');
+  const incomeTotal = incomes.reduce((s,e)=>s+e.amount,0);
+  const expenseTotal = expenses.reduce((s,e)=>s+e.amount,0);
+
+  const totalIn = ordersTotal + incomeTotal;
+  const endBalance = startAmount + totalIn - expenseTotal;
+
+  // Billit-samenvatting: dagontvangsten per btw-tarief (op basis van producten)
+  // Enkel op basis van cash-bestellingen (het is een cash-boek).
+  const vatSplitRows = db.prepare(`
+    SELECT COALESCE(p.vat_rate, 6) AS rate, SUM(oi.qty*oi.price) AS gross
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    LEFT JOIN products p ON p.id = oi.product_id
+    WHERE DATE(o.created_at,'localtime') = ?
+      AND o.method = 'cash'
+      AND o.status NOT IN ('cancelled','pending','archived')
+      AND o.is_staff = 0
+      AND o.cash_paid = 1
+    GROUP BY rate
+    ORDER BY rate
+  `).all(date);
+  const vatSplit = vatSplitRows.map(r => {
+    const rate = r.rate || 0;
+    const gross = r.gross || 0;
+    const excl = rate > 0 ? gross / (1 + rate/100) : gross;
+    const vat = gross - excl;
+    return { rate, gross, excl, vat };
+  });
+
+  res.json({
+    date,
+    start_amount: startAmount,
+    start_entry_id: startEntry ? startEntry.id : null,
+    orders, orders_total: ordersTotal,
+    incomes, income_total: incomeTotal,
+    expenses, expense_total: expenseTotal,
+    total_in: totalIn,
+    end_balance: endBalance,
+    vat_liable: vatLiable,
+    vat_split: vatSplit,
+  });
+});
+
+app.post('/api/cashbook/entry', requireAuth, (req, res) => {
+  const { date, type, description, amount } = req.body;
+  if (!date || !type || amount == null) return res.status(400).json({ error: 'Datum, type en bedrag zijn verplicht' });
+  if (!['start','expense','income'].includes(type)) return res.status(400).json({ error: 'Ongeldig type' });
+  const amt = parseFloat(amount);
+  if (isNaN(amt)) return res.status(400).json({ error: 'Ongeldig bedrag' });
+  // Startbedrag: overschrijf bestaande dagstart
+  if (type === 'start') {
+    const existing = db.prepare("SELECT id FROM cash_journal_entries WHERE date=? AND type='start'").get(date);
+    if (existing) {
+      db.prepare('UPDATE cash_journal_entries SET amount=?, description=? WHERE id=?')
+        .run(amt, description||'', existing.id);
+      res.json(db.prepare('SELECT * FROM cash_journal_entries WHERE id=?').get(existing.id));
+      return;
+    }
+  }
+  const r = db.prepare('INSERT INTO cash_journal_entries (date,type,description,amount) VALUES (?,?,?,?)')
+    .run(date, type, description||'', amt);
+  res.json(db.prepare('SELECT * FROM cash_journal_entries WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.delete('/api/cashbook/entry/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM cash_journal_entries WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 

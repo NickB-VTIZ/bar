@@ -106,6 +106,11 @@ window.API = (() => {
       add: (data) => req('POST', '/api/overhead-costs', data),
       remove: (id) => req('DELETE', `/api/overhead-costs/${id}`),
     },
+    cashbook: {
+      day: (date) => req('GET', `/api/cashbook/day?date=${date}`),
+      addEntry: (data) => req('POST', '/api/cashbook/entry', data),
+      removeEntry: (id) => req('DELETE', `/api/cashbook/entry/${id}`),
+    },
     profit: (from, to) => req('GET', `/api/stats/profit?from=${from}&to=${to||from}`),
     staff: {
       list:   (from,to) => req('GET',    `/api/staff/shifts?from=${from}&to=${to||from}`),
