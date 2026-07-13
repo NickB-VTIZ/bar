@@ -157,7 +157,8 @@ tr:last-child td{border-bottom:none;}
 <!-- Sub-navigatie voor Kasboek -->
 <div id="kasboek-subnav" class="subnav" style="display:none;">
   <button class="subnav-btn on" onclick="showSubTab('cashbook',this)">📒 Kasdagboek</button>
-  <button class="subnav-btn" onclick="showSubTab('daycashbook',this);initDayCashbook()">📔 Dagkasboek</button>
+  <button class="subnav-btn" onclick="showSubTab('daily',this);initDaily()">📅 Dagontvangsten</button>
+  <button class="subnav-btn" onclick="showSubTab('daycashbook',this);initDayCashbook()">💶 Cashboek</button>
   <button class="subnav-btn" onclick="showSubTab('invoice',this);initInvoice()">🧾 Maandfactuur</button>
 </div>
 
@@ -389,7 +390,26 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
-<!-- Dagkasboek: uitgebreid met startbedrag, uitgaven en Billit-samenvatting -->
+<!-- Dagontvangsten (originele Billit-view per btw-tarief) -->
+<div id="screen-daily" class="screen">
+  <div class="wrap">
+    <div class="controls no-print">
+      <label>Dag</label>
+      <input type="date" id="daily-date" onchange="loadDailyOverview()">
+      <button class="btn btn-ghost" onclick="document.getElementById('daily-date').value=new Date(Date.now()-864e5).toISOString().slice(0,10);loadDailyOverview()">Gisteren</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('daily-date').value=new Date().toISOString().slice(0,10);loadDailyOverview()">Vandaag</button>
+      <button class="btn btn-primary" onclick="loadDailyOverview()">Tonen</button>
+    </div>
+    <div class="print-header">
+      <h1>☀️ Zomerbar — Dagontvangsten</h1>
+    </div>
+    <div id="daily-content">
+      <div class="empty"><div class="empty-icon">📅</div><div>Kies een dag voor het dagontvangsten-overzicht</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Cashboek: uitgebreid met startbedrag, uitgaven en Billit-samenvatting -->
 <div id="screen-daycashbook" class="screen">
   <div class="wrap">
     <div class="controls no-print" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
@@ -402,7 +422,7 @@ tr:last-child td{border-bottom:none;}
       <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
     </div>
     <div class="print-header">
-      <h1>☀️ Zomerbar — Dagkasboek <span id="dcb-print-date"></span></h1>
+      <h1>☀️ Zomerbar — Cashboek <span id="dcb-print-date"></span></h1>
     </div>
     <div id="daycashbook-content">
       <div class="empty" style="text-align:center;color:var(--mu);padding:40px;">Kies een dag om het kasboek te bekijken.</div>
@@ -832,12 +852,12 @@ function showSubTab(name, btn){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.getElementById('screen-'+name).classList.add('on');
   // Subnav-button state
-  const subnavId = ['cashbook','daycashbook','invoice'].includes(name) ? 'kasboek-subnav' : 'verkoop-subnav';
+  const subnavId = ['cashbook','daily','daycashbook','invoice'].includes(name) ? 'kasboek-subnav' : 'verkoop-subnav';
   document.querySelectorAll('#'+subnavId+' .subnav-btn').forEach(b=>b.classList.remove('on'));
   if (btn) btn.classList.add('on');
   else {
     // Autoselect eerste of juiste knop
-    const positions = { cashbook:0, daycashbook:1, invoice:2, itemssold:0, busyhours:1 };
+    const positions = { cashbook:0, daily:1, daycashbook:2, invoice:3, itemssold:0, busyhours:1 };
     const idx = positions[name];
     const btns = document.querySelectorAll('#'+subnavId+' .subnav-btn');
     if (btns[idx]) btns[idx].classList.add('on');
