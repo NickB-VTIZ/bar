@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '5.47.1';
+const APP_VERSION = '5.48.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -1276,6 +1276,7 @@ app.post('/api/zwartgeld/purge', requireAuth, (req, res) => {
   });
   tx();
   validIds.forEach(id => broadcast('order_deleted', { id }));
+  broadcast('cashbook_updated', { deleted: validIds.length });
   res.json({ ok: true, deleted: validIds.length });
 });
 

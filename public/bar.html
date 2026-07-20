@@ -55,9 +55,13 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 /* Orders board */
 .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;padding:16px 20px 40px;}
 .card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);overflow:hidden;transition:all .15s;}
-.card.is-paid{border-color:var(--sun);box-shadow:0 0 0 3px var(--sun-l);}
-.card.is-preparing{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-l);}
-.card.is-ready{border-color:var(--teal);background:var(--teal-l);}
+/* Verse bestelling: opvallende gele vulling zodat de bartender ze meteen ziet */
+.card.is-paid{background:var(--sun-l);border:2px solid var(--sun);box-shadow:0 0 0 3px rgba(255,183,0,.18);}
+.card.is-paid .card-head{background:var(--sun);}
+/* Bezig met bereiden: subtiele teal-toon, minder opvallend dan een verse bestelling */
+.card.is-preparing{background:var(--card);border:1px solid var(--teal);box-shadow:inset 3px 0 0 var(--teal);}
+/* Klaar om op te halen: groene vulling — vraagt om afhandeling */
+.card.is-ready{background:var(--teal-l);border:2px solid var(--teal);box-shadow:0 0 0 3px rgba(29,158,117,.18);}
 .card.is-pending{opacity:.6;}
 .card-head{padding:14px 18px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
 .order-num{font-size:34px;font-weight:700;color:var(--sun-d);line-height:1;}
@@ -1227,7 +1231,11 @@ async function confirmCashPayment() {
       if (o && o.status === 'ready') {
         await API.orders.setStatus(payModalOrderId, 'collected');
       }
-      toast(`✅ Betaling geregistreerd — ${payModalMethod === 'sumup' ? 'SumUp kaart' : 'cash'}`);
+      // Anders: verplaats meteen naar "in uitvoering" zodat de bartender enkel nog moet voltooien
+      else if (o && o.status === 'paid') {
+        await API.orders.setStatus(payModalOrderId, 'preparing');
+      }
+      toast(`✅ Betaling geregistreerd — bestelling in uitvoering`);
       closePayModal();
     }
   } catch(e) {
@@ -1407,7 +1415,7 @@ async function submitQuickOrder() {
   const btn = document.getElementById('qo-submit-btn');
   btn.disabled = true; btn.textContent = 'Plaatsen…';
   try {
-    await API.orders.create({
+    const result = await API.orders.create({
       items, method: qoPayMethod,
       tab_id: tabId,
       note: noteFinal,
@@ -1419,10 +1427,16 @@ async function submitQuickOrder() {
       toast(`📋 Toegevoegd aan rekening "${t ? t.name : ''}"`);
     } else if (qoPayMethod === 'staff') {
       toast('🧑‍🍳 Personeelsdrankje geregistreerd');
+    } else if (qoPayMethod === 'cash' && result && result.order) {
+      // Cash: automatisch de pay modal openen om meteen te registreren
+      const o = result.order;
+      // Even wachten tot de order via WS lokaal is toegevoegd
+      setTimeout(() => {
+        const amtFmt = fmtEur(o.amount);
+        openPayModal(o.id, amtFmt, o.order_number);
+      }, 100);
     } else {
-      toast(qoPayMethod === 'cash'
-        ? '✅ Bestelling toegevoegd — staat op "te betalen"'
-        : '✅ Bestelling toegevoegd');
+      toast('✅ Bestelling toegevoegd');
     }
   } catch(e) {
     toast('Fout: ' + e.message);

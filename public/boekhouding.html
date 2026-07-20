@@ -148,7 +148,7 @@ tr:last-child td{border-bottom:none;}
 
 <div class="nav">
   <button class="nav-btn on" onclick="showScreen('profit',this);initProfit()">💰 Winst</button>
-  <button class="nav-btn" onclick="showScreen('kasboek',this);showSubTab('cashbook')">📒 Kasboek</button>
+  <button class="nav-btn" onclick="showScreen('kasboek',this);showSubTab('daily');initDaily()">📒 Kasboek</button>
   <button class="nav-btn" onclick="showScreen('verkoop',this);showSubTab('itemssold')">📊 Verkoop</button>
   <button class="nav-btn" onclick="showScreen('staffdrinks',this);initStaffDrinks()">🧑‍🍳 Personeel</button>
   <button class="nav-btn" onclick="showScreen('overhead',this);initOverhead()">💡 Kosten</button>
@@ -156,8 +156,7 @@ tr:last-child td{border-bottom:none;}
 
 <!-- Sub-navigatie voor Kasboek -->
 <div id="kasboek-subnav" class="subnav" style="display:none;">
-  <button class="subnav-btn on" onclick="showSubTab('cashbook',this)">📒 Kasdagboek</button>
-  <button class="subnav-btn" onclick="showSubTab('daily',this);initDaily()">📅 Dagontvangsten</button>
+  <button class="subnav-btn on" onclick="showSubTab('daily',this);initDaily()">📅 Dagontvangsten</button>
   <button class="subnav-btn" onclick="showSubTab('daycashbook',this);initDayCashbook()">💶 Cashboek</button>
   <button class="subnav-btn" onclick="showSubTab('invoice',this);initInvoice()">🧾 Maandfactuur</button>
 </div>
@@ -166,32 +165,6 @@ tr:last-child td{border-bottom:none;}
 <div id="verkoop-subnav" class="subnav" style="display:none;">
   <button class="subnav-btn on" onclick="showSubTab('itemssold',this);initItemsSold()">🍺 Verkochte items</button>
   <button class="subnav-btn" onclick="showSubTab('busyhours',this);initBusyHours()">🔥 Piekuren</button>
-</div>
-
-<!-- Kasdagboek -->
-<div id="screen-cashbook" class="screen">
-  <div class="wrap">
-    <div class="controls no-print">
-      <label>Van</label>
-      <input type="date" id="cb-from">
-      <label>Tot</label>
-      <input type="date" id="cb-to">
-      <button class="btn btn-ghost" onclick="setPeriodOn('cb','yesterday')">Gisteren</button>
-      <button class="btn btn-ghost" onclick="setPeriodOn('cb','today')">Vandaag</button>
-      <button class="btn btn-ghost" onclick="setPeriodOn('cb','week')">Deze week</button>
-      <button class="btn btn-primary" onclick="loadCashbook()">Tonen</button>
-      <button class="btn btn-ghost" onclick="window.print()">🖨 Afdrukken</button>
-    </div>
-
-    <div class="print-header">
-      <h1>☀️ Zomerbar — Kasdagboek</h1>
-      <p id="print-period"></p>
-    </div>
-
-    <div id="cb-content">
-      <div class="empty"><div class="empty-icon">📒</div><div>Kies een periode en klik "Tonen"</div></div>
-    </div>
-  </div>
 </div>
 
 <!-- Verkochte items -->
@@ -497,7 +470,6 @@ function setPeriodOn(prefix, period){
   else if (prefix === 'is') loadItemsSold();
   else if (prefix === 'bh') loadBusyHours();
   else if (prefix === 'oh') loadOverhead();
-  else if (prefix === 'cb') loadCashbook();
 }
 
 // ── Personeel: drankjes ──
@@ -852,87 +824,17 @@ function showSubTab(name, btn){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   document.getElementById('screen-'+name).classList.add('on');
   // Subnav-button state
-  const subnavId = ['cashbook','daily','daycashbook','invoice'].includes(name) ? 'kasboek-subnav' : 'verkoop-subnav';
+  const subnavId = ['daily','daycashbook','invoice'].includes(name) ? 'kasboek-subnav' : 'verkoop-subnav';
   document.querySelectorAll('#'+subnavId+' .subnav-btn').forEach(b=>b.classList.remove('on'));
   if (btn) btn.classList.add('on');
   else {
-    // Autoselect eerste of juiste knop
-    const positions = { cashbook:0, daily:1, daycashbook:2, invoice:3, itemssold:0, busyhours:1 };
+    const positions = { daily:0, daycashbook:1, invoice:2, itemssold:0, busyhours:1 };
     const idx = positions[name];
     const btns = document.querySelectorAll('#'+subnavId+' .subnav-btn');
     if (btns[idx]) btns[idx].classList.add('on');
   }
 }
 
-// Default dates: current month
-const today=new Date();
-const firstDay=new Date(today.getFullYear(),today.getMonth(),1).toISOString().slice(0,10);
-document.getElementById('cb-from').value=firstDay;
-document.getElementById('cb-to').value=today.toISOString().slice(0,10);
-
-async function loadCashbook(){
-  const from=document.getElementById('cb-from').value;
-  const to=document.getElementById('cb-to').value;
-  if(!from||!to){toast('Kies een periode');return;}
-  document.getElementById('print-period').textContent=`Periode: ${new Date(from).toLocaleDateString('nl-BE')} t/m ${new Date(to).toLocaleDateString('nl-BE')}`;
-  try{
-    const data=await API.cashbook(from,to);
-    renderCashbook(data);
-  }catch(e){toast('Fout: '+e.message);}
-}
-
-function renderCashbook(data){
-  if(!data.days.length){
-    document.getElementById('cb-content').innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>Geen betaalde bestellingen in deze periode</div></div>';
-    return;
-  }
-  const t=data.totals;
-  let html=`<div class="cb-summary">
-    <div class="cb-stat"><div class="cb-stat-n">${fmt(t.total)}</div><div class="cb-stat-l">Totaal ontvangsten</div></div>
-    <div class="cb-stat cash"><div class="cb-stat-n">${fmt(t.cash)}</div><div class="cb-stat-l">💶 Cash</div></div>
-    <div class="cb-stat card"><div class="cb-stat-n">${fmt(t.card)}</div><div class="cb-stat-l">💳 Kaart (SumUp)</div></div>
-    ${t.gift > 0 ? `<div class="cb-stat" style="border-color:var(--sun);"><div class="cb-stat-n" style="color:var(--sun-d)">${fmt(t.gift)}</div><div class="cb-stat-l">🐝 Giften bijen</div></div>` : ''}
-  </div>`;
-
-  // Per day
-  data.days.forEach(d=>{
-    html+=`<div class="day-block">
-      <div class="day-head"><div class="day-date">${fmtDate(d.date)}</div><div class="day-total">${fmt(d.total)}</div></div>
-      <table>
-        <thead><tr><th>Bestelling</th><th>Methode</th><th class="txt-right">Bedrag</th></tr></thead>
-        <tbody>
-        ${d.orders.map(o=>`<tr>
-          <td>#${o.order_number} <span style="color:var(--mu)">· ${parseDbDate(o.created_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}</span></td>
-          <td><span class="method-tag ${o.method==='cash'?'tag-cash':'tag-card'}">${o.method==='cash'?'Cash':'Kaart'}</span></td>
-          <td class="txt-right">${fmt(o.amount)}</td>
-        </tr>`).join('')}
-        </tbody>
-      </table>
-      <table class="vat-table">
-        <thead><tr><th>BTW-tarief</th><th class="txt-right">Excl. BTW</th><th class="txt-right">BTW</th><th class="txt-right">Incl. BTW</th></tr></thead>
-        <tbody>
-        ${d.vat.sort((a,b)=>a.rate-b.rate).map(v=>`<tr>
-          <td>${v.rate}%</td><td class="txt-right">${fmt(v.excl)}</td><td class="txt-right">${fmt(v.vat)}</td><td class="txt-right">${fmt(v.incl)}</td>
-        </tr>`).join('')}
-        <tr class="tot-row"><td>Dagtotaal</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.excl,0))}</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.vat,0))}</td><td class="txt-right">${fmt(d.vat.reduce((s,v)=>s+v.incl,0))}</td></tr>
-        ${d.gift > 0 ? `<tr><td>🐝 Giften (zonder btw)</td><td class="txt-right">${fmt(d.gift)}</td><td class="txt-right">—</td><td class="txt-right">${fmt(d.gift)}</td></tr>` : ''}
-        </tbody>
-      </table>
-    </div>`;
-  });
-
-  // Period VAT totals
-  html+=`<div class="section-label">BTW-overzicht hele periode</div>
-  <div class="day-block"><table class="vat-table">
-    <thead><tr><th>BTW-tarief</th><th class="txt-right">Excl. BTW</th><th class="txt-right">BTW</th><th class="txt-right">Incl. BTW</th></tr></thead>
-    <tbody>
-    ${t.vat.sort((a,b)=>a.rate-b.rate).map(v=>`<tr><td>${v.rate}%</td><td class="txt-right">${fmt(v.excl)}</td><td class="txt-right">${fmt(v.vat)}</td><td class="txt-right">${fmt(v.incl)}</td></tr>`).join('')}
-    <tr class="tot-row"><td>Totaal</td><td class="txt-right">${fmt(t.vat.reduce((s,v)=>s+v.excl,0))}</td><td class="txt-right">${fmt(t.vat.reduce((s,v)=>s+v.vat,0))}</td><td class="txt-right">${fmt(t.total)}</td></tr>
-    </tbody>
-  </table></div>`;
-
-  document.getElementById('cb-content').innerHTML=html;
-}
 
 // Invoice
 // ── Dagontvangsten (Billit-categorieën overzicht) ──
@@ -1129,6 +1031,27 @@ function initDayCashbook(){
   const el = document.getElementById('dcb-date');
   if (!el.value) el.value = new Date().toISOString().slice(0,10);
   loadDayCashbook();
+}
+
+// Live-refresh: als er een nieuwe order geplaatst wordt of een order via /zwartgeld
+// gepurged wordt, de Cashboek automatisch opnieuw laden zodat je de actuele cijfers ziet.
+if (typeof API !== 'undefined' && typeof API.on === 'function') {
+  API.on('order_created', () => {
+    if (document.getElementById('screen-daycashbook')?.classList.contains('on')) loadDayCashbook();
+    if (document.getElementById('screen-daily')?.classList.contains('on')) loadDailyOverview();
+  });
+  API.on('order_updated', () => {
+    if (document.getElementById('screen-daycashbook')?.classList.contains('on')) loadDayCashbook();
+    if (document.getElementById('screen-daily')?.classList.contains('on')) loadDailyOverview();
+  });
+  API.on('cashbook_updated', () => {
+    if (document.getElementById('screen-daycashbook')?.classList.contains('on')) loadDayCashbook();
+    if (document.getElementById('screen-daily')?.classList.contains('on')) loadDailyOverview();
+  });
+  API.on('order_deleted', () => {
+    if (document.getElementById('screen-daycashbook')?.classList.contains('on')) loadDayCashbook();
+    if (document.getElementById('screen-daily')?.classList.contains('on')) loadDailyOverview();
+  });
 }
 
 function dcbSetDate(delta){
