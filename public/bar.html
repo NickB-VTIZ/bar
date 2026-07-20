@@ -559,6 +559,15 @@ function setConn(ok){
   document.getElementById('conn-lbl').textContent=ok?'Live':'Offline';
 }
 
+// SumUp Solo terminal callback: geeft toast/geluid bij eindresultaat van de kaartbetaling
+API.on('sumup_terminal_result', d => {
+  if (d.success) {
+    toast('💳 SumUp betaling geslaagd');
+  } else {
+    toast(`⚠ SumUp betaling ${d.reason||'niet gelukt'} — controleer op de terminal`);
+  }
+});
+
 function playBing(){
   try{
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
@@ -788,23 +797,25 @@ async function markPaid(id){
 // ── Cash betaal modal ────────────────────────────────────────────
 let payModalOrderId = null, payModalMethod = 'cash', payModalAmountNum = 0;
 
-function openPayModal(orderId, amtFmt, orderNum) {
+function openPayModal(orderId, amtFmt, orderNum, preselectMethod) {
   payModalOrderId = orderId;
-  payModalMethod = 'cash';
+  const method = (preselectMethod === 'sumup') ? 'sumup' : 'cash';
+  payModalMethod = method;
   const o = orders[orderId];
   payModalAmountNum = o ? (o.amount || 0) : 0;
   document.getElementById('pay-modal-amt').textContent = amtFmt;
   document.getElementById('pay-modal-order').textContent = `Bestelling #${orderNum}`;
   renderPayItems(o ? o.items : []);
-  document.getElementById('pm-cash-modal').classList.add('sel');
-  document.getElementById('pm-sumup-modal').classList.remove('sel');
+  document.getElementById('pm-cash-modal').classList.toggle('sel', method==='cash');
+  document.getElementById('pm-sumup-modal').classList.toggle('sel', method==='sumup');
   // Reset wisselgeld + knop (fix voor vastlopende knop)
   const cbtn = document.getElementById('pay-modal-confirm');
-  cbtn.disabled = false; cbtn.textContent = '✅ Cash ontvangen';
+  cbtn.disabled = false;
+  cbtn.textContent = method === 'sumup' ? '💳 Betaald via SumUp' : '✅ Cash ontvangen';
   document.getElementById('cash-given').value = '';
   document.getElementById('change-result').style.display = 'none';
   document.getElementById('change-short').style.display = 'none';
-  document.getElementById('change-calc').style.display = 'flex';
+  document.getElementById('change-calc').style.display = method === 'cash' ? 'flex' : 'none';
   renderCashQuickButtons();
   document.getElementById('pay-modal-bg').classList.add('show');
 }
@@ -1233,14 +1244,26 @@ async function confirmCashPayment() {
       renderBoard();
     } else if (payModalOrderId) {
       const o = orders[payModalOrderId];
-      // Registreer de betaling (zet cash_paid + methode)
+      // Betaling registreren + status naar "klaar"
       await API.orders.registerPayment(payModalOrderId, payModalMethod);
-      // Cash-flow: naar "klaar" → belletje rinkelt voor de klant
-      // De kaart blijft op het bord staan; de bartender klikt "Opgehaald" als de klant het drankje krijgt.
       if (o && ['paid','preparing'].includes(o.status)) {
         await API.orders.setStatus(payModalOrderId, 'ready');
       }
-      toast(`🔔 Betaald — klaar voor de klant`);
+
+      // SumUp: probeer het bedrag rechtstreeks naar de gepairde Solo-terminal te sturen
+      if (payModalMethod === 'sumup') {
+        try {
+          await API.orders.sumupTerminal(payModalOrderId);
+          toast(`💳 Bedrag naar Solo verstuurd — klant kan tikken`);
+        } catch(termErr) {
+          // Als er geen terminal gekoppeld is of het versturen mislukt: manueel op de terminal typen.
+          // De bestelling staat wel al als betaald geregistreerd.
+          console.warn('[SumUp terminal]', termErr.message);
+          toast(`⚠ Terminal: ${termErr.message}. Typ het bedrag manueel op de Solo.`);
+        }
+      } else {
+        toast(`🔔 Betaald — klaar voor de klant`);
+      }
       closePayModal();
     }
   } catch(e) {
@@ -1419,9 +1442,13 @@ async function submitQuickOrder() {
   }).filter(Boolean);
   const btn = document.getElementById('qo-submit-btn');
   btn.disabled = true; btn.textContent = 'Plaatsen…';
+  // SumUp aan de bar: behandel als cash-achtige onmiddellijke betaling
+  // (order wordt aangemaakt als 'paid', pay modal opent, definitieve methode gezet bij bevestigen)
+  const isImmediate = qoPayMethod === 'cash' || qoPayMethod === 'sumup';
+  const serverMethod = qoPayMethod === 'sumup' ? 'cash' : qoPayMethod;
   try {
     const result = await API.orders.create({
-      items, method: qoPayMethod,
+      items, method: serverMethod,
       tab_id: tabId,
       note: noteFinal,
       phone: '',
@@ -1432,13 +1459,13 @@ async function submitQuickOrder() {
       toast(`📋 Toegevoegd aan rekening "${t ? t.name : ''}"`);
     } else if (qoPayMethod === 'staff') {
       toast('🧑‍🍳 Personeelsdrankje geregistreerd');
-    } else if (qoPayMethod === 'cash' && result && result.order) {
-      // Cash: automatisch de pay modal openen om meteen te registreren
+    } else if (isImmediate && result && result.order) {
+      // Cash of SumUp aan de bar: pay modal automatisch openen, met de juiste methode voorgeselecteerd
       const o = result.order;
-      // Even wachten tot de order via WS lokaal is toegevoegd
+      const preselect = qoPayMethod; // 'cash' of 'sumup'
       setTimeout(() => {
         const amtFmt = fmtEur(o.amount);
-        openPayModal(o.id, amtFmt, o.order_number);
+        openPayModal(o.id, amtFmt, o.order_number, preselect);
       }, 100);
     } else {
       toast('✅ Bestelling toegevoegd');
