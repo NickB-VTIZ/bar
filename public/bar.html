@@ -172,19 +172,19 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 .qo-step{width:30px;height:30px;border:none;background:var(--sun);color:var(--sun-t);font-size:19px;font-weight:700;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;padding:0;}
 .qo-step-qty{min-width:24px;text-align:center;font-size:16px;font-weight:700;color:var(--tx);}
 .pay-modal-bg.show{display:flex;}
-.pay-modal-bg{align-items:center !important;padding:16px;}
-.pay-modal{background:var(--card);border-radius:20px;padding:20px 22px;width:min(920px,96vw);max-height:92vh;display:flex;flex-direction:column;box-sizing:border-box;}
-.pay-panes{display:flex;gap:18px;flex:1;min-height:0;margin-bottom:14px;}
-.pay-left{flex:1.1;display:flex;flex-direction:column;gap:10px;min-width:0;}
-.pay-right{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;}
+.pay-modal-bg{align-items:center !important;padding:10px;}
+.pay-modal{background:var(--card);border-radius:18px;padding:14px 16px;width:min(920px,96vw);max-height:96vh;display:flex;flex-direction:column;box-sizing:border-box;}
+.pay-panes{display:flex;gap:14px;flex:1;min-height:0;margin-bottom:10px;}
+.pay-left{flex:1.1;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;}
+.pay-right{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;}
 .pay-methods-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.pay-method-tile{padding:12px 8px;border:0.5px solid var(--bd);border-radius:12px;background:var(--bg);cursor:pointer;text-align:center;transition:all .12s;}
+.pay-method-tile{padding:8px 6px;border:0.5px solid var(--bd);border-radius:10px;background:var(--bg);cursor:pointer;text-align:center;transition:all .12s;}
 .pay-method-tile.sel{border-color:var(--teal);background:var(--teal-l);color:var(--teal-d);}
 .pay-method-tile:active{transform:scale(.97);}
-.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
-.numpad button{padding:16px 0;font-size:22px;font-weight:700;background:var(--bg);border:0.5px solid var(--bd);border-radius:10px;color:var(--tx);cursor:pointer;transition:all .1s;}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+.numpad button{padding:10px 0;font-size:18px;font-weight:700;background:var(--bg);border:0.5px solid var(--bd);border-radius:9px;color:var(--tx);cursor:pointer;transition:all .1s;}
 .numpad button:active{transform:scale(.94);background:var(--sun-l);}
-.pay-modal-confirm{width:100%;padding:18px;font-size:18px;font-weight:800;background:var(--teal);color:#fff;border:none;border-radius:14px;cursor:pointer;}
+.pay-modal-confirm{width:100%;padding:12px;font-size:16px;font-weight:800;background:var(--teal);color:#fff;border:none;border-radius:12px;cursor:pointer;}
 .pay-modal-confirm:disabled{opacity:.55;cursor:not-allowed;}
 /* Op smallere schermen stapelen we */
 @media(max-width:720px){
@@ -402,48 +402,48 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 <!-- Betaal modal (tablet-vriendelijk, twee panelen) -->
 <div class="pay-modal-bg" id="pay-modal-bg">
   <div class="pay-modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
       <div>
-        <div style="font-size:18px;font-weight:800;color:var(--tx);">Afrekenen</div>
-        <div style="font-size:13px;color:var(--mu);" id="pay-modal-order">Bestelling #—</div>
+        <div style="font-size:16px;font-weight:800;color:var(--tx);line-height:1.1;">Afrekenen</div>
+        <div style="font-size:12px;color:var(--mu);" id="pay-modal-order">Bestelling #—</div>
       </div>
-      <button onclick="closePayModal()" style="background:none;border:none;font-size:24px;color:var(--mu);cursor:pointer;padding:4px 8px;">✕</button>
+      <button onclick="closePayModal()" style="background:none;border:none;font-size:22px;color:var(--mu);cursor:pointer;padding:2px 6px;line-height:1;">✕</button>
     </div>
 
     <div class="pay-panes">
       <!-- LINKS: bestelling + rekenhulp -->
       <div class="pay-left">
-        <div style="font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Bestelling</div>
-        <div id="pay-items-list" style="flex:1;overflow-y:auto;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:10px 12px;font-size:13px;color:var(--tx);min-height:80px;"></div>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 4px 4px;">
-          <span style="font-size:14px;font-weight:600;color:var(--mu);">Totaal</span>
-          <span id="pay-modal-amt" style="font-size:34px;font-weight:800;color:var(--sun-d);line-height:1;">€ 0,00</span>
+        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;">Bestelling</div>
+        <div id="pay-items-list" style="flex:1;overflow-y:auto;background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rm);padding:8px 10px;font-size:13px;color:var(--tx);min-height:60px;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:4px 2px 0;">
+          <span style="font-size:13px;font-weight:600;color:var(--mu);">Totaal</span>
+          <span id="pay-modal-amt" style="font-size:26px;font-weight:800;color:var(--sun-d);line-height:1;">€ 0,00</span>
         </div>
 
         <!-- Methodekeuze -->
         <div class="pay-methods-row">
           <div class="pay-method-tile sel" id="pm-cash-modal" onclick="selPayModal('cash')">
-            <div style="font-size:22px;">💶</div>
-            <div style="font-size:13px;font-weight:700;">Cash</div>
+            <div style="font-size:18px;line-height:1;">💶</div>
+            <div style="font-size:12px;font-weight:700;">Cash</div>
           </div>
           <div class="pay-method-tile" id="pm-sumup-modal" onclick="selPayModal('sumup')">
-            <div style="font-size:22px;">💳</div>
-            <div style="font-size:13px;font-weight:700;">SumUp</div>
+            <div style="font-size:18px;line-height:1;">💳</div>
+            <div style="font-size:12px;font-weight:700;">SumUp</div>
           </div>
         </div>
       </div>
 
       <!-- RECHTS: cash-rekenhulp (verberg bij SumUp) -->
       <div class="pay-right" id="change-calc">
-        <div style="font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;">Klant geeft</div>
-        <div style="display:flex;align-items:center;background:var(--card);border:2px solid var(--sun);border-radius:12px;padding:0 14px;">
-          <span style="font-size:22px;color:var(--sun-d);font-weight:700;">€</span>
+        <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;">Klant geeft</div>
+        <div style="display:flex;align-items:center;background:var(--card);border:2px solid var(--sun);border-radius:10px;padding:0 10px;">
+          <span style="font-size:18px;color:var(--sun-d);font-weight:700;">€</span>
           <input id="cash-given" type="text" inputmode="decimal" placeholder="0,00" readonly
-            style="flex:1;border:none;background:none;font-size:32px;font-weight:800;color:var(--tx);padding:12px 8px;outline:none;width:100%;text-align:right;">
+            style="flex:1;border:none;background:none;font-size:24px;font-weight:800;color:var(--tx);padding:8px 6px;outline:none;width:100%;text-align:right;">
         </div>
 
         <!-- Snelknoppen: gepast + volgende euro's + briefjes -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="cash-quick"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;" id="cash-quick"></div>
 
         <!-- Numeriek toetsenbord voor tablet-invoer -->
         <div class="numpad">
@@ -462,11 +462,11 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
         </div>
 
         <!-- Resultaat wisselgeld -->
-        <div id="change-result" style="background:var(--teal-l);border:2px solid var(--teal);border-radius:12px;padding:10px 14px;text-align:center;display:none;">
-          <div style="font-size:12px;color:var(--teal-d);font-weight:600;">Wisselgeld</div>
-          <div id="change-amount" style="font-size:32px;font-weight:800;color:var(--teal-d);line-height:1.1;">€ 0,00</div>
+        <div id="change-result" style="background:var(--teal-l);border:2px solid var(--teal);border-radius:10px;padding:6px 12px;text-align:center;display:none;">
+          <div style="font-size:11px;color:var(--teal-d);font-weight:600;line-height:1;">Wisselgeld</div>
+          <div id="change-amount" style="font-size:22px;font-weight:800;color:var(--teal-d);line-height:1.15;">€ 0,00</div>
         </div>
-        <div id="change-short" style="background:var(--coral-l);border:1px solid var(--coral);border-radius:10px;padding:10px;text-align:center;display:none;font-size:14px;color:var(--coral-d);font-weight:700;"></div>
+        <div id="change-short" style="background:var(--coral-l);border:1px solid var(--coral);border-radius:9px;padding:8px;text-align:center;display:none;font-size:13px;color:var(--coral-d);font-weight:700;"></div>
       </div>
     </div>
 
@@ -532,10 +532,18 @@ API.on('order_created', d => {
   toast(`🆕 Bestelling #${d.order.order_number}`);
 });
 API.on('order_updated', d => {
+  const prev = orders[d.order.id];
+  const wentToReady = prev && prev.status !== 'ready' && d.order.status === 'ready';
   if(d.order.status==='collected'||d.order.status==='archived'){
     delete orders[d.order.id];
   } else {
     orders[d.order.id]=d.order;
+  }
+  // Belletje bij transitie naar "klaar" — signaal voor bartender/klant
+  if (wentToReady && soundOn) {
+    playBing();
+    const sb=document.getElementById('sound-btn');
+    sb.classList.add('ring'); setTimeout(()=>sb.classList.remove('ring'),600);
   }
   renderBoard(); loadStats();
 });
@@ -1227,15 +1235,16 @@ async function confirmCashPayment() {
       const o = orders[payModalOrderId];
       // Registreer de betaling (zet cash_paid + methode)
       await API.orders.registerPayment(payModalOrderId, payModalMethod);
-      // Als de bestelling al klaar is om op te halen → meteen afronden
-      if (o && o.status === 'ready') {
-        await API.orders.setStatus(payModalOrderId, 'collected');
+      // Cash-flow: eerst naar "klaar" → belletje rinkelt voor de klant → daarna automatisch opgehaald
+      if (o && ['paid','preparing'].includes(o.status)) {
+        await API.orders.setStatus(payModalOrderId, 'ready');
       }
-      // Anders: verplaats meteen naar "in uitvoering" zodat de bartender enkel nog moet voltooien
-      else if (o && o.status === 'paid') {
-        await API.orders.setStatus(payModalOrderId, 'preparing');
-      }
-      toast(`✅ Betaling geregistreerd — bestelling in uitvoering`);
+      // Na ~2 seconden automatisch als opgehaald markeren zodat de kaart van het bord verdwijnt
+      const idToCollect = payModalOrderId;
+      setTimeout(() => {
+        API.orders.setStatus(idToCollect, 'collected').catch(()=>{});
+      }, 2000);
+      toast(`🔔 Klaar voor klant — automatisch afgehandeld`);
       closePayModal();
     }
   } catch(e) {
