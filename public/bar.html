@@ -559,15 +559,6 @@ function setConn(ok){
   document.getElementById('conn-lbl').textContent=ok?'Live':'Offline';
 }
 
-// SumUp Solo terminal callback: geeft toast/geluid bij eindresultaat van de kaartbetaling
-API.on('sumup_terminal_result', d => {
-  if (d.success) {
-    toast('💳 SumUp betaling geslaagd');
-  } else {
-    toast(`⚠ SumUp betaling ${d.reason||'niet gelukt'} — controleer op de terminal`);
-  }
-});
-
 function playBing(){
   try{
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
@@ -1249,21 +1240,9 @@ async function confirmCashPayment() {
       if (o && ['paid','preparing'].includes(o.status)) {
         await API.orders.setStatus(payModalOrderId, 'ready');
       }
-
-      // SumUp: probeer het bedrag rechtstreeks naar de gepairde Solo-terminal te sturen
-      if (payModalMethod === 'sumup') {
-        try {
-          await API.orders.sumupTerminal(payModalOrderId);
-          toast(`💳 Bedrag naar Solo verstuurd — klant kan tikken`);
-        } catch(termErr) {
-          // Als er geen terminal gekoppeld is of het versturen mislukt: manueel op de terminal typen.
-          // De bestelling staat wel al als betaald geregistreerd.
-          console.warn('[SumUp terminal]', termErr.message);
-          toast(`⚠ Terminal: ${termErr.message}. Typ het bedrag manueel op de Solo.`);
-        }
-      } else {
-        toast(`🔔 Betaald — klaar voor de klant`);
-      }
+      toast(payModalMethod === 'sumup'
+        ? `💳 Betaald via SumUp — klaar voor de klant`
+        : `🔔 Betaald — klaar voor de klant`);
       closePayModal();
     }
   } catch(e) {

@@ -228,37 +228,6 @@ select.inp{cursor:pointer;}
       </div>
     </div>
 
-    <!-- SumUp Solo terminal via Cloud API -->
-    <div class="sec">
-      <div class="sec-title">💳 SumUp Solo terminal</div>
-      <div class="card">
-        <div class="row">
-          <div><div class="row-label">Status</div><div class="row-sub">De Solo-terminal die aan deze POS gekoppeld is.</div></div>
-          <div id="solo-status" style="font-size:13px;font-weight:600;color:var(--mu);">— nog niet gekoppeld —</div>
-        </div>
-        <div class="row" id="solo-pair-row">
-          <div><div class="row-label">Pairing-code</div><div class="row-sub">Op de Solo: swipe naar beneden → <strong>Connections</strong> → <strong>API</strong> → <strong>Connect</strong>. Kopieer de 6-cijferige code die verschijnt.</div></div>
-          <input class="inp" id="solo-pairing-code" placeholder="123456" style="max-width:140px;letter-spacing:.1em;font-family:monospace;font-size:16px;">
-        </div>
-        <div class="row" id="solo-name-row">
-          <div><div class="row-label">Naam</div><div class="row-sub">Optionele omschrijving, bv. "Bar Terminal"</div></div>
-          <input class="inp" id="solo-name" placeholder="Bar Terminal">
-        </div>
-        <div class="row" id="solo-affiliate-row">
-          <div><div class="row-label">Affiliate Key (optioneel)</div><div class="row-sub">Aanmaken via me.sumup.com → Developers → Affiliate Keys. Als leeg gelaten wordt de standaard betaalmodus gebruikt.</div></div>
-          <input class="inp" id="s-sumup-affiliate" type="password" placeholder="sup_afk_…">
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
-        <button class="btn btn-teal btn-full" id="solo-pair-btn" onclick="pairSolo()">🔗 Koppelen</button>
-        <button class="btn btn-ghost btn-full" id="solo-unpair-btn" onclick="unpairSolo()" style="display:none;">✕ Ontkoppelen</button>
-      </div>
-      <button class="btn btn-ghost btn-full" style="margin-top:6px;" onclick="testSolo()">🔍 Status ophalen</button>
-      <div id="solo-result" style="margin-top:10px;font-size:12px;"></div>
-      <div style="margin-top:10px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);padding:12px 14px;font-size:12px;color:var(--sun-t);line-height:1.6;">
-        <strong>Hoe het werkt:</strong> zodra gekoppeld stuurt de bar-app het bedrag rechtstreeks naar de Solo-terminal wanneer je op "Betaald via SumUp" klikt. De klant tikt zijn kaart, en de bestelling wordt automatisch als betaald gemarkeerd. Meer info: <a href="https://developer.sumup.com/terminal-payments/cloud-api" target="_blank" style="color:var(--sun-d);text-decoration:underline;">developer.sumup.com</a>.
-      </div>
-    </div>
   </div>
 </div>
 
@@ -868,9 +837,6 @@ function loadSettingsToForm() {
   if(s.mollieKey)   document.getElementById('s-mollie').value=s.mollieKey;
   if(s.sumupApiKey) document.getElementById('s-sumup-key').value=s.sumupApiKey;
   if(s.sumupMerchantCode) document.getElementById('s-sumup-merchant').value=s.sumupMerchantCode;
-  if(s.sumupAffiliateKey) document.getElementById('s-sumup-affiliate').value=s.sumupAffiliateKey;
-  // Solo terminal status verversen
-  refreshSoloStatus();
   if(s.payProvider) document.getElementById('s-pay-provider').value=s.payProvider;
   if(s.siteUrl)     document.getElementById('s-site-url').value=s.siteUrl;
   if(s.twilioAccountSid) document.getElementById('s-twilio-sid').value=s.twilioAccountSid;
@@ -929,81 +895,10 @@ async function saveSumupOnline() {
     sumupApiKey: document.getElementById('s-sumup-key').value,
     sumupMerchantCode: document.getElementById('s-sumup-merchant').value,
     payProvider: document.getElementById('s-pay-provider').value,
-    sumupAffiliateKey: document.getElementById('s-sumup-affiliate').value,
   });
   toast('✅ SumUp online instellingen opgeslagen');
 }
 
-// ── SumUp Solo Cloud API ──
-async function pairSolo() {
-  const code = document.getElementById('solo-pairing-code').value.trim();
-  const name = document.getElementById('solo-name').value.trim() || 'Bar Terminal';
-  const el = document.getElementById('solo-result');
-  if (!code) { toast('Vul de pairing-code van de Solo in'); return; }
-  el.innerHTML = '<span style="color:var(--mu);">🔗 Pairen…</span>';
-  const btn = document.getElementById('solo-pair-btn');
-  btn.disabled = true;
-  try {
-    // Sla eerst de affiliate key op zodat die meteen beschikbaar is voor de eerste checkout
-    const affKey = document.getElementById('s-sumup-affiliate').value;
-    if (affKey) await API.settings.save({ sumupAffiliateKey: affKey });
-    const r = await API.sumup.pairReader(code, name);
-    el.innerHTML = `<span style="color:var(--teal-d);">✅ Gekoppeld: <strong>${r.reader.name || 'Reader'}</strong> (${r.reader.id || '—'})</span>`;
-    document.getElementById('solo-pairing-code').value = '';
-    toast('✅ Solo terminal gekoppeld');
-    refreshSoloStatus();
-  } catch(e) {
-    el.innerHTML = `<span style="color:var(--coral-d);">❌ ${e.message}</span>`;
-    toast('Fout: ' + e.message);
-  } finally { btn.disabled = false; }
-}
-
-async function unpairSolo() {
-  if (!confirm('Solo terminal ontkoppelen? Je kan hem later opnieuw koppelen met een nieuwe pairing-code.')) return;
-  const el = document.getElementById('solo-result');
-  try {
-    const r = await API.sumup.unpairReader();
-    el.innerHTML = `<span style="color:var(--mu);">${r.note ? '⚠ ' + r.note : '✅ Ontkoppeld'}. Vergeet niet fysiek te ontkoppelen op het toestel: Connections → API → Disconnect.</span>`;
-    toast('Ontkoppeld');
-    refreshSoloStatus();
-  } catch(e) {
-    el.innerHTML = `<span style="color:var(--coral-d);">❌ ${e.message}</span>`;
-  }
-}
-
-async function testSolo() {
-  const el = document.getElementById('solo-result');
-  el.innerHTML = '<span style="color:var(--mu);">Status ophalen…</span>';
-  try {
-    const s = await API.sumup.readerStatus();
-    el.innerHTML = `<span style="color:var(--teal-d);">Status: <strong>${s.status || 'onbekend'}</strong> · laatst gezien: ${s.last_seen_at || '—'}</span>`;
-  } catch(e) {
-    el.innerHTML = `<span style="color:var(--coral-d);">❌ ${e.message}</span>`;
-  }
-}
-
-async function refreshSoloStatus() {
-  const readerName = settings.sumupReaderName;
-  const readerId = settings.sumupReaderId;
-  const st = document.getElementById('solo-status');
-  const pairBtn = document.getElementById('solo-pair-btn');
-  const unpairBtn = document.getElementById('solo-unpair-btn');
-  const pairRow = document.getElementById('solo-pair-row');
-  const nameRow = document.getElementById('solo-name-row');
-  if (readerId) {
-    st.innerHTML = `<span style="color:var(--teal-d);">✅ Gekoppeld: <strong>${readerName || 'Reader'}</strong><br><span style="font-size:11px;color:var(--mu);font-weight:400;">ID: ${readerId}</span></span>`;
-    pairRow.style.display = 'none';
-    nameRow.style.display = 'none';
-    pairBtn.style.display = 'none';
-    unpairBtn.style.display = 'block';
-  } else {
-    st.textContent = '— nog niet gekoppeld —';
-    pairRow.style.display = '';
-    nameRow.style.display = '';
-    pairBtn.style.display = 'block';
-    unpairBtn.style.display = 'none';
-  }
-}
 
 async function checkSumupMethods() {
   const el = document.getElementById('sumup-methods-result');

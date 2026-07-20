@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.1.0';
+const APP_VERSION = '6.1.1';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -167,6 +167,10 @@ migrations.forEach(sql => {
 // Opkuis: verwijder oude WK-scorebord instellingen (feature verwijderd in v5.44)
 try {
   db.prepare("DELETE FROM settings WHERE key IN ('scoreboard','wkMode','wkApiKey','wkFavoriteTeam')").run();
+} catch(_) {}
+// Opkuis: verwijder oude SumUp Solo-pairing instellingen (Solo-integratie verwijderd in v6.1.1)
+try {
+  db.prepare("DELETE FROM settings WHERE key IN ('sumupReaderId','sumupReaderName','sumupAffiliateKey','sumupAppId')").run();
 } catch(_) {}
 
 // Seed default products if empty
@@ -1018,165 +1022,6 @@ app.get('/api/orders/:id/payment-status', async (req, res) => {
     } catch(e) { return res.json({ status: 'pending' }); }
   }
   res.json({ status: o.status });
-});
-
-// ─────────────────────────────────────────────────────────────
-// SumUp Solo — Cloud API integratie
-// Documentatie: https://developer.sumup.com/terminal-payments/cloud-api
-// Bedrag wordt rechtstreeks naar de gepairde Solo-terminal gestuurd.
-// ─────────────────────────────────────────────────────────────
-
-async function sumupApiCall(path, method='GET', body=null) {
-  const apiKey = getSetting('sumupApiKey');
-  const merchantCode = getSetting('sumupMerchantCode');
-  if (!apiKey) throw new Error('SumUp API-sleutel ontbreekt');
-  if (!merchantCode) throw new Error('SumUp merchant code ontbreekt');
-  const url = `https://api.sumup.com/v0.1/merchants/${encodeURIComponent(merchantCode)}${path}`;
-  const options = {
-    method,
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-  };
-  if (body) options.body = JSON.stringify(body);
-  const r = await fetch(url, options);
-  const text = await r.text();
-  let data;
-  try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
-  if (!r.ok) {
-    const msg = data && (data.message || data.error_message || data.title) || `HTTP ${r.status}`;
-    const err = new Error(`SumUp API-fout: ${msg}`);
-    err.status = r.status;
-    err.body = data;
-    throw err;
-  }
-  return data;
-}
-
-// Solo reader pairen met een pairing-code die op het toestel is getoond
-app.post('/api/sumup/reader/pair', requireAuth, async (req, res) => {
-  try {
-    const { pairing_code, name } = req.body || {};
-    if (!pairing_code) return res.status(400).json({ error: 'Pairing-code is verplicht (te vinden op je Solo → Connections → API → Connect)' });
-    const data = await sumupApiCall('/readers', 'POST', {
-      pairing_code: String(pairing_code).trim(),
-      name: name || `Zomerbar Solo ${new Date().toISOString().slice(0,10)}`,
-    });
-    // Bewaar reader ID in settings
-    db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)')
-      .run('sumupReaderId', data.id || '');
-    db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)')
-      .run('sumupReaderName', data.name || '');
-    res.json({ ok: true, reader: data });
-  } catch (e) {
-    res.status(400).json({ error: e.message, details: e.body });
-  }
-});
-
-// Lijst van alle gepairde readers ophalen
-app.get('/api/sumup/reader/list', requireAuth, async (req, res) => {
-  try {
-    const data = await sumupApiCall('/readers', 'GET');
-    res.json(data);
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
-// Reader-status opvragen (staat hij online, betalingsstatus, …)
-app.get('/api/sumup/reader/status', requireAuth, async (req, res) => {
-  const readerId = getSetting('sumupReaderId');
-  if (!readerId) return res.status(400).json({ error: 'Nog geen reader gepaird' });
-  try {
-    const data = await sumupApiCall(`/readers/${encodeURIComponent(readerId)}/status`, 'GET');
-    res.json(data);
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
-// Reader unpair — SumUp-kant verwijderen (fysiek loskoppelen doe je op het toestel zelf)
-app.delete('/api/sumup/reader', requireAuth, async (req, res) => {
-  const readerId = getSetting('sumupReaderId');
-  if (!readerId) return res.status(400).json({ error: 'Geen reader gepaird' });
-  try {
-    await sumupApiCall(`/readers/${encodeURIComponent(readerId)}`, 'DELETE');
-    db.prepare("DELETE FROM settings WHERE key IN ('sumupReaderId','sumupReaderName')").run();
-    res.json({ ok: true });
-  } catch (e) {
-    // Ook lokaal wissen indien SumUp de reader niet meer kent (404)
-    if (e.status === 404) {
-      db.prepare("DELETE FROM settings WHERE key IN ('sumupReaderId','sumupReaderName')").run();
-      return res.json({ ok: true, note: 'Al ontkoppeld aan SumUp-kant' });
-    }
-    res.status(400).json({ error: e.message });
-  }
-});
-
-// Betaling starten op de Solo terminal voor een bestelling
-app.post('/api/orders/:id/sumup-terminal', requireAuth, async (req, res) => {
-  const o = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
-  if (!o) return res.status(404).json({ error: 'Bestelling niet gevonden' });
-  const readerId = getSetting('sumupReaderId');
-  if (!readerId) return res.status(400).json({ error: 'Geen Solo terminal gepaird. Ga naar Beheer → Instellingen → SumUp om te pairen.' });
-  const affiliateKey = getSetting('sumupAffiliateKey');
-  const appId = getSetting('sumupAppId') || 'zomerbar-pos';
-
-  const amountCents = Math.round((o.amount || 0) * 100);
-  if (amountCents <= 0) return res.status(400).json({ error: 'Ongeldig bedrag' });
-
-  const body = {
-    total_amount: { currency: 'EUR', minor_unit: 2, value: amountCents },
-    description: `Bestelling #${o.order_number} — 't Bieke`,
-    return_url: `${req.protocol}://${req.get('host')}/api/sumup/terminal-webhook?order_id=${o.id}`,
-  };
-  if (affiliateKey) {
-    body.affiliate = { key: affiliateKey, app_id: appId, foreign_transaction_id: `order-${o.id}-${Date.now()}` };
-  }
-
-  try {
-    const data = await sumupApiCall(`/readers/${encodeURIComponent(readerId)}/checkout`, 'POST', body);
-    // Bewaar checkout ref op de order zodat we later status kunnen matchen
-    db.prepare("UPDATE orders SET sumup_tx_id=? WHERE id=?").run(data.data?.client_transaction_id || data.id || '', o.id);
-    broadcast('order_updated', { order: db.prepare('SELECT * FROM orders WHERE id=?').get(o.id) });
-    res.json({ ok: true, checkout: data });
-  } catch (e) {
-    res.status(400).json({ error: e.message, details: e.body });
-  }
-});
-
-// Actieve terminal-transactie afbreken
-app.post('/api/sumup/terminal-terminate', requireAuth, async (req, res) => {
-  const readerId = getSetting('sumupReaderId');
-  if (!readerId) return res.status(400).json({ error: 'Geen reader gepaird' });
-  try {
-    await sumupApiCall(`/readers/${encodeURIComponent(readerId)}/terminate`, 'POST', {});
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
-// Terminal-webhook (return_url in checkout): SumUp roept dit op met het transactie-resultaat.
-// Publiek endpoint — beveiligd via order_id query en de checkout ref op de order.
-app.post('/api/sumup/terminal-webhook', async (req, res) => {
-  res.status(200).send('OK');
-  try {
-    const orderId = req.query.order_id;
-    if (!orderId) return;
-    const o = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
-    if (!o) return;
-    // Uitkomst kan verschillende velden bevatten afhankelijk van API-versie.
-    const status = (req.body.status || req.body.transaction_status || '').toLowerCase();
-    const success = status === 'successful' || status === 'success';
-    if (success) {
-      db.prepare("UPDATE orders SET method='sumup', cash_paid=1, status='ready' WHERE id=?").run(orderId);
-      broadcast('order_updated', { order: db.prepare('SELECT * FROM orders WHERE id=?').get(orderId) });
-      broadcast('sumup_terminal_result', { order_id: orderId, success: true });
-    } else if (status === 'failed' || status === 'cancelled' || status === 'canceled' || status === 'declined') {
-      broadcast('sumup_terminal_result', { order_id: orderId, success: false, reason: status });
-    }
-  } catch (e) {
-    console.error('[SumUp terminal webhook]', e.message);
-  }
 });
 
 
