@@ -1235,16 +1235,12 @@ async function confirmCashPayment() {
       const o = orders[payModalOrderId];
       // Registreer de betaling (zet cash_paid + methode)
       await API.orders.registerPayment(payModalOrderId, payModalMethod);
-      // Cash-flow: eerst naar "klaar" → belletje rinkelt voor de klant → daarna automatisch opgehaald
+      // Cash-flow: naar "klaar" → belletje rinkelt voor de klant
+      // De kaart blijft op het bord staan; de bartender klikt "Opgehaald" als de klant het drankje krijgt.
       if (o && ['paid','preparing'].includes(o.status)) {
         await API.orders.setStatus(payModalOrderId, 'ready');
       }
-      // Na ~2 seconden automatisch als opgehaald markeren zodat de kaart van het bord verdwijnt
-      const idToCollect = payModalOrderId;
-      setTimeout(() => {
-        API.orders.setStatus(idToCollect, 'collected').catch(()=>{});
-      }, 2000);
-      toast(`🔔 Klaar voor klant — automatisch afgehandeld`);
+      toast(`🔔 Betaald — klaar voor de klant`);
       closePayModal();
     }
   } catch(e) {
