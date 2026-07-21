@@ -364,14 +364,10 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
 
         <input id="qo-note" type="text" placeholder="Opmerking (optioneel)" style="width:100%;font-size:13px;padding:9px 12px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);box-sizing:border-box;">
 
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
           <div id="qo-pm-cash" class="method-btn" onclick="qoSelPay('cash')" style="padding:10px 4px;border:0.5px solid var(--sun);border-radius:var(--rm);background:var(--sun-l);cursor:pointer;text-align:center;">
             <div style="font-size:18px;margin-bottom:2px;">💶</div>
-            <div style="font-size:11px;font-weight:600;color:var(--sun-t);">Cash</div>
-          </div>
-          <div id="qo-pm-mollie" class="method-btn" onclick="qoSelPay('mollie')" style="padding:10px 4px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
-            <div style="font-size:18px;margin-bottom:2px;">🏦</div>
-            <div style="font-size:11px;font-weight:600;color:var(--tx);">Bancontact</div>
+            <div style="font-size:11px;font-weight:600;color:var(--sun-t);">Cash / Bancontact</div>
           </div>
           <div id="qo-pm-tab" class="method-btn" onclick="qoSelPay('tab')" style="padding:10px 4px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);cursor:pointer;text-align:center;">
             <div style="font-size:18px;margin-bottom:2px;">📋</div>
@@ -1388,7 +1384,7 @@ let qoTabs = [];
 
 function qoSelPay(m) {
   qoPayMethod = m;
-  const btns = { cash: 'qo-pm-cash', mollie: 'qo-pm-mollie', tab: 'qo-pm-tab', staff: 'qo-pm-staff' };
+  const btns = { cash: 'qo-pm-cash', tab: 'qo-pm-tab', staff: 'qo-pm-staff' };
   Object.entries(btns).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1441,15 +1437,12 @@ async function submitQuickOrder() {
   }).filter(Boolean);
   const btn = document.getElementById('qo-submit-btn');
   btn.disabled = true; btn.textContent = 'Plaatsen…';
-  // Cash aan de bar: pay modal om wisselgeld te berekenen
-  // SumUp aan de bar: direct in verwerking (skip payment-controle, klant tikt op Air terminal)
+  // Cash of Bancontact aan de bar: pay modal om te bevestigen (met wisselgeld-berekening bij cash)
   const isCashImmediate = qoPayMethod === 'cash';
-  const isSumupDirect = qoPayMethod === 'sumup';
   try {
     const result = await API.orders.create({
       items,
-      method: isSumupDirect ? 'sumup' : qoPayMethod,
-      direct_pay: isSumupDirect ? true : undefined,
+      method: qoPayMethod,
       tab_id: tabId,
       note: noteFinal,
       phone: '',
@@ -1461,14 +1454,12 @@ async function submitQuickOrder() {
     } else if (qoPayMethod === 'staff') {
       toast('🧑‍🍳 Personeelsdrankje geregistreerd');
     } else if (isCashImmediate && result && result.order) {
-      // Cash: pay modal automatisch openen om cash-ontvangst te bevestigen (wisselgeld)
+      // Pay modal automatisch openen — bartender kan in de modal switchen tussen Cash en SumUp
       const o = result.order;
       setTimeout(() => {
         const amtFmt = fmtEur(o.amount);
         openPayModal(o.id, amtFmt, o.order_number, 'cash');
       }, 100);
-    } else if (isSumupDirect) {
-      toast('💳 SumUp bestelling — in verwerking · typ bedrag op de terminal');
     } else {
       toast('✅ Bestelling toegevoegd');
     }

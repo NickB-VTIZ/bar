@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.1.2';
+const APP_VERSION = '6.1.3';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
