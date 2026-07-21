@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.1.1';
+const APP_VERSION = '6.1.2';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -155,6 +155,7 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN is_staff INTEGER DEFAULT 0`,
   `ALTER TABLE tabs ADD COLUMN is_staff INTEGER DEFAULT 0`,
   `ALTER TABLE overhead_costs ADD COLUMN period TEXT DEFAULT 'maand'`,
+  `ALTER TABLE orders ADD COLUMN direct_pay INTEGER DEFAULT 0`,
 ];
 
 migrations.forEach(sql => {
@@ -881,7 +882,7 @@ app.get('/api/orders/:id', (req, res) => {
 
 // Create order + SumUp checkout
 app.post('/api/orders', async (req, res) => {
-  const { items, method, note, table_ref, phone, redirect_url, gift } = req.body;
+  const { items, method, note, table_ref, phone, redirect_url, gift, direct_pay } = req.body;
   if (!items?.length) return res.status(400).json({ error: 'Geen items' });
 
   // Validate stock
@@ -905,11 +906,14 @@ app.post('/api/orders', async (req, res) => {
   // Tab = op rekening: zelfde gedrag, gekoppeld aan een rekening
   // Staff = personeelsdrankje: gaat op de speciale "eeuwige" Personeel-rekening,
   //   status meteen 'collected' zodat het niet op het bord komt om af te vinken
+  // direct_pay = bar-sumup (of andere handmatige "we vertrouwen erop"): direct in verwerking,
+  //   'Klaar - bel klant' knop kuist dan automatisch op
   // Online (mollie/sumup) = wacht op betaling
   let tabId = req.body.tab_id ? parseInt(req.body.tab_id) : null;
   const isCash = method === 'cash';
   const isStaff = method === 'staff';
   const isTab = method === 'tab' && tabId;
+  const isBarDirect = !!direct_pay && !isStaff && !isTab && !isCash;   // bv. sumup aan de bar
 
   // Staff → automatisch koppelen aan de speciale personeelsrekening
   if (isStaff) {
@@ -918,22 +922,26 @@ app.post('/api/orders', async (req, res) => {
 
   const payMethod = isCash ? 'cash' : isTab ? 'tab' : isStaff ? 'staff' : (method || getSetting('payProvider') || 'mollie');
   // Staff-bestellingen zijn meteen 'collected' → verschijnen niet op het bord
-  const status = isStaff ? 'collected' : (isCash || isTab) ? 'paid' : 'pending';
+  // Bar-direct (bv. sumup aan de bar): status 'preparing' + cash_paid=1 zodat de bartender
+  //   niet manueel hoeft te bevestigen; de klant heeft/gaat direct betalen aan de terminal
+  const status = isStaff ? 'collected' : isBarDirect ? 'preparing' : (isCash || isTab) ? 'paid' : 'pending';
+  const cashPaidFlag = isStaff ? 1 : isBarDirect ? 1 : 0;
+  const directPayFlag = isBarDirect ? 1 : 0;
 
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, isStaff?1:0, (isTab||isStaff) ? tabId : null, isStaff?1:0);
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff,direct_pay)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, cashPaidFlag, (isTab||isStaff) ? tabId : null, isStaff?1:0, directPayFlag);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
 
-  // Cash/rekening/personeel: trek de voorraad meteen af
-  if (isCash || isTab || isStaff) {
+  // Cash/rekening/personeel/bar-direct: trek de voorraad meteen af
+  if (isCash || isTab || isStaff || isBarDirect) {
     deductStock(items.map(i => ({...i})), id);
   }
 
   // Create Mollie Bancontact payment
   let paymentError = null;
-  if (payMethod === 'mollie') {
+  if (payMethod === 'mollie' && !isBarDirect) {
     try {
       const order = hydrate(db.prepare('SELECT * FROM orders WHERE id=?').get(id));
       const payment = await createMolliePayment(order, redirect_url);

@@ -696,7 +696,7 @@ function cardHTML(o){
   } else if (o.status === 'preparing') {
     if (isCash && !o.cash_paid) {
       actions = `<div class="card-actions" style="flex-direction:column;gap:0;">
-        <button class="act-btn btn-ready" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
+        <button class="act-btn btn-ready" onclick="markReady('${o.id}')">✅ Klaar — bel klant</button>
         <div style="display:flex;border-top:0.5px solid var(--bd);">
           <button class="act-btn" style="flex:2;background:var(--teal);color:#fff;font-size:12px;font-weight:600;" onclick="openPayModal('${o.id}','${amtFmt}','${o.order_number}')">💶 Cash ontvangen</button>
           <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
@@ -704,7 +704,7 @@ function cardHTML(o){
       </div>`;
     } else {
       actions = `<div class="card-actions">
-        <button class="act-btn btn-ready" style="flex:2" onclick="setStatus('${o.id}','ready')">✅ Klaar — bel klant</button>
+        <button class="act-btn btn-ready" style="flex:2" onclick="markReady('${o.id}')">✅ Klaar — bel klant</button>
         <button class="act-btn btn-del" onclick="cancelOrder('${o.id}')">✕</button>
       </div>`;
     }
@@ -760,6 +760,26 @@ async function setStatus(id,status){
   await API.orders.setStatus(id,status);
   if(status==='ready') toast(`✅ #${orders[id]?.order_number} is klaar! SMS verstuurd.`);
 }
+
+// "Klaar - bel klant" knop: als de order via de directe bar-flow werd aangemaakt
+// (bv. SumUp aan de bar), dan mag hij na het belletje automatisch als opgehaald verdwijnen.
+// Voor gewone online orders blijft het gedrag zoals voorheen: gebruiker klikt zelf op "Opgehaald".
+async function markReady(id){
+  const o = orders[id];
+  const autoCollect = o && (o.direct_pay === 1 || o.direct_pay === true);
+  await API.orders.setStatus(id, 'ready');
+  toast(`✅ #${o?.order_number} is klaar!`);
+  if (autoCollect) {
+    setTimeout(async () => {
+      // Enkel opkuisen als de kaart nog altijd 'ready' is (gebruiker heeft niets anders gedaan)
+      const cur = orders[id];
+      if (cur && cur.status === 'ready') {
+        try { await API.orders.setStatus(id, 'collected'); } catch(_){}
+      }
+    }, 2000);
+  }
+}
+
 async function del(id){ await API.orders.remove(id); delete orders[id]; renderBoard(); }
 
 // Controleer online betaling bij Mollie/SumUp
@@ -1421,13 +1441,15 @@ async function submitQuickOrder() {
   }).filter(Boolean);
   const btn = document.getElementById('qo-submit-btn');
   btn.disabled = true; btn.textContent = 'Plaatsen…';
-  // SumUp aan de bar: behandel als cash-achtige onmiddellijke betaling
-  // (order wordt aangemaakt als 'paid', pay modal opent, definitieve methode gezet bij bevestigen)
-  const isImmediate = qoPayMethod === 'cash' || qoPayMethod === 'sumup';
-  const serverMethod = qoPayMethod === 'sumup' ? 'cash' : qoPayMethod;
+  // Cash aan de bar: pay modal om wisselgeld te berekenen
+  // SumUp aan de bar: direct in verwerking (skip payment-controle, klant tikt op Air terminal)
+  const isCashImmediate = qoPayMethod === 'cash';
+  const isSumupDirect = qoPayMethod === 'sumup';
   try {
     const result = await API.orders.create({
-      items, method: serverMethod,
+      items,
+      method: isSumupDirect ? 'sumup' : qoPayMethod,
+      direct_pay: isSumupDirect ? true : undefined,
       tab_id: tabId,
       note: noteFinal,
       phone: '',
@@ -1438,14 +1460,15 @@ async function submitQuickOrder() {
       toast(`📋 Toegevoegd aan rekening "${t ? t.name : ''}"`);
     } else if (qoPayMethod === 'staff') {
       toast('🧑‍🍳 Personeelsdrankje geregistreerd');
-    } else if (isImmediate && result && result.order) {
-      // Cash of SumUp aan de bar: pay modal automatisch openen, met de juiste methode voorgeselecteerd
+    } else if (isCashImmediate && result && result.order) {
+      // Cash: pay modal automatisch openen om cash-ontvangst te bevestigen (wisselgeld)
       const o = result.order;
-      const preselect = qoPayMethod; // 'cash' of 'sumup'
       setTimeout(() => {
         const amtFmt = fmtEur(o.amount);
-        openPayModal(o.id, amtFmt, o.order_number, preselect);
+        openPayModal(o.id, amtFmt, o.order_number, 'cash');
       }, 100);
+    } else if (isSumupDirect) {
+      toast('💳 SumUp bestelling — in verwerking · typ bedrag op de terminal');
     } else {
       toast('✅ Bestelling toegevoegd');
     }
