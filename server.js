@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.1.3';
+const APP_VERSION = '6.2.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -156,6 +156,14 @@ const migrations = [
   `ALTER TABLE tabs ADD COLUMN is_staff INTEGER DEFAULT 0`,
   `ALTER TABLE overhead_costs ADD COLUMN period TEXT DEFAULT 'maand'`,
   `ALTER TABLE orders ADD COLUMN direct_pay INTEGER DEFAULT 0`,
+  // Productvarianten (bv. Thee: Bosvruchten, Rozenbottel, Kamille, Citroen) — JSON-array in TEXT
+  `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
+  // Gekozen variant per bestelde regel
+  `ALTER TABLE order_items ADD COLUMN variant TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
 ];
 
 migrations.forEach(sql => {
@@ -517,7 +525,11 @@ app.get('/api/products', (req, res) => {
     if (b._margin !== a._margin) return b._margin - a._margin;
     return (a.sort_order || 0) - (b.sort_order || 0);
   });
-  withMargin.forEach(p => delete p._margin);
+  withMargin.forEach(p => {
+    delete p._margin;
+    // Parse variants JSON naar een array; leeg = geen keuze
+    try { p.variants = p.variants ? JSON.parse(p.variants) : []; } catch { p.variants = []; }
+  });
   res.json(withMargin);
 });
 
@@ -767,24 +779,46 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
 });
 
 app.post('/api/products', requireAuth, (req, res) => {
-  const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate, crate_size } = req.body;
+  const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate, crate_size, variants } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
   const vatFood = parseFloat(getSetting('vatFood') || '12');
   const finalVatRate = vat_rate != null ? parseFloat(vat_rate) : (vat_type === 'food' ? vatFood : vatDrinks);
-  const r = db.prepare(`INSERT INTO products (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,crate_size,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, crate_size||null, maxOrd+1);
+  const cleanVariants = normalizeVariants(variants);
+  const r = db.prepare(`INSERT INTO products (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,crate_size,sort_order,variants) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, crate_size||null, maxOrd+1, cleanVariants);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
 });
 
+// Helper: variants → gestandaardiseerd JSON-array in string vorm
+function normalizeVariants(input) {
+  if (!input) return '';
+  let arr = [];
+  if (Array.isArray(input)) arr = input;
+  else if (typeof input === 'string') {
+    // Toestaan: komma-gescheiden lijst of JSON-array
+    const trimmed = input.trim();
+    if (!trimmed) return '';
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) arr = parsed;
+    } catch {
+      arr = trimmed.split(',');
+    }
+  }
+  arr = arr.map(x => String(x||'').trim()).filter(Boolean);
+  return arr.length ? JSON.stringify(arr) : '';
+}
+
 app.put('/api/products/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Product niet gevonden' });
-  const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate, crate_size } = req.body;
-  db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=?,crate_size=? WHERE id=?`)
+  const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate, crate_size, variants } = req.body;
+  const cleanVariants = variants !== undefined ? normalizeVariants(variants) : existing.variants;
+  db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=?,crate_size=?,variants=? WHERE id=?`)
     .run(
       name ?? existing.name,
       description != null ? description : existing.description,
@@ -798,6 +832,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
       cost_price != null ? parseFloat(cost_price) : existing.cost_price,
       vat_rate != null ? parseFloat(vat_rate) : existing.vat_rate,
       crate_size !== undefined ? (crate_size||null) : existing.crate_size,
+      cleanVariants,
       req.params.id
     );
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
@@ -931,8 +966,8 @@ app.post('/api/orders', async (req, res) => {
   db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff,direct_pay)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, cashPaidFlag, (isTab||isStaff) ? tabId : null, isStaff?1:0, directPayFlag);
 
-  const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty) VALUES (?,?,?,?,?,?)');
-  items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty));
+  const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty,variant) VALUES (?,?,?,?,?,?,?)');
+  items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty, (i.variant||'').toString().trim()));
 
   // Cash/rekening/personeel/bar-direct: trek de voorraad meteen af
   if (isCash || isTab || isStaff || isBarDirect) {
@@ -1437,7 +1472,8 @@ app.post('/api/billit/invoice-custom', requireAuth, async (req, res) => {
     const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(orderId);
     if (!items.length) return res.status(400).json({ error: 'Bestelling heeft geen items' });
     invoiceLines = items.map(i => ({
-      description: i.name, qty: i.qty, unit_price_incl: i.price,
+      description: i.variant ? `${i.name} — ${i.variant}` : i.name,
+      qty: i.qty, unit_price_incl: i.price,
     }));
     sourceOrderId = orderId;
   }
@@ -1445,7 +1481,8 @@ app.post('/api/billit/invoice-custom', requireAuth, async (req, res) => {
     const t = db.prepare('SELECT * FROM tabs WHERE id=?').get(tabId);
     if (!t) return res.status(404).json({ error: 'Rekening niet gevonden' });
     invoiceLines = tabWithDetails(t).items.map(i => ({
-      description: i.name, qty: i.qty, unit_price_incl: i.price,
+      description: i.variant ? `${i.name} — ${i.variant}` : i.name,
+      qty: i.qty, unit_price_incl: i.price,
     }));
   }
   if (!invoiceLines || !invoiceLines.length) return res.status(400).json({ error: 'Geen factuurregels' });

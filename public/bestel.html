@@ -58,6 +58,9 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .prod-desc{font-size:12px;color:var(--mu);line-height:1.35;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .prod-price{font-size:14px;font-weight:600;color:var(--sun-d);margin-top:3px;}
 .prod-stock{font-size:11px;margin-top:2px;}
+.prod-variants-hint{display:inline-block;font-size:10px;margin-top:3px;padding:2px 8px;border-radius:8px;background:var(--sun-l);color:var(--sun-t);font-weight:600;letter-spacing:.02em;}
+.variant-opt{padding:14px 12px;font-size:14px;font-weight:600;background:var(--sun-l);color:var(--sun-t);border:0.5px solid var(--sun);border-radius:12px;cursor:pointer;transition:transform .1s;}
+.variant-opt:active{transform:scale(.96);}
 .stock-low{color:var(--coral-d);}
 .prod-add{flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:var(--sun);color:#fff;font-size:22px;font-weight:600;display:flex;align-items:center;justify-content:center;line-height:1;}
 .prod-stepper{flex:0 0 auto;display:flex;align-items:center;gap:2px;background:var(--card);border:0.5px solid var(--sun);border-radius:18px;padding:3px;box-shadow:0 1px 4px rgba(0,0,0,.1);z-index:3;}
@@ -149,6 +152,16 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 <div class="cats" id="cats"></div>
 <div class="prod-grid" id="prod-grid"></div>
 
+<!-- Variant picker -->
+<div class="sheet-overlay" id="variant-overlay" onclick="closeVariantPicker(event)">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="variant-title">Kies je variant</div>
+    <div id="variant-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 0 16px;"></div>
+    <button class="cancel-btn" onclick="closeVariantPicker()" style="width:100%;">Annuleren</button>
+  </div>
+</div>
+
 <!-- Cart sheet -->
 <div class="sheet-overlay" id="cart-overlay">
   <div class="sheet">
@@ -223,7 +236,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 
 <script src="/api.js"></script>
 <script>
-let products = [], cart = {}, activeCat = 'Alle';
+let products = [], cart = [], activeCat = 'Alle';
+// cart is een array van { key, product_id, name, icon, price, variant, qty }
+// key = productId (zonder variant) OR "productId::variant" (met variant)
+function cartKey(pid, variant) { return variant ? `${pid}::${variant}` : String(pid); }
+function cartFind(pid, variant) { const k = cartKey(pid, variant); return cart.find(x => x.key === k); }
+function cartQtyForProduct(pid) { return cart.filter(x => x.product_id == pid).reduce((s,x)=>s+x.qty, 0); }
+function cartCount() { return cart.reduce((s,x)=>s+x.qty, 0); }
+function cartTotal() { return cart.reduce((s,x)=>s + x.price * x.qty, 0); }
 let payProvider = 'mollie'; // resolved from server settings
 let justReturned = false; // true wanneer klant terugkeert van betaalpagina
 let giftAmount = 0; // vrije gift voor de bijen
@@ -320,7 +340,8 @@ function renderCats() {
 function setCat(c) { activeCat = c; renderCats(); renderProds(); }
 
 function prodCardHtml(p) {
-  const qty = cart[p.id] || 0;
+  const qty = cartQtyForProduct(p.id);
+  const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
   const outOfStock = p.stock === 0;
   const lowStock = p.stock > 0 && p.stock <= p.low_stock;
   const stockLabel = p.stock >= 0
@@ -332,21 +353,23 @@ function prodCardHtml(p) {
   const thumb = p.image_url
     ? `<div class="prod-thumb"><img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.parentElement.classList.add('thumb-fallback');this.parentElement.innerHTML='${p.icon}'"></div>`
     : `<div class="prod-thumb thumb-fallback">${p.icon}</div>`;
-  return `<div class="prod ${inCart?'in-cart':''} ${outOfStock?'out':''}" onclick="${outOfStock||inCart?'':'addItem('+p.id+')'}">
+  const variantBadge = hasVariants ? '<div class="prod-variants-hint">Kies variant</div>' : '';
+  const onClick = outOfStock ? '' : `startAddItem(${p.id})`;
+  return `<div class="prod ${inCart?'in-cart':''} ${outOfStock?'out':''}" onclick="${onClick}">
     ${thumb}
     <div class="prod-body">
       <div class="prod-name">${p.name}</div>
       ${showDesc ? `<div class="prod-desc">${p.description}</div>` : ''}
       <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
+      ${variantBadge}
       ${stockLabel}
     </div>
     ${inCart
-      ? `<div class="prod-stepper" onclick="event.stopPropagation()">
-          <button class="step-btn" onclick="changeQty(${p.id},-1)">−</button>
+      ? `<div class="prod-stepper" onclick="event.stopPropagation();startAddItem(${p.id})">
           <span class="step-qty">${qty}</span>
-          <button class="step-btn" onclick="addItem(${p.id})">+</button>
+          <button class="step-btn">+</button>
         </div>`
-      : (outOfStock ? '' : `<div class="prod-add" onclick="event.stopPropagation();addItem(${p.id})">+</div>`)}
+      : (outOfStock ? '' : `<div class="prod-add" onclick="event.stopPropagation();startAddItem(${p.id})">+</div>`)}
   </div>`;
 }
 
@@ -381,31 +404,35 @@ function renderProds() {
   `).join('');
 }
 
-function addItem(id) {
+function startAddItem(id) {
   const p = products.find(x => x.id === id);
   if (!p || p.stock === 0) return;
-  const curQty = cart[id] || 0;
-  if (p.stock > 0 && curQty >= p.stock) { toast(`Nog maar ${p.stock} beschikbaar`); return; }
-  cart[id] = curQty + 1;
+  const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
+  if (hasVariants) { openVariantPicker(p); return; }
+  addItemInternal(p, null);
+}
+
+function addItemInternal(p, variant) {
+  const totalForProduct = cartQtyForProduct(p.id);
+  if (p.stock > 0 && totalForProduct >= p.stock) { toast(`Nog maar ${p.stock} beschikbaar`); return; }
+  const key = cartKey(p.id, variant);
+  const existing = cart.find(x => x.key === key);
+  if (existing) existing.qty += 1;
+  else cart.push({ key, product_id: p.id, name: p.name, icon: p.icon, price: p.price, variant: variant || '', qty: 1 });
   updateCartBar(); renderProds();
 }
 
-function changeQty(id, d) {
-  cart[id] = (cart[id] || 0) + d;
-  if (cart[id] <= 0) delete cart[id];
+function changeQtyByKey(key, d) {
+  const idx = cart.findIndex(x => x.key === key);
+  if (idx < 0) return;
+  cart[idx].qty += d;
+  if (cart[idx].qty <= 0) cart.splice(idx, 1);
   updateCartBar(); renderProds(); renderCartRows();
 }
 
-function getProductsTotal() {
-  return Object.entries(cart).reduce((s, [id, qty]) => {
-    const p = products.find(x => x.id == id);
-    return s + (p ? p.price * qty : 0);
-  }, 0);
-}
-function getTotal() {
-  return getProductsTotal() + giftAmount;
-}
-function getCount() { return Object.values(cart).reduce((a,b)=>a+b, 0); }
+function getProductsTotal() { return cartTotal(); }
+function getTotal() { return getProductsTotal() + giftAmount; }
+function getCount() { return cartCount(); }
 
 // ── Gift voor de bijen ──
 function setGift(amount, btn) {
@@ -450,18 +477,17 @@ function updateCartBar() {
 }
 
 function renderCartRows() {
-  const entries = Object.entries(cart);
-  document.getElementById('cart-rows').innerHTML = entries.map(([id, qty]) => {
-    const p = products.find(x => x.id == id); if (!p) return '';
+  document.getElementById('cart-rows').innerHTML = cart.map(x => {
+    const label = x.variant ? `${x.name} <span style="font-size:11px;color:var(--mu);font-weight:400;">— ${x.variant}</span>` : x.name;
     return `<div class="cart-row">
-      <span class="cr-icon">${p.icon}</span>
-      <span class="cr-name">${p.name}</span>
+      <span class="cr-icon">${x.icon}</span>
+      <span class="cr-name">${label}</span>
       <div class="cr-ctrl">
-        <button class="qbtn" onclick="changeQty(${id},-1)">−</button>
-        <span style="font-size:14px;min-width:18px;text-align:center">${qty}</span>
-        <button class="qbtn" onclick="changeQty(${id},1)">+</button>
+        <button class="qbtn" onclick="changeQtyByKey('${x.key}',-1)">−</button>
+        <span style="font-size:14px;min-width:18px;text-align:center">${x.qty}</span>
+        <button class="qbtn" onclick="changeQtyByKey('${x.key}',1)">+</button>
       </div>
-      <span class="cr-price">€ ${(p.price*qty).toFixed(2).replace('.',',')}</span>
+      <span class="cr-price">€ ${(x.price*x.qty).toFixed(2).replace('.',',')}</span>
     </div>`;
   }).join('');
   refreshCartTotal();
@@ -469,6 +495,29 @@ function renderCartRows() {
 
 function openCart() { renderCartRows(); document.getElementById('cart-overlay').classList.add('show'); }
 function closeCart() { document.getElementById('cart-overlay').classList.remove('show'); }
+
+// ── Variant picker ──
+let variantPickerProduct = null;
+function openVariantPicker(p) {
+  variantPickerProduct = p;
+  document.getElementById('variant-title').textContent = `Kies je ${p.name.toLowerCase()}`;
+  const list = document.getElementById('variant-list');
+  list.innerHTML = p.variants.map(v => `
+    <button class="variant-opt" onclick="pickVariant('${v.replace(/'/g,"\\'")}')">${v}</button>
+  `).join('');
+  document.getElementById('variant-overlay').classList.add('show');
+}
+function closeVariantPicker(ev) {
+  if (ev && ev.target && ev.target.id !== 'variant-overlay') return;
+  document.getElementById('variant-overlay').classList.remove('show');
+  variantPickerProduct = null;
+}
+function pickVariant(variant) {
+  if (!variantPickerProduct) return;
+  addItemInternal(variantPickerProduct, variant);
+  document.getElementById('variant-overlay').classList.remove('show');
+  variantPickerProduct = null;
+}
 
 function validatePhone() {
   const phone = document.getElementById('order-phone').value.trim();
@@ -496,10 +545,9 @@ async function placeOrder() {
 
   const btn = document.getElementById('place-order-btn');
   btn.disabled = true; btn.textContent = 'Bezig met bestellen…';
-  const items = Object.entries(cart).map(([id, qty]) => {
-    const p = products.find(x => x.id == id);
-    return p ? { product_id: p.id, name: p.name, icon: p.icon, price: p.price, qty } : null;
-  }).filter(Boolean);
+  const items = cart.map(x => ({
+    product_id: x.product_id, name: x.name, icon: x.icon, price: x.price, qty: x.qty, variant: x.variant || ''
+  }));
   try {
     // Altijd online betalen via de ingestelde provider (mollie of sumup)
     const result = await API.orders.create({
@@ -513,7 +561,7 @@ async function placeOrder() {
     closeCart();
     const checkoutUrl = result.mollieCheckoutUrl || result.sumupCheckoutUrl;
     showStatusScreen(result.order, checkoutUrl, result.paymentError);
-    cart = {};
+    cart = [];
     giftAmount = 0;
     document.querySelectorAll('.bee-opt').forEach(b => b.classList.remove('sel'));
     const bcw = document.getElementById('bee-custom-wrap'); if (bcw) bcw.style.display = 'none';

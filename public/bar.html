@@ -647,7 +647,7 @@ function cardHTML(o){
   }
 
   const items = (o.items||[]).map(i =>
-    `<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}</span></div>`
+    `<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}${i.variant?` <span style="color:var(--mu);font-size:11px;">— ${i.variant}</span>`:''}</span></div>`
   ).join('') + (o.gift > 0
     ? `<div class="item-row" style="color:var(--sun-d);"><span class="item-icon">🐝</span><span class="item-qty"></span><span>Gift voor de bijen · € ${o.gift.toFixed(2).replace('.',',')}</span></div>`
     : '');
@@ -834,7 +834,7 @@ function renderPayItems(items) {
   el.innerHTML = items.map(i => `
     <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--bd);">
       <span style="font-size:18px;">${i.icon||'🍺'}</span>
-      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}${i.variant?` <span style="color:var(--mu);font-size:12px;">— ${i.variant}</span>`:''}</span>
       <span style="font-weight:700;color:var(--sun-d);min-width:30px;text-align:right;">${i.qty}×</span>
       <span style="color:var(--mu);min-width:64px;text-align:right;">€ ${(i.price*i.qty).toFixed(2).replace('.',',')}</span>
     </div>`).join('');
@@ -973,7 +973,7 @@ async function renderTabsList() {
           <div style="font-size:20px;font-weight:700;color:var(--sun-d);">€ ${t.open_amount.toFixed(2).replace('.',',')}</div>
         </div>
         <div style="font-size:13px;color:var(--mu);margin-bottom:10px;">
-          ${t.items.map(i => `${i.icon||''} ${i.qty}× ${i.name}`).join(' · ') || 'Nog geen items'}
+          ${t.items.map(i => `${i.icon||''} ${i.qty}× ${i.name}${i.variant?` (${i.variant})`:''}`).join(' · ') || 'Nog geen items'}
         </div>
         <div style="display:flex;gap:8px;">
           <button onclick="settleTab(${t.id})" style="flex:2;padding:11px;font-size:14px;font-weight:700;background:var(--teal);color:#fff;border:none;border-radius:var(--rm);cursor:pointer;">💶 Afrekenen</button>
@@ -1003,7 +1003,7 @@ function settleTab(tabId) {
   document.getElementById('pay-modal-amt').textContent = '€ ' + t.open_amount.toFixed(2).replace('.',',');
   document.getElementById('pay-modal-order').textContent = `Rekening "${t.name}"`;
   // Toon items van de rekening in het linker paneel
-  renderPayItems(t.items.map(i => ({ icon:i.icon, name:i.name, qty:i.qty, price:i.price })));
+  renderPayItems(t.items.map(i => ({ icon:i.icon, name:i.name, qty:i.qty, price:i.price, variant:i.variant })));
   document.getElementById('pm-cash-modal').classList.add('sel');
   document.getElementById('pm-sumup-modal').classList.remove('sel');
   const cbtn = document.getElementById('pay-modal-confirm');
@@ -1082,7 +1082,7 @@ async function loadHistory() {
         <div class="item-row" style="font-size:15px;padding:5px 0;">
           <span class="item-icon" style="font-size:18px;">${i.icon||'🍺'}</span>
           <span class="item-qty" style="font-size:15px;min-width:26px;">${i.qty}×</span>
-          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}</span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}${i.variant?` <span style="color:var(--mu);font-size:12px;">— ${i.variant}</span>`:''}</span>
           <span style="color:var(--mu);font-size:13px;">${fmtEur(i.price*i.qty)}</span>
         </div>`).join('');
       // Methode-label: tab-bestellingen krijgen altijd het rekening-label + naam,
@@ -1154,7 +1154,7 @@ function openOrderInvoice(orderId) {
   document.getElementById('oi-items-preview').innerHTML = items.map(i => `
     <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--bd);">
       <span>${i.icon||'🍺'}</span>
-      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}${i.variant?` <span style="color:var(--mu);font-size:12px;">— ${i.variant}</span>`:''}</span>
       <span style="font-weight:700;color:var(--sun-d);">×${i.qty}</span>
       <span style="color:var(--mu);min-width:60px;text-align:right;">${fmtEur(i.price*i.qty)}</span>
     </div>`).join('') + `
