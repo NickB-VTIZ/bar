@@ -157,6 +157,7 @@ header{background:var(--sun);padding:12px 20px;display:flex;align-items:center;j
   .qo-prods{grid-template-columns:repeat(3,1fr);}
 }
 .qo-cat-heading{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--sun-t);margin:10px 2px 2px;padding-bottom:4px;border-bottom:2px solid var(--sun);}
+.qo-cat-heading-promo{color:var(--coral-d);border-bottom-color:var(--coral);}
 .hist-filter{padding:9px 16px;font-size:13px;font-weight:600;border:0.5px solid var(--bd);border-radius:18px;background:var(--card);color:var(--mu);cursor:pointer;}
 .hist-filter.on{background:var(--sun-l);border-color:var(--sun);color:var(--sun-t);}
 .qo-cat-heading:first-child{margin-top:0;}
@@ -647,7 +648,7 @@ function cardHTML(o){
   }
 
   const items = (o.items||[]).map(i =>
-    `<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}${i.variant?` <span style="color:var(--mu);font-size:11px;">— ${i.variant}</span>`:''}</span></div>`
+    `<div class="item-row"><span class="item-icon">${i.icon||'🍺'}</span><span class="item-qty">${i.qty}×</span><span>${i.name}${i.variant?` <span style="color:var(--mu);font-size:11px;">— ${i.variant}</span>`:''}${i.was_promo?` <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:var(--coral);color:#fff;">🎉 ${i.promo_label||'promo'}</span>`:''}</span></div>`
   ).join('') + (o.gift > 0
     ? `<div class="item-row" style="color:var(--sun-d);"><span class="item-icon">🐝</span><span class="item-qty"></span><span>Gift voor de bijen · € ${o.gift.toFixed(2).replace('.',',')}</span></div>`
     : '');
@@ -831,13 +832,18 @@ function renderPayItems(items) {
   const el = document.getElementById('pay-items-list');
   if (!el) return;
   if (!items || !items.length) { el.innerHTML = '<div style="color:var(--mu);">Geen items</div>'; return; }
-  el.innerHTML = items.map(i => `
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--bd);">
+  el.innerHTML = items.map(i => {
+    const promoTag = i.was_promo ? ` <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:var(--coral);color:#fff;">🎉 ${i.promo_label||'promo'}</span>` : '';
+    const priceCell = i.was_promo && i.original_price
+      ? `<span style="color:var(--mu);text-decoration:line-through;font-size:11px;margin-right:6px;">€ ${(i.original_price*i.qty).toFixed(2).replace('.',',')}</span><span style="color:var(--coral-d);font-weight:700;">€ ${(i.price*i.qty).toFixed(2).replace('.',',')}</span>`
+      : `<span style="color:var(--mu);">€ ${(i.price*i.qty).toFixed(2).replace('.',',')}</span>`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--bd);">
       <span style="font-size:18px;">${i.icon||'🍺'}</span>
-      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}${i.variant?` <span style="color:var(--mu);font-size:12px;">— ${i.variant}</span>`:''}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}${i.variant?` <span style="color:var(--mu);font-size:12px;">— ${i.variant}</span>`:''}${promoTag}</span>
       <span style="font-weight:700;color:var(--sun-d);min-width:30px;text-align:right;">${i.qty}×</span>
-      <span style="color:var(--mu);min-width:64px;text-align:right;">€ ${(i.price*i.qty).toFixed(2).replace('.',',')}</span>
-    </div>`).join('');
+      <span style="min-width:100px;text-align:right;">${priceCell}</span>
+    </div>`;
+  }).join('');
 }
 
 function closePayModal() {
@@ -1003,7 +1009,8 @@ function settleTab(tabId) {
   document.getElementById('pay-modal-amt').textContent = '€ ' + t.open_amount.toFixed(2).replace('.',',');
   document.getElementById('pay-modal-order').textContent = `Rekening "${t.name}"`;
   // Toon items van de rekening in het linker paneel
-  renderPayItems(t.items.map(i => ({ icon:i.icon, name:i.name, qty:i.qty, price:i.price, variant:i.variant })));
+  renderPayItems(t.items.map(i => ({ icon:i.icon, name:i.name, qty:i.qty, price:i.price, variant:i.variant,
+                                      was_promo:i.was_promo, original_price:i.original_price, promo_label:i.promo_label })));
   document.getElementById('pm-cash-modal').classList.add('sel');
   document.getElementById('pm-sumup-modal').classList.remove('sel');
   const cbtn = document.getElementById('pay-modal-confirm');
@@ -1082,7 +1089,7 @@ async function loadHistory() {
         <div class="item-row" style="font-size:15px;padding:5px 0;">
           <span class="item-icon" style="font-size:18px;">${i.icon||'🍺'}</span>
           <span class="item-qty" style="font-size:15px;min-width:26px;">${i.qty}×</span>
-          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}${i.variant?` <span style="color:var(--mu);font-size:12px;">— ${i.variant}</span>`:''}</span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.name}${i.variant?` <span style="color:var(--mu);font-size:12px;">— ${i.variant}</span>`:''}${i.was_promo?` <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:var(--coral);color:#fff;">🎉 ${i.promo_label||'promo'}</span>`:''}</span>
           <span style="color:var(--mu);font-size:13px;">${fmtEur(i.price*i.qty)}</span>
         </div>`).join('');
       // Methode-label: tab-bestellingen krijgen altijd het rekening-label + naam,
@@ -1327,6 +1334,16 @@ function renderQoGrid() {
     if (!groups[cat]) { groups[cat] = []; order.push(cat); }
     groups[cat].push(p);
   });
+  // Sorteer binnen elke categorie: promo-items eerst
+  const promoFirst = (a, b) => {
+    const ap = (a.is_on_promo === true || a.is_on_promo === 1) ? 1 : 0;
+    const bp = (b.is_on_promo === true || b.is_on_promo === 1) ? 1 : 0;
+    return bp - ap;
+  };
+  order.forEach(cat => groups[cat].sort(promoFirst));
+  // Promo-blok bovenaan (indien aanwezig)
+  const promos = products.filter(p => p.is_on_promo === true || p.is_on_promo === 1);
+
   const tileHtml = (p) => {
     const qty = qoCart[p.id] || 0;
     const visual = p.image_url
@@ -1347,10 +1364,17 @@ function renderQoGrid() {
       ${priceHtml}
     </div>`;
   };
-  document.getElementById('qo-grid').innerHTML = order.map(cat => `
+
+  let html = '';
+  if (promos.length) {
+    html += `<div class="qo-cat-heading qo-cat-heading-promo">🎉 Nu in actie</div>
+      <div class="qo-prods">${promos.map(tileHtml).join('')}</div>`;
+  }
+  html += order.map(cat => `
     <div class="qo-cat-heading">${qoCatEmoji(cat)} ${cat}</div>
     <div class="qo-prods">${groups[cat].map(tileHtml).join('')}</div>
   `).join('');
+  document.getElementById('qo-grid').innerHTML = html;
 }
 
 function qoAddItem(id) {

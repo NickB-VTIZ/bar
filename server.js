@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.3.0';
+const APP_VERSION = '6.3.2';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -166,6 +166,10 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN promo_end TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN promo_days TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN promo_label TEXT DEFAULT ''`,
+  // Registreer of een besteld item op promo was + het originele bedrag (voor visuele tracering)
+  `ALTER TABLE order_items ADD COLUMN was_promo INTEGER DEFAULT 0`,
+  `ALTER TABLE order_items ADD COLUMN original_price REAL DEFAULT NULL`,
+  `ALTER TABLE order_items ADD COLUMN promo_label TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
@@ -1001,7 +1005,10 @@ app.post('/api/orders', async (req, res) => {
       const p = db.prepare('SELECT * FROM products WHERE id=?').get(item.product_id);
       if (p) {
         const promo = computePromoState(p, nowForPromo);
-        item.price = promo.effective_price;   // Overschrijf met server-bepaalde prijs
+        item.price = promo.effective_price;
+        item.was_promo = promo.is_on_promo ? 1 : 0;
+        item.original_price = promo.is_on_promo ? promo.original_price : null;
+        item.promo_label = promo.is_on_promo ? (promo.promo_label || 'Actie') : '';
       }
     }
   });
@@ -1042,8 +1049,9 @@ app.post('/api/orders', async (req, res) => {
   db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff,direct_pay)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, cashPaidFlag, (isTab||isStaff) ? tabId : null, isStaff?1:0, directPayFlag);
 
-  const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty,variant) VALUES (?,?,?,?,?,?,?)');
-  items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty, (i.variant||'').toString().trim()));
+  const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty,variant,was_promo,original_price,promo_label) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty,
+    (i.variant||'').toString().trim(), i.was_promo?1:0, i.original_price||null, i.promo_label||''));
 
   // Cash/rekening/personeel/bar-direct: trek de voorraad meteen af
   if (isCash || isTab || isStaff || isBarDirect) {
