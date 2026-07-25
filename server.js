@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.2.0';
+const APP_VERSION = '6.3.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -160,6 +160,12 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   // Gekozen variant per bestelde regel
   `ALTER TABLE order_items ADD COLUMN variant TEXT DEFAULT ''`,
+  // Promo/happy-hour: verlaagde prijs binnen tijdsvenster
+  `ALTER TABLE products ADD COLUMN promo_price REAL DEFAULT NULL`,
+  `ALTER TABLE products ADD COLUMN promo_start TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN promo_end TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN promo_days TEXT DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN promo_label TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
@@ -505,6 +511,40 @@ app.post('/api/auth/change-password', requireAuth, (req, res) => {
 });
 
 // Products
+// Bepaalt of een product op dit moment "op promo" staat en teruggeeft welke prijs de klant ziet.
+// Returns { effective_price, is_on_promo, promo_label, original_price }
+function computePromoState(p, now = new Date()) {
+  const original = p.price;
+  const promoPrice = p.promo_price;
+  if (promoPrice == null || promoPrice <= 0 || promoPrice >= original) {
+    return { effective_price: original, is_on_promo: false, promo_label: '', original_price: original };
+  }
+  // Tijdsvenster: leeg = altijd actief
+  const start = (p.promo_start || '').trim();
+  const end = (p.promo_end || '').trim();
+  const days = (p.promo_days || '').trim();
+  if (start && end) {
+    const [sh, sm] = start.split(':').map(x => parseInt(x)||0);
+    const [eh, em] = end.split(':').map(x => parseInt(x)||0);
+    const nowMin = now.getHours()*60 + now.getMinutes();
+    const startMin = sh*60 + sm;
+    const endMin = eh*60 + em;
+    let inWindow;
+    if (endMin >= startMin) inWindow = nowMin >= startMin && nowMin < endMin;
+    else inWindow = nowMin >= startMin || nowMin < endMin;   // over middernacht
+    if (!inWindow) {
+      return { effective_price: original, is_on_promo: false, promo_label: p.promo_label || '', original_price: original };
+    }
+  }
+  if (days) {
+    const daySet = new Set(days.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)));
+    if (daySet.size && !daySet.has(now.getDay())) {
+      return { effective_price: original, is_on_promo: false, promo_label: p.promo_label || '', original_price: original };
+    }
+  }
+  return { effective_price: promoPrice, is_on_promo: true, promo_label: p.promo_label || 'Promo', original_price: original };
+}
+
 app.get('/api/products', (req, res) => {
   // Admin ziet ook verborgen producten (?admin=1), klant niet
   const isAdmin = req.query.admin === '1';
@@ -512,6 +552,7 @@ app.get('/api/products', (req, res) => {
     ? 'SELECT * FROM products WHERE active=1'
     : 'SELECT * FROM products WHERE active=1 AND hidden=0';
   const products = db.prepare(sql).all();
+  const now = new Date();
   // Bereken marge per product en sorteer hoogste marge bovenaan
   const withMargin = products.map(p => {
     const noVat = p.vat_rate === -1;
@@ -529,6 +570,11 @@ app.get('/api/products', (req, res) => {
     delete p._margin;
     // Parse variants JSON naar een array; leeg = geen keuze
     try { p.variants = p.variants ? JSON.parse(p.variants) : []; } catch { p.variants = []; }
+    // Bereken huidige promo-status
+    const promo = computePromoState(p, now);
+    p.effective_price = promo.effective_price;
+    p.is_on_promo = promo.is_on_promo;
+    p.active_promo_label = promo.is_on_promo ? (promo.promo_label || 'Promo') : '';
   });
   res.json(withMargin);
 });
@@ -779,15 +825,22 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
 });
 
 app.post('/api/products', requireAuth, (req, res) => {
-  const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate, crate_size, variants } = req.body;
+  const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate, crate_size, variants,
+          promo_price, promo_start, promo_end, promo_days, promo_label } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
   const vatFood = parseFloat(getSetting('vatFood') || '12');
   const finalVatRate = vat_rate != null ? parseFloat(vat_rate) : (vat_type === 'food' ? vatFood : vatDrinks);
   const cleanVariants = normalizeVariants(variants);
-  const r = db.prepare(`INSERT INTO products (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,crate_size,sort_order,variants) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5, cost_price!=null?parseFloat(cost_price):0, finalVatRate, crate_size||null, maxOrd+1, cleanVariants);
+  const pPrice = promo_price != null && promo_price !== '' ? parseFloat(promo_price) : null;
+  const r = db.prepare(`INSERT INTO products
+    (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,crate_size,sort_order,variants,
+     promo_price,promo_start,promo_end,promo_days,promo_label)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5,
+         cost_price!=null?parseFloat(cost_price):0, finalVatRate, crate_size||null, maxOrd+1, cleanVariants,
+         pPrice, (promo_start||'').trim(), (promo_end||'').trim(), (promo_days||'').toString().trim(), (promo_label||'').trim());
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -816,9 +869,18 @@ function normalizeVariants(input) {
 app.put('/api/products/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Product niet gevonden' });
-  const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate, crate_size, variants } = req.body;
+  const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate, crate_size, variants,
+          promo_price, promo_start, promo_end, promo_days, promo_label } = req.body;
   const cleanVariants = variants !== undefined ? normalizeVariants(variants) : existing.variants;
-  db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=?,crate_size=?,variants=? WHERE id=?`)
+  // Promo velden: expliciet null / '' toestaan om te wissen
+  const pPrice = (promo_price === '' || promo_price === null) ? null
+               : (promo_price !== undefined ? parseFloat(promo_price) : existing.promo_price);
+  const pStart = promo_start !== undefined ? String(promo_start||'').trim() : (existing.promo_start||'');
+  const pEnd   = promo_end   !== undefined ? String(promo_end  ||'').trim() : (existing.promo_end||'');
+  const pDays  = promo_days  !== undefined ? String(promo_days ||'').trim() : (existing.promo_days||'');
+  const pLabel = promo_label !== undefined ? String(promo_label||'').trim() : (existing.promo_label||'');
+  db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=?,crate_size=?,variants=?,
+              promo_price=?,promo_start=?,promo_end=?,promo_days=?,promo_label=? WHERE id=?`)
     .run(
       name ?? existing.name,
       description != null ? description : existing.description,
@@ -833,6 +895,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
       vat_rate != null ? parseFloat(vat_rate) : existing.vat_rate,
       crate_size !== undefined ? (crate_size||null) : existing.crate_size,
       cleanVariants,
+      pPrice, pStart, pEnd, pDays, pLabel,
       req.params.id
     );
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
@@ -929,6 +992,19 @@ app.post('/api/orders', async (req, res) => {
       }
     }
   }
+
+  // Server-side prijs override: als het product een actieve promo heeft, gebruik de promo-prijs
+  // zodat de klant niet manueel de originele prijs kan meesturen tijdens happy hour.
+  const nowForPromo = new Date();
+  items.forEach(item => {
+    if (item.product_id) {
+      const p = db.prepare('SELECT * FROM products WHERE id=?').get(item.product_id);
+      if (p) {
+        const promo = computePromoState(p, nowForPromo);
+        item.price = promo.effective_price;   // Overschrijf met server-bepaalde prijs
+      }
+    }
+  });
 
   const id = generateOrderId();
   const orderNumber = nextOrderNumber();

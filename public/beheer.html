@@ -157,6 +157,42 @@ select.inp{cursor:pointer;}
           <input id="np-variants" type="text" placeholder="bv. Bosvruchten, Rozenbottel, Kamille, Citroen" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-top:4px;">
           <div style="font-size:11px;color:var(--mu);margin-top:4px;line-height:1.4;">💡 Komma-gescheiden lijst. Als er varianten zijn ingevuld, moet de klant er één kiezen bij het bestellen. Laat leeg voor gewone producten. Verandert niets aan de bar-interface — enkel online.</div>
         </div>
+
+        <!-- Promo / Happy hour -->
+        <div style="margin-top:14px;background:var(--sun-l);border:0.5px solid var(--sun);border-radius:var(--rm);padding:12px;">
+          <label style="font-size:11px;font-weight:700;color:var(--sun-t);text-transform:uppercase;letter-spacing:.03em;">🎉 Promo / Happy hour (optioneel)</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+            <div>
+              <label style="font-size:11px;color:var(--mu);">Promoprijs (€)</label>
+              <input id="np-promo-price" type="number" step="0.01" placeholder="bv. 5,00" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--mu);">Label</label>
+              <input id="np-promo-label" type="text" placeholder="Happy Hour" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--mu);">Start uur</label>
+              <input id="np-promo-start" type="time" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--mu);">Eind uur</label>
+              <input id="np-promo-end" type="time" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);">
+            </div>
+          </div>
+          <div style="margin-top:8px;">
+            <label style="font-size:11px;color:var(--mu);">Actief op dagen (leeg = elke dag)</label>
+            <div id="np-promo-days" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+              <label style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:12px;cursor:pointer;"><input type="checkbox" data-day="1"> Ma</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:12px;cursor:pointer;"><input type="checkbox" data-day="2"> Di</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:12px;cursor:pointer;"><input type="checkbox" data-day="3"> Wo</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:12px;cursor:pointer;"><input type="checkbox" data-day="4"> Do</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:12px;cursor:pointer;"><input type="checkbox" data-day="5"> Vr</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:12px;cursor:pointer;"><input type="checkbox" data-day="6"> Za</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;font-size:12px;background:var(--card);border:0.5px solid var(--bd);border-radius:12px;cursor:pointer;"><input type="checkbox" data-day="0"> Zo</label>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--sun-t);margin-top:6px;line-height:1.4;">💡 Laat promoprijs leeg om promo uit te schakelen. Leeg start/eind uur = altijd actief zolang promoprijs ingevuld is. Werkt zowel online als aan de bar.</div>
+        </div>
         <input type="hidden" id="np-vat">
         <!-- Marge weergave -->
         <div id="margin-display" style="background:var(--teal-l);border:0.5px solid var(--teal);border-radius:var(--rm);padding:10px 12px;margin-top:10px;font-size:13px;color:var(--teal-d);display:none;">
@@ -606,9 +642,17 @@ function renderProducts() {
       const isHidden = p.hidden === 1;
       const descLine = p.description && p.description.trim()
         ? `<div style="font-size:11px;color:var(--mu);font-style:italic;margin-top:1px;">${p.description}</div>` : '';
+      // Promo-badge: toon huidige status (actief nu, of "op planning")
+      let promoBadge = '';
+      if (p.promo_price != null && p.promo_price > 0 && p.promo_price < p.price) {
+        const label = p.promo_label || 'Promo';
+        const window = (p.promo_start && p.promo_end) ? ` ${p.promo_start}–${p.promo_end}` : '';
+        const isActive = p.is_on_promo === true || p.is_on_promo === 1;
+        promoBadge = ` <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${isActive?'var(--sun)':'var(--sun-l)'};color:var(--sun-t);margin-left:4px;">🎉 ${label} € ${p.promo_price.toFixed(2).replace('.',',')}${window}${isActive?' · nu':''}</span>`;
+      }
       html += `<div class="prod-row" style="${isHidden?'opacity:.5;':''}">
         <span class="prod-icon">${p.icon}</span>
-        <div class="prod-info"><div class="prod-name">${p.name}${isHidden?' <span style="font-size:11px;color:var(--coral-d);font-weight:600;">· verborgen</span>':''}</div>${descLine}<div class="prod-meta">Stock: ${stockLbl} · ${vatLbl}${marginLbl}</div></div>
+        <div class="prod-info"><div class="prod-name">${p.name}${isHidden?' <span style="font-size:11px;color:var(--coral-d);font-weight:600;">· verborgen</span>':''}${promoBadge}</div>${descLine}<div class="prod-meta">Stock: ${stockLbl} · ${vatLbl}${marginLbl}</div></div>
         <span class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</span>
         <button class="icon-btn" onclick="toggleHidden(${p.id})" title="${isHidden?'Tonen':'Verbergen'}">${isHidden?'🙈':'👁'}</button>
         <button class="icon-btn" onclick="editProduct(${p.id})" title="Bewerken">✏️</button>
@@ -699,6 +743,15 @@ function editProduct(id) {
     try { const parsed = JSON.parse(p.variants); if (Array.isArray(parsed)) vArr = parsed; } catch { vArr = p.variants.split(','); }
   }
   document.getElementById('np-variants').value = vArr.map(x => String(x||'').trim()).filter(Boolean).join(', ');
+  // Promo velden inladen
+  document.getElementById('np-promo-price').value = p.promo_price != null ? p.promo_price : '';
+  document.getElementById('np-promo-label').value = p.promo_label || '';
+  document.getElementById('np-promo-start').value = p.promo_start || '';
+  document.getElementById('np-promo-end').value = p.promo_end || '';
+  const daysSet = new Set(String(p.promo_days||'').split(',').map(x=>x.trim()));
+  document.querySelectorAll('#np-promo-days input[type=checkbox]').forEach(cb => {
+    cb.checked = daysSet.has(cb.dataset.day);
+  });
   calcMargin();
   document.querySelector('#add-form .add-form-btns .btn-sun').textContent = 'Wijzigingen opslaan';
   document.getElementById('add-form').classList.add('show');
@@ -739,15 +792,22 @@ async function saveProduct() {
   const vat_type = vat_rate >= 12 ? 'food' : 'drinks';
   const variants = document.getElementById('np-variants').value
     .split(',').map(x => x.trim()).filter(Boolean);
+  const promoPriceVal = document.getElementById('np-promo-price').value.trim();
+  const promo_price = promoPriceVal === '' ? null : parseFloat(promoPriceVal);
+  const promo_start = document.getElementById('np-promo-start').value;
+  const promo_end = document.getElementById('np-promo-end').value;
+  const promo_label = document.getElementById('np-promo-label').value.trim();
+  const promo_days = [...document.querySelectorAll('#np-promo-days input[type=checkbox]:checked')]
+    .map(cb => cb.dataset.day).join(',');
   if (!name || !category || isNaN(price)) { toast('Vul naam, categorie en prijs in'); return; }
   try {
     if (editingId) {
-      const updated = await API.products.update(editingId, { name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants });
+      const updated = await API.products.update(editingId, { name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants, promo_price, promo_start, promo_end, promo_days, promo_label });
       const idx = products.findIndex(p => p.id === editingId);
       if (idx >= 0) products[idx] = updated;
       toast('✅ Product bijgewerkt');
     } else {
-      const p = await API.products.add({ name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants });
+      const p = await API.products.add({ name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants, promo_price, promo_start, promo_end, promo_days, promo_label });
       products.push(p);
       toast('✅ Product toegevoegd');
     }
@@ -759,7 +819,9 @@ async function saveProduct() {
 function closeAddForm() {
   editingId = null;
   document.getElementById('add-form').classList.remove('show');
-  ['np-name','np-desc','np-cat','np-price','np-cost','np-icon','np-stock','np-crate','np-variants'].forEach(id => document.getElementById(id).value='');
+  ['np-name','np-desc','np-cat','np-price','np-cost','np-icon','np-stock','np-crate','np-variants',
+   'np-promo-price','np-promo-label','np-promo-start','np-promo-end'].forEach(id => document.getElementById(id).value='');
+  document.querySelectorAll('#np-promo-days input[type=checkbox]').forEach(cb => cb.checked = false);
   document.getElementById('np-vatrate').value = '6';
   document.getElementById('margin-display').style.display = 'none';
   document.querySelector('#add-form .add-form-btns .btn-sun').textContent = 'Opslaan';

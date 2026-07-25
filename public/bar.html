@@ -1332,12 +1332,19 @@ function renderQoGrid() {
     const visual = p.image_url
       ? `<div class="qo-tile-img"><img src="${p.image_url}" alt="" loading="lazy" onerror="this.parentElement.classList.add('qo-tile-img-fb');this.parentElement.innerHTML='${p.icon}'"></div>`
       : `<div class="qo-tile-img qo-tile-img-fb">${p.icon}</div>`;
-    return `<div class="qo-tile ${qty>0?'sel':''}" onclick="qoAddItem(${p.id})">
+    const onPromo = p.is_on_promo === true || p.is_on_promo === 1;
+    const showPrice = onPromo && p.effective_price != null ? p.effective_price : p.price;
+    const priceHtml = onPromo
+      ? `<div class="qo-tile-price"><span style="text-decoration:line-through;color:var(--mu);font-weight:500;font-size:11px;">€ ${p.price.toFixed(2).replace('.',',')}</span> <span style="color:var(--coral-d);">€ ${showPrice.toFixed(2).replace('.',',')}</span></div>`
+      : `<div class="qo-tile-price">€ ${p.price.toFixed(2).replace('.',',')}</div>`;
+    const promoTag = onPromo ? `<div style="position:absolute;top:4px;left:4px;background:var(--coral);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px;z-index:2;">🎉 ${p.active_promo_label||'PROMO'}</div>` : '';
+    return `<div class="qo-tile ${qty>0?'sel':''} ${onPromo?'on-promo':''}" onclick="qoAddItem(${p.id})" style="position:relative;">
+      ${promoTag}
       ${qty>0?`<div class="qo-tile-min" onclick="event.stopPropagation();qoChangeQty(${p.id},-1)">−</div>`:''}
       ${qty>0?`<div class="qo-tile-qty">${qty}</div>`:''}
       ${visual}
       <div class="qo-tile-name">${p.name}</div>
-      <div class="qo-tile-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
+      ${priceHtml}
     </div>`;
   };
   document.getElementById('qo-grid').innerHTML = order.map(cat => `
@@ -1433,7 +1440,10 @@ async function submitQuickOrder() {
   }
   const items = entries.map(([id,qty]) => {
     const p = products.find(x=>x.id==id);
-    return p ? { product_id:p.id, name:p.name, icon:p.icon, price:p.price, qty } : null;
+    if (!p) return null;
+    const onPromo = p.is_on_promo === true || p.is_on_promo === 1;
+    const price = onPromo && p.effective_price != null ? p.effective_price : p.price;
+    return { product_id:p.id, name:p.name, icon:p.icon, price, qty };
   }).filter(Boolean);
   const btn = document.getElementById('qo-submit-btn');
   btn.disabled = true; btn.textContent = 'Plaatsen…';

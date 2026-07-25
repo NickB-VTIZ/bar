@@ -59,6 +59,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;color:
 .prod-price{font-size:14px;font-weight:600;color:var(--sun-d);margin-top:3px;}
 .prod-stock{font-size:11px;margin-top:2px;}
 .prod-variants-hint{display:inline-block;font-size:10px;margin-top:3px;padding:2px 8px;border-radius:8px;background:var(--sun-l);color:var(--sun-t);font-weight:600;letter-spacing:.02em;}
+.prod-promo-badge{display:inline-block;font-size:10px;margin-top:3px;padding:3px 9px;border-radius:8px;background:var(--coral);color:#fff;font-weight:700;letter-spacing:.03em;}
+.prod.on-promo{border:1.5px solid var(--coral);box-shadow:0 0 0 3px rgba(216,100,47,.12);}
 .variant-opt{padding:14px 12px;font-size:14px;font-weight:600;background:var(--sun-l);color:var(--sun-t);border:0.5px solid var(--sun);border-radius:12px;cursor:pointer;transition:transform .1s;}
 .variant-opt:active{transform:scale(.96);}
 .stock-low{color:var(--coral-d);}
@@ -283,6 +285,21 @@ async function init() {
     if (!products_result.ok) throw new Error(`Server antwoordt met fout ${products_result.status}`);
     products = await products_result.json();
     if (!Array.isArray(products)) throw new Error('Onverwacht antwoord van server');
+    // Defensief: normaliseer variants naar array voor elk product
+    // (server stuurt ze normaal al als array, maar we blijven vergevingsgezind)
+    products.forEach(p => {
+      if (Array.isArray(p.variants)) return;
+      if (typeof p.variants === 'string' && p.variants.trim()) {
+        try {
+          const parsed = JSON.parse(p.variants);
+          p.variants = Array.isArray(parsed) ? parsed : String(p.variants).split(',').map(x=>x.trim()).filter(Boolean);
+        } catch {
+          p.variants = String(p.variants).split(',').map(x=>x.trim()).filter(Boolean);
+        }
+      } else {
+        p.variants = [];
+      }
+    });
     if (!products.length) {
       document.getElementById('prod-grid').innerHTML = `
         <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--mu);">
@@ -354,13 +371,24 @@ function prodCardHtml(p) {
     ? `<div class="prod-thumb"><img src="${p.image_url}" alt="${p.name}" loading="lazy" onerror="this.parentElement.classList.add('thumb-fallback');this.parentElement.innerHTML='${p.icon}'"></div>`
     : `<div class="prod-thumb thumb-fallback">${p.icon}</div>`;
   const variantBadge = hasVariants ? '<div class="prod-variants-hint">Kies variant</div>' : '';
+  // Promo: toon oorspronkelijke prijs doorgestreept + nieuwe prijs in coral
+  const onPromo = p.is_on_promo === true || p.is_on_promo === 1;
+  const showPrice = onPromo ? p.effective_price : p.price;
+  const priceHtml = onPromo
+    ? `<div class="prod-price">
+        <span style="text-decoration:line-through;color:var(--mu);font-weight:400;font-size:12px;margin-right:6px;">€ ${p.price.toFixed(2).replace('.',',')}</span>
+        <span style="color:var(--coral-d);">€ ${showPrice.toFixed(2).replace('.',',')}</span>
+      </div>`
+    : `<div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>`;
+  const promoBadge = onPromo ? `<div class="prod-promo-badge">🎉 ${p.active_promo_label || 'Promo'}</div>` : '';
   const onClick = outOfStock ? '' : `startAddItem(${p.id})`;
-  return `<div class="prod ${inCart?'in-cart':''} ${outOfStock?'out':''}" onclick="${onClick}">
+  return `<div class="prod ${inCart?'in-cart':''} ${outOfStock?'out':''} ${onPromo?'on-promo':''}" onclick="${onClick}">
     ${thumb}
     <div class="prod-body">
       <div class="prod-name">${p.name}</div>
       ${showDesc ? `<div class="prod-desc">${p.description}</div>` : ''}
-      <div class="prod-price">€ ${p.price.toFixed(2).replace('.',',')}</div>
+      ${priceHtml}
+      ${promoBadge}
       ${variantBadge}
       ${stockLabel}
     </div>
@@ -417,8 +445,10 @@ function addItemInternal(p, variant) {
   if (p.stock > 0 && totalForProduct >= p.stock) { toast(`Nog maar ${p.stock} beschikbaar`); return; }
   const key = cartKey(p.id, variant);
   const existing = cart.find(x => x.key === key);
+  const onPromo = p.is_on_promo === true || p.is_on_promo === 1;
+  const price = onPromo && p.effective_price != null ? p.effective_price : p.price;
   if (existing) existing.qty += 1;
-  else cart.push({ key, product_id: p.id, name: p.name, icon: p.icon, price: p.price, variant: variant || '', qty: 1 });
+  else cart.push({ key, product_id: p.id, name: p.name, icon: p.icon, price, variant: variant || '', qty: 1 });
   updateCartBar(); renderProds();
 }
 
