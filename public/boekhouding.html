@@ -366,6 +366,22 @@ tr:last-child td{border-bottom:none;}
 <!-- Dagontvangsten (originele Billit-view per btw-tarief) -->
 <div id="screen-daily" class="screen">
   <div class="wrap">
+    <!-- Bedrijfsdag banner -->
+    <div id="biz-day-banner" style="display:none;background:linear-gradient(135deg, var(--sun-l), var(--card));border:0.5px solid var(--sun);border-radius:14px;padding:14px 18px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;">🕒 Huidige bedrijfsdag</div>
+          <div style="font-size:20px;font-weight:800;color:var(--sun-t);margin-top:2px;" id="biz-day-name">—</div>
+          <div style="font-size:12px;color:var(--mu);margin-top:2px;" id="biz-day-hint">—</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-teal" id="biz-day-open-btn" onclick="bizDayOpen()" style="display:none;">🌅 Open dag</button>
+          <button class="btn btn-primary" id="biz-day-close-btn" onclick="bizDayClose()" style="display:none;">🌙 Sluit dag</button>
+          <button class="btn btn-ghost" id="biz-day-reopen-btn" onclick="bizDayReopen()" style="display:none;">↻ Heropen</button>
+        </div>
+      </div>
+    </div>
+
     <div class="controls no-print">
       <label>Dag</label>
       <input type="date" id="daily-date" onchange="loadDailyOverview()">
@@ -1023,8 +1039,51 @@ async function loadItemsSold(){
 function initDaily(){
   const d = document.getElementById('daily-date');
   if (!d.value) d.value = new Date().toISOString().slice(0,10);
+  refreshBusinessDay();
   loadDailyOverview();
 }
+
+// ── Bedrijfsdag banner + open/sluit knoppen ──
+async function refreshBusinessDay() {
+  try {
+    const info = await API.businessDay.current();
+    const banner = document.getElementById('biz-day-banner');
+    if (!banner) return;
+    banner.style.display = 'block';
+    const startH = String(info.start_hour).padStart(2, '0');
+    const dateFmt = new Date(info.date+'T12:00:00').toLocaleDateString('nl-BE', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    document.getElementById('biz-day-name').textContent = dateFmt.charAt(0).toUpperCase() + dateFmt.slice(1);
+    // Info-tekst: startuur van de dag en (indien) open/gesloten tijden
+    const parts = [`Van ${startH}:00 vandaag tot ${startH}:00 morgen`];
+    if (info.opened_at) {
+      const t = new Date(info.opened_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      parts.push(`geopend om ${t}`);
+    } else if (info.first_order_at) {
+      const t = new Date(info.first_order_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      parts.push(`eerste bestelling om ${t}`);
+    }
+    if (info.closed_at) {
+      const t = new Date(info.closed_at).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+      parts.push(`<strong>gesloten om ${t}</strong>`);
+    }
+    document.getElementById('biz-day-hint').innerHTML = parts.join(' · ');
+    // Knop-zichtbaarheid: als er nog nooit iets geopend was → toon Open. Anders → Sluit of Heropen.
+    const openBtn = document.getElementById('biz-day-open-btn');
+    const closeBtn = document.getElementById('biz-day-close-btn');
+    const reopenBtn = document.getElementById('biz-day-reopen-btn');
+    openBtn.style.display = (!info.opened_at && !info.closed_at) ? 'inline-block' : 'none';
+    closeBtn.style.display = (!info.closed_at) ? 'inline-block' : 'none';
+    reopenBtn.style.display = info.closed_at ? 'inline-block' : 'none';
+  } catch(e) {
+    console.warn('[businessDay]', e.message);
+  }
+}
+async function bizDayOpen()  { try { await API.businessDay.open();  toast('🌅 Dag geopend'); refreshBusinessDay(); } catch(e){ toast('Fout: '+e.message); } }
+async function bizDayClose() {
+  if (!confirm('Bedrijfsdag afsluiten? De sluitingstijd wordt genoteerd; nieuwe bestellingen blijven tellen tot het nieuwe startuur.')) return;
+  try { await API.businessDay.close(); toast('🌙 Dag afgesloten'); refreshBusinessDay(); } catch(e){ toast('Fout: '+e.message); }
+}
+async function bizDayReopen(){ try { await API.businessDay.reopen(); toast('↻ Dag heropend'); refreshBusinessDay(); } catch(e){ toast('Fout: '+e.message); } }
 
 // ── Uitgebreid Dagkasboek ──
 function initDayCashbook(){

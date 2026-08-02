@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.3.2';
+const APP_VERSION = '6.4.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -170,6 +170,9 @@ const migrations = [
   `ALTER TABLE order_items ADD COLUMN was_promo INTEGER DEFAULT 0`,
   `ALTER TABLE order_items ADD COLUMN original_price REAL DEFAULT NULL`,
   `ALTER TABLE order_items ADD COLUMN promo_label TEXT DEFAULT ''`,
+  // Bedrijfsdag: de "boekhoud-dag" waar een bestelling toe hoort (standaard: 07:00 tot 07:00).
+  // Zo tellen orders die na middernacht binnenkomen nog op de dag van gisteren.
+  `ALTER TABLE orders ADD COLUMN assigned_date TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
@@ -182,6 +185,54 @@ migrations.forEach(sql => {
     if (!e.message.includes('duplicate column')) { /* negeer */ }
   }
 });
+
+// ─── Bedrijfsdag setup ───────────────────────────────────────
+// Tabel voor manuele open/sluit registratie per bedrijfsdag
+db.exec(`
+  CREATE TABLE IF NOT EXISTS business_days (
+    date TEXT PRIMARY KEY,
+    opened_at TEXT,
+    closed_at TEXT,
+    notes TEXT DEFAULT '',
+    manually_opened INTEGER DEFAULT 0,
+    manually_closed INTEGER DEFAULT 0
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_orders_assigned_date ON orders(assigned_date)`);
+
+// Backfill assigned_date voor bestaande bestellingen (07:00 cutoff — was standaard).
+// Alles wat tussen 00:00 en 06:59 lokaal gemaakt werd, telt bij de dag ervoor.
+try {
+  const changed = db.prepare(`
+    UPDATE orders SET assigned_date = DATE(created_at, 'localtime', '-7 hours')
+    WHERE assigned_date IS NULL OR assigned_date = ''
+  `).run();
+  if (changed.changes > 0) console.log(`[migration] assigned_date ingevuld voor ${changed.changes} bestellingen`);
+} catch(e) { console.warn('[migration] assigned_date backfill:', e.message); }
+
+// Standaardinstelling: bedrijfsdag start om 07:00
+try {
+  const existing = db.prepare("SELECT value FROM settings WHERE key='businessDayStart'").get();
+  if (!existing) db.prepare("INSERT INTO settings (key,value) VALUES (?,?)").run('businessDayStart', '07:00');
+} catch(_) {}
+
+// ─── Bedrijfsdag helpers ─────────────────────────────────────
+function getBusinessDayStartHour() {
+  const s = getSetting('businessDayStart') || '07:00';
+  const h = parseInt(String(s).split(':')[0]);
+  return isNaN(h) ? 7 : Math.max(0, Math.min(23, h));
+}
+// Huidige bedrijfsdatum (YYYY-MM-DD) rekening houdend met de cutoff.
+function currentBusinessDate() {
+  const h = getBusinessDayStartHour();
+  return db.prepare(`SELECT DATE('now', 'localtime', ?) as d`).get(`-${h} hours`).d;
+}
+// Bedrijfsdatum voor een specifieke timestamp (UTC ISO)
+function assignedDateFor(createdAt) {
+  const h = getBusinessDayStartHour();
+  return db.prepare(`SELECT DATE(?, 'localtime', ?) as d`).get(createdAt, `-${h} hours`).d;
+}
+
 
 // Opkuis: verwijder oude WK-scorebord instellingen (feature verwijderd in v5.44)
 try {
@@ -966,7 +1017,7 @@ app.get('/api/orders/history', requireAuth, (req, res) => {
     SELECT o.*, t.name AS tab_name, t.status AS tab_status
     FROM orders o
     LEFT JOIN tabs t ON t.id = o.tab_id
-    WHERE DATE(o.created_at,'localtime')=?
+    WHERE o.assigned_date=?
     ORDER BY o.created_at DESC LIMIT 300
   `).all(date);
   res.json(orders.map(o => {
@@ -983,6 +1034,60 @@ app.get('/api/orders/:id', (req, res) => {
 });
 
 // Create order + SumUp checkout
+// ─── Bedrijfsdag: handmatige start/sluit + status ──────────────
+app.get('/api/business-day/current', (req, res) => {
+  const date = currentBusinessDate();
+  const record = db.prepare('SELECT * FROM business_days WHERE date=?').get(date) || null;
+  const startHour = getBusinessDayStartHour();
+  // Eerste bestelling van deze dag (als indicatie van feitelijke opening)
+  const firstOrder = db.prepare(`
+    SELECT MIN(created_at) as t FROM orders WHERE assigned_date=? AND status!='cancelled'
+  `).get(date);
+  res.json({
+    date,
+    start_hour: startHour,
+    opened_at: record?.opened_at || null,
+    closed_at: record?.closed_at || null,
+    manually_opened: record?.manually_opened ? true : false,
+    manually_closed: record?.manually_closed ? true : false,
+    notes: record?.notes || '',
+    first_order_at: firstOrder?.t || null,
+  });
+});
+
+app.post('/api/business-day/open', requireAuth, (req, res) => {
+  const date = req.body?.date || currentBusinessDate();
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT * FROM business_days WHERE date=?').get(date);
+  if (existing) {
+    db.prepare("UPDATE business_days SET opened_at=?, manually_opened=1, closed_at=NULL, manually_closed=0 WHERE date=?").run(now, date);
+  } else {
+    db.prepare("INSERT INTO business_days (date, opened_at, manually_opened) VALUES (?,?,1)").run(date, now);
+  }
+  broadcast('business_day_changed', { date });
+  res.json({ ok: true, date, opened_at: now });
+});
+
+app.post('/api/business-day/close', requireAuth, (req, res) => {
+  const date = req.body?.date || currentBusinessDate();
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT * FROM business_days WHERE date=?').get(date);
+  if (existing) {
+    db.prepare("UPDATE business_days SET closed_at=?, manually_closed=1 WHERE date=?").run(now, date);
+  } else {
+    db.prepare("INSERT INTO business_days (date, closed_at, manually_closed) VALUES (?,?,1)").run(date, now);
+  }
+  broadcast('business_day_changed', { date });
+  res.json({ ok: true, date, closed_at: now });
+});
+
+app.post('/api/business-day/reopen', requireAuth, (req, res) => {
+  const date = req.body?.date || currentBusinessDate();
+  db.prepare("UPDATE business_days SET closed_at=NULL, manually_closed=0 WHERE date=?").run(date);
+  broadcast('business_day_changed', { date });
+  res.json({ ok: true, date });
+});
+
 app.post('/api/orders', async (req, res) => {
   const { items, method, note, table_ref, phone, redirect_url, gift, direct_pay } = req.body;
   if (!items?.length) return res.status(400).json({ error: 'Geen items' });
@@ -1046,8 +1151,9 @@ app.post('/api/orders', async (req, res) => {
   const cashPaidFlag = isStaff ? 1 : isBarDirect ? 1 : 0;
   const directPayFlag = isBarDirect ? 1 : 0;
 
-  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff,direct_pay)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, cashPaidFlag, (isTab||isStaff) ? tabId : null, isStaff?1:0, directPayFlag);
+  const assignedDate = currentBusinessDate();
+  db.prepare(`INSERT INTO orders (id,order_number,status,amount,method,note,phone,table_ref,gift,cash_paid,tab_id,is_staff,direct_pay,assigned_date)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, orderNumber, status, amount, payMethod, note||'', phone||'', table_ref||'', giftAmount, cashPaidFlag, (isTab||isStaff) ? tabId : null, isStaff?1:0, directPayFlag, assignedDate);
 
   const insertItem = db.prepare('INSERT INTO order_items (order_id,product_id,name,icon,price,qty,variant,was_promo,original_price,promo_label) VALUES (?,?,?,?,?,?,?,?,?,?)');
   items.forEach(i => insertItem.run(id, i.product_id||null, i.name, i.icon||'🍺', i.price, i.qty,
@@ -1252,16 +1358,17 @@ app.get('/api/tabs', requireAuth, (req, res) => {
 app.get('/api/tabs/staff', requireAuth, (req, res) => {
   const tab = getOrCreateStaffTab();
   const details = tabWithDetails(tab);
+  const today = currentBusinessDate();
   const dayTotal = db.prepare(`
     SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as n
     FROM orders WHERE tab_id=? AND status!='cancelled'
-      AND DATE(created_at,'localtime')=DATE('now','localtime')
-  `).get(tab.id);
+      AND assigned_date = ?
+  `).get(tab.id, today);
   const weekTotal = db.prepare(`
     SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as n
     FROM orders WHERE tab_id=? AND status!='cancelled'
-      AND DATE(created_at,'localtime') >= DATE('now','localtime','-7 days')
-  `).get(tab.id);
+      AND assigned_date >= DATE(?, '-6 days')
+  `).get(tab.id, today);
   res.json({ ...details, day_total: dayTotal.v, day_orders: dayTotal.n, week_total: weekTotal.v, week_orders: weekTotal.n });
 });
 
@@ -1288,7 +1395,7 @@ app.get('/api/stats/items-sold', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
+    WHERE o.assigned_date >= ? AND o.assigned_date <= ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     GROUP BY oi.name, oi.icon, p.category
     ORDER BY qty DESC
@@ -1311,7 +1418,7 @@ app.get('/api/stats/busy-hours', requireAuth, (req, res) => {
       SUM(oi.price*oi.qty) as revenue
     FROM orders o
     JOIN order_items oi ON oi.order_id = o.id
-    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
+    WHERE o.assigned_date >= ? AND o.assigned_date <= ?
       AND o.status NOT IN ('cancelled','archived','pending')
       AND o.is_staff = 0
     GROUP BY hour
@@ -1333,8 +1440,8 @@ app.get('/api/stats/busy-hours', requireAuth, (req, res) => {
 
   // Aantal actieve dagen (voor gemiddelde per uur per dag)
   const days = db.prepare(`
-    SELECT COUNT(DISTINCT DATE(created_at,'localtime')) as n FROM orders
-    WHERE DATE(created_at,'localtime') >= ? AND DATE(created_at,'localtime') <= ?
+    SELECT COUNT(DISTINCT assigned_date) as n FROM orders
+    WHERE assigned_date >= ? AND assigned_date <= ?
       AND status NOT IN ('cancelled','archived','pending') AND is_staff = 0
   `).get(from, to).n || 1;
 
@@ -1359,7 +1466,7 @@ app.get('/api/stats/staff-drinks', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
+    WHERE o.assigned_date >= ? AND o.assigned_date <= ?
       AND o.status != 'cancelled' AND o.is_staff = 1
     GROUP BY oi.name, oi.icon, p.category
     ORDER BY qty DESC
@@ -1378,7 +1485,7 @@ app.get('/api/zwartgeld/list', requireAuth, (req, res) => {
   const orders = db.prepare(`
     SELECT o.*, (SELECT COUNT(*) FROM order_items WHERE order_id=o.id) as item_count
     FROM orders o
-    WHERE method='cash' AND DATE(created_at,'localtime') >= ? AND DATE(created_at,'localtime') <= ?
+    WHERE method='cash' AND assigned_date >= ? AND assigned_date <= ?
       AND status NOT IN ('cancelled')
     ORDER BY created_at DESC
   `).all(from, to);
@@ -1455,7 +1562,7 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
+    WHERE o.assigned_date >= ? AND o.assigned_date <= ?
       AND o.status NOT IN ('cancelled','archived','pending')
       AND o.is_staff = 0
   `).all(from, to);
@@ -1468,7 +1575,7 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
   // Cadeaus (bijentip): toegevoegd op ordertotaal, tellen eenmalig
   const gifts = db.prepare(`
     SELECT COALESCE(SUM(gift),0) as g FROM orders
-    WHERE DATE(created_at,'localtime') >= ? AND DATE(created_at,'localtime') <= ?
+    WHERE assigned_date >= ? AND assigned_date <= ?
       AND status NOT IN ('cancelled','archived','pending') AND is_staff = 0
   `).get(from, to).g;
   revenue += gifts;
@@ -1479,7 +1586,7 @@ app.get('/api/stats/profit', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at,'localtime') >= ? AND DATE(o.created_at,'localtime') <= ?
+    WHERE o.assigned_date >= ? AND o.assigned_date <= ?
       AND o.status != 'cancelled' AND o.is_staff = 1
   `).all(from, to);
   let staffCost = 0, staffQty = 0, staffRetail = 0;
@@ -1717,12 +1824,12 @@ app.get('/api/stats', requireAuth, (req, res) => {
       COALESCE(SUM(CASE WHEN method='cash' THEN amount END),0) as cash_revenue,
       COUNT(CASE WHEN method='sumup' THEN 1 END) as card_count,
       COALESCE(SUM(CASE WHEN method='sumup' THEN amount END),0) as card_revenue
-    FROM orders WHERE DATE(created_at,'localtime')=? AND status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
+    FROM orders WHERE assigned_date=? AND status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).get(today);
   const topProducts = db.prepare(`
     SELECT oi.name,oi.icon,SUM(oi.qty) as sold,SUM(oi.qty*oi.price) as revenue
     FROM order_items oi JOIN orders o ON o.id=oi.order_id
-    WHERE DATE(o.created_at,'localtime')=? AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
+    WHERE o.assigned_date=? AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     GROUP BY oi.name ORDER BY sold DESC LIMIT 8
   `).all(today);
   const lowStock = db.prepare('SELECT * FROM products WHERE stock>=0 AND stock<=low_stock AND active=1').all();
@@ -1830,7 +1937,7 @@ app.get('/api/cashbook/day', requireAuth, (req, res) => {
   const orders = db.prepare(`
     SELECT o.id, o.order_number, o.created_at, o.amount, o.note, o.cash_paid, o.tab_id, t.name AS tab_name
     FROM orders o LEFT JOIN tabs t ON t.id = o.tab_id
-    WHERE DATE(o.created_at,'localtime') = ?
+    WHERE o.assigned_date = ?
       AND o.method = 'cash'
       AND o.status NOT IN ('cancelled','pending','archived')
       AND o.is_staff = 0
@@ -1861,7 +1968,7 @@ app.get('/api/cashbook/day', requireAuth, (req, res) => {
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE DATE(o.created_at,'localtime') = ?
+    WHERE o.assigned_date = ?
       AND o.method = 'cash'
       AND o.status NOT IN ('cancelled','pending','archived')
       AND o.is_staff = 0
@@ -1977,8 +2084,8 @@ app.get('/api/cashbook', requireAuth, (req, res) => {
   const dateTo = to || dateFrom;
 
   const orders = db.prepare(`
-    SELECT o.*, DATE(o.created_at,'localtime') as day FROM orders o
-    WHERE DATE(o.created_at,'localtime') BETWEEN ? AND ?
+    SELECT o.*, o.assigned_date as day FROM orders o
+    WHERE o.assigned_date BETWEEN ? AND ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
     ORDER BY o.created_at ASC
   `).all(dateFrom, dateTo);
@@ -2091,7 +2198,7 @@ app.get('/api/billit/daily-overview', requireAuth, (req, res) => {
   const day = req.query.date || new Date().toISOString().slice(0,10);
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method, o.gift FROM orders o
-    WHERE DATE(o.created_at,'localtime') = ?
+    WHERE o.assigned_date = ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
@@ -2132,7 +2239,7 @@ app.post('/api/billit/daily-receipt', requireAuth, async (req, res) => {
 
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at,'localtime') = ?
+    WHERE o.assigned_date = ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
@@ -2213,7 +2320,7 @@ app.get('/api/billit/daily-receipt/preview', requireAuth, (req, res) => {
   const day = req.query.date || new Date().toISOString().slice(0,10);
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at,'localtime') = ?
+    WHERE o.assigned_date = ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(day);
 
@@ -2254,7 +2361,7 @@ app.post('/api/invoice/monthly', requireAuth, async (req, res) => {
   // Gather paid orders for the month
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at,'localtime') BETWEEN ? AND ?
+    WHERE o.assigned_date BETWEEN ? AND ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(dateFrom, dateTo);
 
@@ -2338,7 +2445,7 @@ app.get('/api/invoice/preview', requireAuth, (req, res) => {
 
   const orders = db.prepare(`
     SELECT o.id, o.amount, o.method FROM orders o
-    WHERE DATE(o.created_at,'localtime') BETWEEN ? AND ?
+    WHERE o.assigned_date BETWEEN ? AND ?
       AND o.status NOT IN ('cancelled','archived','pending') AND o.is_staff = 0
   `).all(dateFrom, dateTo);
 

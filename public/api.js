@@ -63,6 +63,12 @@ window.API = (() => {
       importSumupSalesPreview: (rows) => req('POST', '/api/products/import-sumup-sales/preview', { rows }),
       importSumupSales: (rows) => req('POST', '/api/products/import-sumup-sales', { rows }),
     },
+    businessDay: {
+      current: () => req('GET',  '/api/business-day/current'),
+      open:    () => req('POST', '/api/business-day/open', {}),
+      close:   () => req('POST', '/api/business-day/close', {}),
+      reopen:  () => req('POST', '/api/business-day/reopen', {}),
+    },
     orders: {
       list:           ()        => req('GET',    '/api/orders'),
       get:            (id)      => req('GET',    `/api/orders/${id}`),

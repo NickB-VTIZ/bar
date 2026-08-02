@@ -496,6 +496,16 @@ select.inp{cursor:pointer;}
     </div>
 
     <div class="sec">
+      <div class="sec-title">🕒 Bedrijfsdag</div>
+      <div class="card">
+        <div class="row"><div><div class="row-label">Startuur van de dag</div><div class="row-sub">Bestellingen die na middernacht binnenkomen (bv. tot 02:00) tellen nog op de dag ervoor, tot dit uur bereikt is. Standaard 07:00.</div></div>
+          <input class="inp" id="s-biz-day-start" type="time" value="07:00" style="max-width:120px;font-size:16px;">
+        </div>
+      </div>
+      <button class="btn btn-teal btn-full" onclick="saveBusinessDayStart()">Opslaan</button>
+    </div>
+
+    <div class="sec">
       <div class="sec-title">📅 Openingsdagen</div>
       <div class="card">
         <div class="row"><div><div class="row-label">Welke dagen is de bar open?</div><div class="row-sub">Vaste kosten (elektriciteit, huur, verzekering, …) worden bij het berekenen van de winst per opendag verdeeld, niet per kalenderdag.</div></div>
@@ -985,6 +995,8 @@ function loadSettingsToForm() {
   document.querySelectorAll('#open-days-picker input[type=checkbox]').forEach(cb => {
     cb.checked = openSet.has(parseInt(cb.dataset.day));
   });
+  // Bedrijfsdag startuur (standaard 07:00)
+  document.getElementById('s-biz-day-start').value = s.businessDayStart || '07:00';
   if(s.vatFood)      document.getElementById('s-vat-food').value=s.vatFood;
   // SMS template
   const tpl = document.getElementById('s-sms-template');
@@ -1410,6 +1422,12 @@ async function saveVat() {
 async function saveVatLiable() {
   await API.settings.save({ vatLiable: document.getElementById('s-vat-liable').value });
   toast('✅ BTW-status opgeslagen — de winstberekening past zich aan');
+}
+
+async function saveBusinessDayStart() {
+  const v = document.getElementById('s-biz-day-start').value || '07:00';
+  await API.settings.save({ businessDayStart: v });
+  toast('✅ Bedrijfsdag startuur opgeslagen — geldt vanaf de volgende bestelling');
 }
 
 async function saveOpeningDays() {
