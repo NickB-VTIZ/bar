@@ -167,6 +167,18 @@ select.inp{cursor:pointer;}
           </div>
           <div style="font-size:11px;color:var(--teal-d);margin-top:6px;line-height:1.4;">💡 Bv. wijn (70cl fles → 3 glazen): vul "fles" en "3" in. Je kan dan in de stock-lijst gewoon "5 flessen" toevoegen en het systeem berekent 15 porties. Laat leeg voor gewone producten (1 stuk = 1 portie).</div>
         </div>
+
+        <!-- Gedeelde voorraad -->
+        <div style="margin-top:10px;background:#F4EBFA;border:0.5px solid #7A45AB;border-radius:var(--rm);padding:10px 12px;">
+          <label style="font-size:11px;font-weight:700;color:#5A3288;text-transform:uppercase;letter-spacing:.03em;">🔗 Gedeelde voorraad</label>
+          <div style="margin-top:6px;">
+            <label style="font-size:11px;color:var(--mu);">Deelt voorraad met (optioneel)</label>
+            <select id="np-stock-source" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--card);">
+              <option value="">— eigen voorraad —</option>
+            </select>
+          </div>
+          <div style="font-size:11px;color:#5A3288;margin-top:6px;line-height:1.4;">💡 Bv. "Virgin Mojito" en "Mojito" gebruiken beide dezelfde fles Virgin Mojito syroop. Kies dan bij beide het hoofdproduct (bv. "Mojito (syroop-fles)") als bron. Elk verkocht drankje trekt dan één portie af van die gedeelde stock. Wijzig deze instelling voorzichtig — actieve bestellingen worden niet met terugwerkende kracht bijgewerkt.</div>
+        </div>
         <div style="margin-top:10px;">
           <label style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.03em;">Varianten (enkel voor online bestellingen)</label>
           <input id="np-variants" type="text" placeholder="bv. Bosvruchten, Rozenbottel, Kamille, Citroen" style="width:100%;box-sizing:border-box;font-size:13px;padding:9px 10px;border:0.5px solid var(--bd);border-radius:var(--rm);background:var(--bg);color:var(--tx);margin-top:4px;">
@@ -808,6 +820,15 @@ function editProduct(id) {
   document.getElementById('np-crate').value = p.crate_size || '';
   document.getElementById('np-portions-per-unit').value = (p.portions_per_unit && p.portions_per_unit > 1) ? p.portions_per_unit : '';
   document.getElementById('np-unit-name').value = p.unit_name || '';
+  // Vul de "deelt voorraad met" dropdown — met alle andere producten die getrackte stock hebben
+  const sel = document.getElementById('np-stock-source');
+  sel.innerHTML = '<option value="">— eigen voorraad —</option>' +
+    products
+      .filter(x => x.id !== id && x.stock >= 0 && !x.stock_source_id)
+      .sort((a,b) => a.name.localeCompare(b.name))
+      .map(x => `<option value="${x.id}">${x.icon} ${x.name}${x.unit_name?` (per ${x.unit_name})`:''}</option>`)
+      .join('');
+  sel.value = p.stock_source_id || '';
   document.getElementById('np-vat').value = p.vat_type;
   // Varianten inladen: kan al een array zijn (uit /api/products) of een JSON-string (fallback)
   let vArr = [];
@@ -871,6 +892,8 @@ async function saveProduct() {
   const ppuVal = document.getElementById('np-portions-per-unit').value.trim();
   const portions_per_unit = ppuVal ? Math.max(1, parseInt(ppuVal)) : 1;
   const unit_name = document.getElementById('np-unit-name').value.trim();
+  const stockSrcVal = document.getElementById('np-stock-source').value;
+  const stock_source_id = stockSrcVal ? parseInt(stockSrcVal) : null;
   const vat_type = vat_rate >= 12 ? 'food' : 'drinks';
   const variants = document.getElementById('np-variants').value
     .split(',').map(x => x.trim()).filter(Boolean);
@@ -884,12 +907,12 @@ async function saveProduct() {
   if (!name || !category || isNaN(price)) { toast('Vul naam, categorie en prijs in'); return; }
   try {
     if (editingId) {
-      const updated = await API.products.update(editingId, { name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants, promo_price, promo_start, promo_end, promo_days, promo_label, portions_per_unit, unit_name });
+      const updated = await API.products.update(editingId, { name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants, promo_price, promo_start, promo_end, promo_days, promo_label, portions_per_unit, unit_name, stock_source_id });
       const idx = products.findIndex(p => p.id === editingId);
       if (idx >= 0) products[idx] = updated;
       toast('✅ Product bijgewerkt');
     } else {
-      const p = await API.products.add({ name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants, promo_price, promo_start, promo_end, promo_days, promo_label, portions_per_unit, unit_name });
+      const p = await API.products.add({ name, description, category, price, icon, stock: isNaN(stock)?-1:stock, vat_type, cost_price, vat_rate, crate_size, variants, promo_price, promo_start, promo_end, promo_days, promo_label, portions_per_unit, unit_name, stock_source_id });
       products.push(p);
       toast('✅ Product toegevoegd');
     }
@@ -906,6 +929,8 @@ function closeAddForm() {
    'np-portions-per-unit','np-unit-name'].forEach(id => document.getElementById(id).value='');
   document.querySelectorAll('#np-promo-days input[type=checkbox]').forEach(cb => cb.checked = false);
   document.getElementById('np-vatrate').value = '6';
+  const srcSel = document.getElementById('np-stock-source');
+  if (srcSel) srcSel.value = '';
   document.getElementById('margin-display').style.display = 'none';
   document.querySelector('#add-form .add-form-btns .btn-sun').textContent = 'Opslaan';
   setPromoType('none');
@@ -936,22 +961,39 @@ function renderStock() {
       </span>
     </div>`;
     prods.forEach(p => {
+      // Als dit product zijn voorraad deelt met een ander: toon de bron duidelijk en verberg de aftrek-knoppen
+      if (p.stock_source_id) {
+        const src = products.find(x => x.id === p.stock_source_id);
+        const srcName = src ? `${src.icon} ${src.name}` : '?';
+        const srcStock = src ? (src.stock < 0 ? '∞' : src.stock) : '?';
+        html += `<div class="prod-row" style="background:#F9F5FD;">
+          <span class="prod-icon">${p.icon}</span>
+          <div class="prod-info"><div class="prod-name">${p.name}</div><div class="prod-meta">🔗 Deelt voorraad met <strong>${srcName}</strong></div></div>
+          <span class="stock-n ok" style="color:#5A3288;">${srcStock}</span>
+          <div class="stock-ctrl">
+            <span style="font-size:11px;color:var(--mu);padding:0 6px;">bewerk het bronproduct</span>
+          </div>
+        </div>`;
+        return;
+      }
       const ul = p.stock < 0;
       const low = !ul && p.stock <= p.low_stock;
       const cls = ul ? 'unlimited' : low ? 'low' : 'ok';
       const crate = p.crate_size || 24;
       const ppu = Math.max(1, p.portions_per_unit || 1);
       const uName = (p.unit_name || 'eenheid').trim();
-      // Als het product porties per fles heeft: toon "5 flessen ≈ 15 porties" + knop
       const hasUnits = ppu > 1;
       const unitCount = hasUnits ? Math.floor(p.stock / ppu) : 0;
       const unitLbl = hasUnits ? `<div class="prod-meta">${uName}: ${unitCount} × ${ppu} porties</div>` : `<div class="prod-meta">bak = ${crate}</div>`;
       const addUnitsBtn = hasUnits
         ? `<button class="sbtn sbtn-crate" onclick="addUnits(${p.id},1)" title="+1 ${uName}">+🍾</button>`
         : '';
+      // Aantal producten die deze stock delen — toon indicatie
+      const sharedBy = products.filter(x => x.stock_source_id === p.id).length;
+      const sharedLbl = sharedBy > 0 ? ` · <span style="color:#5A3288;font-weight:600;">gedeeld door ${sharedBy}</span>` : '';
       html += `<div class="prod-row">
         <span class="prod-icon">${p.icon}</span>
-        <div class="prod-info"><div class="prod-name">${p.name}</div>${unitLbl}</div>
+        <div class="prod-info"><div class="prod-name">${p.name}${sharedLbl}</div>${unitLbl}</div>
         <span class="stock-n ${cls}">${ul ? '∞' : p.stock}</span>
         <div class="stock-ctrl">
           <button class="sbtn" onclick="adjStock(${p.id},-1)" title="−1">−</button>

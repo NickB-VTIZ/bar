@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.5.0';
+const APP_VERSION = '6.6.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -177,6 +177,9 @@ const migrations = [
   `ALTER TABLE products ADD COLUMN portions_per_unit INTEGER DEFAULT 1`,
   // Naam van de eenheid (bv. "fles", "kan", "krat") — enkel weergave, geen logica
   `ALTER TABLE products ADD COLUMN unit_name TEXT DEFAULT ''`,
+  // Gedeelde voorraad: als dit product besteld wordt, wordt de stock van het opgegeven bron-product afgetrokken.
+  // Bv. "Mojito" en "Virgin Mojito" delen beide de fles Virgin Mojito syroop.
+  `ALTER TABLE products ADD COLUMN stock_source_id INTEGER DEFAULT NULL`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
@@ -512,10 +515,20 @@ function requireAuth(req, res, next) {
 function deductStock(items, orderId) {
   const upd = db.prepare('UPDATE products SET stock = MAX(-1, stock - ?) WHERE id=? AND stock >= 0');
   const log = db.prepare('INSERT INTO stock_log (product_id,delta,reason,order_id) VALUES (?,?,?,?)');
+  const findSrc = db.prepare('SELECT stock_source_id FROM products WHERE id=?');
   items.forEach(item => {
     if (item.product_id) {
-      upd.run(item.qty, item.product_id);
-      log.run(item.product_id, -item.qty, 'sale', orderId);
+      // Als het product zijn voorraad deelt met een ander product, trek af van de bron.
+      // (Volgen door de keten indien nodig, met bescherming tegen cycli.)
+      let targetId = item.product_id, seen = new Set();
+      for (let i = 0; i < 4; i++) {
+        const row = findSrc.get(targetId);
+        if (!row || !row.stock_source_id || seen.has(targetId)) break;
+        seen.add(targetId);
+        targetId = row.stock_source_id;
+      }
+      upd.run(item.qty, targetId);
+      log.run(targetId, -item.qty, targetId !== item.product_id ? `sale (via ${item.product_id})` : 'sale', orderId);
     }
   });
   // Broadcast low stock alerts
@@ -625,6 +638,9 @@ app.get('/api/products', (req, res) => {
     if (b._margin !== a._margin) return b._margin - a._margin;
     return (a.sort_order || 0) - (b.sort_order || 0);
   });
+  // Lookup-map voor snel volgen van de stock_source keten
+  const byId = {};
+  withMargin.forEach(p => { byId[p.id] = p; });
   withMargin.forEach(p => {
     delete p._margin;
     // Parse variants JSON naar een array; leeg = geen keuze
@@ -634,6 +650,18 @@ app.get('/api/products', (req, res) => {
     p.effective_price = promo.effective_price;
     p.is_on_promo = promo.is_on_promo;
     p.active_promo_label = promo.is_on_promo ? (promo.promo_label || 'Promo') : '';
+    // Effectieve voorraad: als het product een stock-bron heeft, gebruik de voorraad daarvan.
+    // Volg tot 4 lagen diep tegen circulaire referenties.
+    let src = p, seen = new Set([p.id]);
+    for (let i = 0; i < 4; i++) {
+      if (!src.stock_source_id || seen.has(src.stock_source_id)) break;
+      const next = byId[src.stock_source_id];
+      if (!next) break;
+      seen.add(src.stock_source_id);
+      src = next;
+    }
+    p.effective_stock = src.stock;
+    p.stock_source_name = (src.id !== p.id) ? src.name : null;
   });
   res.json(withMargin);
 });
@@ -886,7 +914,7 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
 app.post('/api/products', requireAuth, (req, res) => {
   const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate, crate_size, variants,
           promo_price, promo_start, promo_end, promo_days, promo_label,
-          portions_per_unit, unit_name } = req.body;
+          portions_per_unit, unit_name, stock_source_id } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
@@ -896,14 +924,15 @@ app.post('/api/products', requireAuth, (req, res) => {
   const pPrice = promo_price != null && promo_price !== '' ? parseFloat(promo_price) : null;
   const ppu = portions_per_unit != null ? Math.max(1, parseInt(portions_per_unit) || 1) : 1;
   const uName = (unit_name || '').toString().trim();
+  const srcId = stock_source_id != null && stock_source_id !== '' ? parseInt(stock_source_id) : null;
   const r = db.prepare(`INSERT INTO products
     (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,crate_size,sort_order,variants,
-     promo_price,promo_start,promo_end,promo_days,promo_label,portions_per_unit,unit_name)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+     promo_price,promo_start,promo_end,promo_days,promo_label,portions_per_unit,unit_name,stock_source_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5,
          cost_price!=null?parseFloat(cost_price):0, finalVatRate, crate_size||null, maxOrd+1, cleanVariants,
          pPrice, (promo_start||'').trim(), (promo_end||'').trim(), (promo_days||'').toString().trim(), (promo_label||'').trim(),
-         ppu, uName);
+         ppu, uName, srcId);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -934,7 +963,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Product niet gevonden' });
   const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate, crate_size, variants,
           promo_price, promo_start, promo_end, promo_days, promo_label,
-          portions_per_unit, unit_name } = req.body;
+          portions_per_unit, unit_name, stock_source_id } = req.body;
   const cleanVariants = variants !== undefined ? normalizeVariants(variants) : existing.variants;
   // Promo velden: expliciet null / '' toestaan om te wissen
   const pPrice = (promo_price === '' || promo_price === null) ? null
@@ -945,8 +974,16 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   const pLabel = promo_label !== undefined ? String(promo_label||'').trim() : (existing.promo_label||'');
   const ppu    = portions_per_unit !== undefined ? Math.max(1, parseInt(portions_per_unit) || 1) : (existing.portions_per_unit || 1);
   const uName  = unit_name !== undefined ? String(unit_name||'').trim() : (existing.unit_name || '');
+  // Voorkom dat een product zichzelf als bron zet (zou een cycle veroorzaken)
+  let srcId;
+  if (stock_source_id === undefined) srcId = existing.stock_source_id;
+  else if (stock_source_id === '' || stock_source_id === null) srcId = null;
+  else {
+    const asInt = parseInt(stock_source_id);
+    srcId = (asInt && asInt !== parseInt(req.params.id)) ? asInt : null;
+  }
   db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=?,crate_size=?,variants=?,
-              promo_price=?,promo_start=?,promo_end=?,promo_days=?,promo_label=?,portions_per_unit=?,unit_name=? WHERE id=?`)
+              promo_price=?,promo_start=?,promo_end=?,promo_days=?,promo_label=?,portions_per_unit=?,unit_name=?,stock_source_id=? WHERE id=?`)
     .run(
       name ?? existing.name,
       description != null ? description : existing.description,
@@ -961,7 +998,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
       vat_rate != null ? parseFloat(vat_rate) : existing.vat_rate,
       crate_size !== undefined ? (crate_size||null) : existing.crate_size,
       cleanVariants,
-      pPrice, pStart, pEnd, pDays, pLabel, ppu, uName,
+      pPrice, pStart, pEnd, pDays, pLabel, ppu, uName, srcId,
       req.params.id
     );
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
@@ -1122,13 +1159,33 @@ app.post('/api/orders', async (req, res) => {
   const { items, method, note, table_ref, phone, redirect_url, gift, direct_pay } = req.body;
   if (!items?.length) return res.status(400).json({ error: 'Geen items' });
 
-  // Validate stock
+  // Validate stock — volg de bron-keten voor gedeelde voorraad
+  const findProd = db.prepare('SELECT * FROM products WHERE id=?');
+  // Aggregate benodigde hoeveelheden per bron-product (belangrijk als 2 items dezelfde bron delen)
+  const needed = {};
   for (const item of items) {
-    if (item.product_id) {
-      const p = db.prepare('SELECT * FROM products WHERE id=?').get(item.product_id);
-      if (p && p.stock >= 0 && p.stock < item.qty) {
-        return res.status(400).json({ error: `Onvoldoende stock voor ${p.name} (nog ${p.stock})` });
-      }
+    if (!item.product_id) continue;
+    const p = findProd.get(item.product_id);
+    if (!p) continue;
+    // Volg naar bron
+    let src = p, seen = new Set([p.id]);
+    for (let i = 0; i < 4; i++) {
+      if (!src.stock_source_id || seen.has(src.stock_source_id)) break;
+      const next = findProd.get(src.stock_source_id); if (!next) break;
+      seen.add(src.stock_source_id);
+      src = next;
+    }
+    needed[src.id] = (needed[src.id] || 0) + item.qty;
+    // Bewaar bron-referentie voor foutmelding
+    if (src.id !== p.id) needed[src.id + '_via'] = p.name;
+  }
+  for (const [srcId, qty] of Object.entries(needed)) {
+    if (srcId.endsWith('_via')) continue;
+    const src = findProd.get(srcId);
+    if (src && src.stock >= 0 && src.stock < qty) {
+      const via = needed[srcId + '_via'];
+      const label = via ? `${via} (deelt voorraad met ${src.name})` : src.name;
+      return res.status(400).json({ error: `Onvoldoende stock voor ${label} (nog ${src.stock})` });
     }
   }
 
@@ -1834,8 +1891,19 @@ app.post('/api/orders/:id/cancel', requireAuth, (req, res) => {
     const items = db.prepare('SELECT * FROM order_items WHERE order_id=?').all(o.id);
     const restore = db.prepare('UPDATE products SET stock = stock + ? WHERE id=? AND stock >= 0');
     const logStock = db.prepare("INSERT INTO stock_log (product_id,delta,reason,order_id) VALUES (?,?,'cancel_restore',?)");
+    const findSrc = db.prepare('SELECT stock_source_id FROM products WHERE id=?');
     items.forEach(i => {
-      if (i.product_id) { restore.run(i.qty, i.product_id); logStock.run(i.product_id, i.qty, o.id); }
+      if (i.product_id) {
+        // Volg de bron-keten voor gedeelde voorraad, zelfde logica als bij deductStock
+        let targetId = i.product_id, seen = new Set();
+        for (let k = 0; k < 4; k++) {
+          const row = findSrc.get(targetId);
+          if (!row || !row.stock_source_id || seen.has(targetId)) break;
+          seen.add(targetId);
+          targetId = row.stock_source_id;
+        }
+        restore.run(i.qty, targetId); logStock.run(targetId, i.qty, o.id);
+      }
     });
   }
   db.prepare("UPDATE orders SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(o.id);
