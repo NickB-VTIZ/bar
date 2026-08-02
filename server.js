@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.4.0';
+const APP_VERSION = '6.4.1';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -1450,6 +1450,7 @@ app.get('/api/stats/busy-hours', requireAuth, (req, res) => {
     total_orders: totalOrders, total_items: totalItems, total_revenue: totalRevenue,
     peak_items: peakByItems, peak_orders: peakByOrders,
     active_days: days,
+    business_day_start_hour: getBusinessDayStartHour(),
   });
 });
 

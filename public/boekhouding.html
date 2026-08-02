@@ -865,15 +865,24 @@ function initBusyHours(){
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 
-function renderHourChart(hours, activeDays){
-  // Toon enkel het bereik waar er activiteit is (met een uur marge links/rechts)
-  const withActivity = hours.filter(h => h.items > 0);
-  let firstHour = 0, lastHour = 23;
-  if (withActivity.length) {
-    firstHour = Math.max(0, withActivity[0].hour - 1);
-    lastHour = Math.min(23, withActivity[withActivity.length-1].hour + 1);
+function renderHourChart(hours, activeDays, startHour){
+  // Roteer de uren zodat de bedrijfsdag opent bij startHour (standaard 07u) en eindigt bij startHour-1
+  // Zo verschijnen orders van 00u en 01u na 23u — logischer voor een bar die tot na middernacht open is
+  const sHour = (startHour != null && !isNaN(startHour)) ? Math.max(0, Math.min(23, startHour)) : 7;
+  const rotated = [];
+  for (let i = 0; i < 24; i++) {
+    rotated.push(hours[(sHour + i) % 24]);
   }
-  const range = hours.slice(firstHour, lastHour+1);
+  // Toon enkel het bereik waar er activiteit is (met een uur marge links/rechts)
+  const withActivity = rotated.filter(h => h.items > 0);
+  let firstIdx = 0, lastIdx = 23;
+  if (withActivity.length) {
+    const firstActivityIdx = rotated.findIndex(h => h.items > 0);
+    const lastActivityIdx = rotated.length - 1 - [...rotated].reverse().findIndex(h => h.items > 0);
+    firstIdx = Math.max(0, firstActivityIdx - 1);
+    lastIdx = Math.min(23, lastActivityIdx + 1);
+  }
+  const range = rotated.slice(firstIdx, lastIdx+1);
   const maxItems = Math.max(1, ...range.map(h => h.items));
   const peakItems = Math.max(...hours.map(h => h.items));
 
@@ -903,7 +912,7 @@ function renderHourChart(hours, activeDays){
     svg += `<text x="${padLeft-8}" y="${y+4}" text-anchor="end" font-size="11" fill="#8A7256">${v}</text>`;
   }
 
-  // Bars
+  // Bars — geordend volgens de geroteerde reeks (bv. 14u, 15u, ..., 23u, 00u, 01u)
   range.forEach((h, i) => {
     const barHeight = (h.items / yMax) * chartH;
     const x = padLeft + i * barW + barW * 0.15;
@@ -913,12 +922,10 @@ function renderHourChart(hours, activeDays){
     const color = isPeak ? '#D8642F' : '#FFB700';
     if (barHeight > 0) {
       svg += `<rect x="${x}" y="${y}" width="${w}" height="${barHeight}" fill="${color}" rx="3"/>`;
-      // Waarde boven de balk
       if (barHeight > 20 || isPeak) {
         svg += `<text x="${x+w/2}" y="${y-6}" text-anchor="middle" font-size="11" font-weight="700" fill="${isPeak?'#A8431B':'#391C14'}">${h.items}</text>`;
       }
     }
-    // X-label (uur)
     svg += `<text x="${x+w/2}" y="${H-padBottom+16}" text-anchor="middle" font-size="11" fill="#8A7256">${pad2(h.hour)}u</text>`;
   });
 
@@ -954,7 +961,7 @@ async function loadBusyHours(){
       </div>
       <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:14px;">
         <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:12px;">Drankjes verkocht per uur</div>
-        ${renderHourChart(d.hours, d.active_days)}
+        ${renderHourChart(d.hours, d.active_days, d.business_day_start_hour)}
       </div>
       <div style="background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);padding:14px 16px;">
         <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px;">Detail per uur</div>
