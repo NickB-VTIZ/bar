@@ -57,6 +57,7 @@ window.API = (() => {
       add:       (p)      => req('POST',   '/api/products', p),
       update:    (id, p)  => req('PUT',    `/api/products/${id}`, p),
       setStock:  (id, s, reason)  => req('PATCH',  `/api/products/${id}/stock`, { stock: s, reason }),
+      addUnits:  (id, units, reason) => req('PATCH', `/api/products/${id}/add-units`, { units, reason }),
       remove:    (id)     => req('DELETE', `/api/products/${id}`),
       syncSumup: ()       => req('POST',   '/api/products/sync-sumup'),
       importSumup: (rows) => req('POST',   '/api/products/import-sumup', { rows }),

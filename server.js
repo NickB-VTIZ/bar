@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.4.1';
+const APP_VERSION = '6.5.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -173,6 +173,10 @@ const migrations = [
   // Bedrijfsdag: de "boekhoud-dag" waar een bestelling toe hoort (standaard: 07:00 tot 07:00).
   // Zo tellen orders die na middernacht binnenkomen nog op de dag van gisteren.
   `ALTER TABLE orders ADD COLUMN assigned_date TEXT DEFAULT ''`,
+  // Porties per fles/eenheid (bv. wijn 70cl → 3 porties). Default 1 = elk stuk in stock is één portie.
+  `ALTER TABLE products ADD COLUMN portions_per_unit INTEGER DEFAULT 1`,
+  // Naam van de eenheid (bv. "fles", "kan", "krat") — enkel weergave, geen logica
+  `ALTER TABLE products ADD COLUMN unit_name TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''`,
@@ -881,7 +885,8 @@ app.post('/api/products/import-sumup-sales', requireAuth, (req, res) => {
 
 app.post('/api/products', requireAuth, (req, res) => {
   const { name, description, category, price, icon, vat_type, stock, low_stock, cost_price, vat_rate, crate_size, variants,
-          promo_price, promo_start, promo_end, promo_days, promo_label } = req.body;
+          promo_price, promo_start, promo_end, promo_days, promo_label,
+          portions_per_unit, unit_name } = req.body;
   if (!name || price == null) return res.status(400).json({ error: 'Naam en prijs zijn verplicht' });
   const maxOrd = db.prepare('SELECT MAX(sort_order) as m FROM products').get().m || 0;
   const vatDrinks = parseFloat(getSetting('vatDrinks') || '6');
@@ -889,13 +894,16 @@ app.post('/api/products', requireAuth, (req, res) => {
   const finalVatRate = vat_rate != null ? parseFloat(vat_rate) : (vat_type === 'food' ? vatFood : vatDrinks);
   const cleanVariants = normalizeVariants(variants);
   const pPrice = promo_price != null && promo_price !== '' ? parseFloat(promo_price) : null;
+  const ppu = portions_per_unit != null ? Math.max(1, parseInt(portions_per_unit) || 1) : 1;
+  const uName = (unit_name || '').toString().trim();
   const r = db.prepare(`INSERT INTO products
     (name,description,category,price,icon,vat_type,stock,low_stock,cost_price,vat_rate,crate_size,sort_order,variants,
-     promo_price,promo_start,promo_end,promo_days,promo_label)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+     promo_price,promo_start,promo_end,promo_days,promo_label,portions_per_unit,unit_name)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(name, description||'', category||'Overige', parseFloat(price), icon||'🍺', vat_type||'drinks', stock??-1, low_stock??5,
          cost_price!=null?parseFloat(cost_price):0, finalVatRate, crate_size||null, maxOrd+1, cleanVariants,
-         pPrice, (promo_start||'').trim(), (promo_end||'').trim(), (promo_days||'').toString().trim(), (promo_label||'').trim());
+         pPrice, (promo_start||'').trim(), (promo_end||'').trim(), (promo_days||'').toString().trim(), (promo_label||'').trim(),
+         ppu, uName);
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
   broadcast('product_updated', { product: p });
   res.json(p);
@@ -925,7 +933,8 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Product niet gevonden' });
   const { name, description, category, price, icon, vat_type, stock, low_stock, active, cost_price, vat_rate, crate_size, variants,
-          promo_price, promo_start, promo_end, promo_days, promo_label } = req.body;
+          promo_price, promo_start, promo_end, promo_days, promo_label,
+          portions_per_unit, unit_name } = req.body;
   const cleanVariants = variants !== undefined ? normalizeVariants(variants) : existing.variants;
   // Promo velden: expliciet null / '' toestaan om te wissen
   const pPrice = (promo_price === '' || promo_price === null) ? null
@@ -934,8 +943,10 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   const pEnd   = promo_end   !== undefined ? String(promo_end  ||'').trim() : (existing.promo_end||'');
   const pDays  = promo_days  !== undefined ? String(promo_days ||'').trim() : (existing.promo_days||'');
   const pLabel = promo_label !== undefined ? String(promo_label||'').trim() : (existing.promo_label||'');
+  const ppu    = portions_per_unit !== undefined ? Math.max(1, parseInt(portions_per_unit) || 1) : (existing.portions_per_unit || 1);
+  const uName  = unit_name !== undefined ? String(unit_name||'').trim() : (existing.unit_name || '');
   db.prepare(`UPDATE products SET name=?,description=?,category=?,price=?,icon=?,vat_type=?,stock=?,low_stock=?,active=?,cost_price=?,vat_rate=?,crate_size=?,variants=?,
-              promo_price=?,promo_start=?,promo_end=?,promo_days=?,promo_label=? WHERE id=?`)
+              promo_price=?,promo_start=?,promo_end=?,promo_days=?,promo_label=?,portions_per_unit=?,unit_name=? WHERE id=?`)
     .run(
       name ?? existing.name,
       description != null ? description : existing.description,
@@ -950,7 +961,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
       vat_rate != null ? parseFloat(vat_rate) : existing.vat_rate,
       crate_size !== undefined ? (crate_size||null) : existing.crate_size,
       cleanVariants,
-      pPrice, pStart, pEnd, pDays, pLabel,
+      pPrice, pStart, pEnd, pDays, pLabel, ppu, uName,
       req.params.id
     );
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
@@ -969,6 +980,25 @@ app.patch('/api/products/:id/stock', requireAuth, (req, res) => {
     db.prepare('INSERT INTO stock_log (product_id,delta,reason) VALUES (?,?,?)')
       .run(req.params.id, delta, reason || 'manual');
   }
+  const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
+  broadcast('product_updated', { product: p });
+  res.json(p);
+});
+
+// Voeg een aantal flessen/eenheden toe aan de stock — berekent zelf de porties op basis van portions_per_unit.
+// Handig voor wijn (1 fles = 3 porties): typ 5 → +15 porties.
+app.patch('/api/products/:id/add-units', requireAuth, (req, res) => {
+  const { units, reason } = req.body;
+  const nUnits = parseInt(units) || 0;
+  if (nUnits === 0) return res.status(400).json({ error: 'Aantal eenheden mag niet 0 zijn' });
+  const existing = db.prepare('SELECT stock, portions_per_unit FROM products WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Niet gevonden' });
+  const ppu = Math.max(1, existing.portions_per_unit || 1);
+  const delta = nUnits * ppu;
+  const newStock = Math.max(0, (existing.stock < 0 ? 0 : existing.stock) + delta);
+  db.prepare('UPDATE products SET stock=? WHERE id=?').run(newStock, req.params.id);
+  db.prepare('INSERT INTO stock_log (product_id,delta,reason) VALUES (?,?,?)')
+    .run(req.params.id, delta, reason || (nUnits > 0 ? `+${nUnits} eenheden` : `-${Math.abs(nUnits)} eenheden`));
   const p = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   broadcast('product_updated', { product: p });
   res.json(p);
