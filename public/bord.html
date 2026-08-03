@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
+<title>Bord — Zomerbar</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+:root{
+  --sun:#FFB700;--sun-d:#E09600;--sun-l:#FCEBC8;--sun-t:#391C14;
+  --teal:#1D9E75;--teal-l:#E1F5EE;--teal-d:#0F6E56;
+  --coral:#D8642F;--coral-l:#FBEADF;--coral-d:#A8431B;
+  --bg:#FDF1DB;--card:#FFFBF2;--bd:#EADBBE;
+  --tx:#391C14;--mu:#8A7256;--mu2:#B3A082;
+  --r:14px;--rm:9px;
+}
+*{-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+body{min-height:100vh;padding-bottom:30px;}
+
+/* Compacte header — enkel klok */
+.head{
+  position:sticky;top:0;z-index:5;
+  padding:10px 18px;background:var(--sun-t);color:var(--sun-l);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.head-title{font-size:13px;font-weight:600;letter-spacing:.04em;opacity:.85;}
+.clock{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.02em;}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--teal);transition:background .2s;}
+.dot.off{background:var(--coral);}
+
+/* Bord: raster van kaarten, compact op tablet */
+.wrap{padding:14px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
+.empty{padding:60px 20px;text-align:center;color:var(--mu);}
+.empty-emoji{font-size:56px;margin-bottom:14px;opacity:.35;}
+.empty-txt{font-size:15px;font-weight:500;}
+
+.card{background:var(--card);border:0.5px solid var(--bd);border-radius:var(--r);overflow:hidden;transition:transform .1s;}
+.card.is-paid{background:var(--sun-l);border:2px solid var(--sun);box-shadow:0 0 0 3px rgba(255,183,0,.18);}
+.card.is-paid .card-head{background:var(--sun);}
+.card.is-preparing{background:var(--card);border:1px solid var(--teal);box-shadow:inset 3px 0 0 var(--teal);}
+.card.is-ready{background:var(--teal-l);border:2px solid var(--teal);box-shadow:0 0 0 3px rgba(29,158,117,.18);}
+
+.card-head{padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.order-num{font-size:24px;font-weight:800;color:var(--sun-t);line-height:1;}
+.order-time{font-size:11px;color:var(--sun-t);opacity:.65;margin-top:3px;font-variant-numeric:tabular-nums;}
+.badge{padding:4px 9px;border-radius:11px;font-size:11px;font-weight:700;border:1px solid;white-space:nowrap;}
+.badge-paid{background:var(--sun);color:var(--sun-t);border-color:var(--sun-d);}
+.badge-prep{background:var(--teal-l);color:var(--teal-d);border-color:var(--teal);}
+.badge-ready{background:var(--teal);color:#fff;border-color:var(--teal-d);}
+
+.items{padding:6px 14px 10px;}
+.item-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;}
+.item-icon{font-size:18px;flex-shrink:0;}
+.item-qty{font-weight:700;color:var(--sun-d);min-width:22px;}
+.item-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.item-variant{color:var(--mu);font-size:11px;}
+
+.note{font-size:11px;color:var(--mu);font-style:italic;padding:4px 14px 6px;border-top:0.5px dashed var(--bd);}
+
+/* Actieknoppen onderaan de kaart */
+.actions{display:flex;border-top:0.5px solid var(--bd);}
+.act-btn{flex:1;padding:11px 8px;border:none;background:none;font-size:13px;font-weight:700;color:var(--tx);cursor:pointer;transition:background .1s;font-family:inherit;}
+.act-btn:not(:first-child){border-left:0.5px solid var(--bd);}
+.act-btn:active{background:rgba(0,0,0,.06);}
+.act-ready{color:var(--teal-d);}
+.act-collect{background:var(--teal);color:#fff;}
+.act-collect:active{background:var(--teal-d);}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120%);background:var(--sun-t);color:var(--sun-l);padding:12px 20px;border-radius:24px;font-size:13px;font-weight:600;z-index:100;transition:transform .3s;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="dot" id="dot" title="Verbinding"></div>
+    <div class="head-title">Bord</div>
+  </div>
+  <div class="clock" id="clock">--:--:--</div>
+</div>
+
+<div class="wrap">
+  <div id="board" class="grid"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/api.js"></script>
+<script>
+// Klok
+function tick(){
+  const d=new Date();
+  document.getElementById('clock').textContent =
+    String(d.getHours()).padStart(2,'0')+':'+
+    String(d.getMinutes()).padStart(2,'0')+':'+
+    String(d.getSeconds()).padStart(2,'0');
+}
+tick(); setInterval(tick,1000);
+
+// Toast (kort verdwijnende melding onderaan)
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),1800);
+}
+
+// State
+let orders={};
+
+function timeAgo(iso){
+  if(!iso) return '';
+  const then = new Date(iso.endsWith('Z')?iso:iso+'Z');
+  const s = Math.max(0, Math.floor((Date.now()-then.getTime())/1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s/60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m/60);
+  return `${h}u ${m%60}m`;
+}
+
+function statusBadge(o){
+  const s = o.status;
+  if (s === 'ready') return '<span class="badge badge-ready">🎉 Klaar</span>';
+  if (s === 'preparing') return '<span class="badge badge-prep">👨‍🍳 Bezig</span>';
+  if (s === 'paid') return '<span class="badge badge-paid">✅ Nieuw</span>';
+  return '';
+}
+
+function renderBoard(){
+  const list = Object.values(orders)
+    .filter(o => ['paid','preparing','ready'].includes(o.status))
+    .sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+
+  if (!list.length){
+    document.getElementById('board').innerHTML = `
+      <div class="empty" style="grid-column:1/-1;">
+        <div class="empty-emoji">☀️</div>
+        <div class="empty-txt">Geen actieve bestellingen</div>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('board').innerHTML = list.map(o => {
+    const cls = o.status === 'ready' ? 'is-ready' : o.status === 'preparing' ? 'is-preparing' : 'is-paid';
+    const items = (o.items||[]).map(i => `
+      <div class="item-row">
+        <span class="item-icon">${i.icon||'🍺'}</span>
+        <span class="item-qty">${i.qty}×</span>
+        <span class="item-name">${i.name}${i.variant?` <span class="item-variant">— ${i.variant}</span>`:''}</span>
+      </div>`).join('');
+    const note = o.note && o.note.trim()
+      ? `<div class="note">💬 ${o.note}</div>` : '';
+    // Actieknoppen: enkel status-transities. Geen betalingen of andere administratieve acties.
+    let actions = '';
+    if (o.status === 'paid') {
+      actions = `<div class="actions">
+        <button class="act-btn" onclick="setStatus('${o.id}','preparing')">👨‍🍳 Aan de slag</button>
+        <button class="act-btn act-ready" onclick="setStatus('${o.id}','ready')">🎉 Klaar</button>
+      </div>`;
+    } else if (o.status === 'preparing') {
+      actions = `<div class="actions">
+        <button class="act-btn act-ready" onclick="setStatus('${o.id}','ready')">🎉 Klaar</button>
+      </div>`;
+    } else if (o.status === 'ready') {
+      actions = `<div class="actions">
+        <button class="act-btn act-collect" onclick="setStatus('${o.id}','collected')">👋 Opgehaald</button>
+      </div>`;
+    }
+    return `<div class="card ${cls}" data-id="${o.id}">
+      <div class="card-head">
+        <div><div class="order-num">#${o.order_number}</div><div class="order-time">${timeAgo(o.created_at)} geleden</div></div>
+        ${statusBadge(o)}
+      </div>
+      <div class="items">${items}</div>
+      ${note}
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+async function setStatus(id, status){
+  try {
+    await API.orders.setStatus(id, status);
+    if (status === 'ready') toast(`✅ #${orders[id]?.order_number} klaar`);
+    else if (status === 'collected') toast(`👋 #${orders[id]?.order_number} opgehaald`);
+    else if (status === 'preparing') toast(`👨‍🍳 #${orders[id]?.order_number} bezig`);
+  } catch(e){ toast('Fout: '+e.message); }
+}
+
+// Verbindings-indicator: luister op de WS-events uit api.js
+API.on('ws_open',  () => document.getElementById('dot').classList.remove('off'));
+API.on('ws_close', () => document.getElementById('dot').classList.add('off'));
+
+// WS listeners: enkel bestellingen bijhouden. Bewust GEEN stock- of banner-meldingen,
+// geen geluid, geen toast bij nieuwe bestelling — deze pagina is puur read/status-update.
+API.on('order_created', d => {
+  orders[d.order.id] = d.order;
+  renderBoard();
+});
+API.on('order_updated', d => {
+  if (['collected','archived','cancelled'].includes(d.order.status)) delete orders[d.order.id];
+  else orders[d.order.id] = d.order;
+  renderBoard();
+});
+API.on('order_deleted', d => { delete orders[d.id]; renderBoard(); });
+
+// Initial load
+(async () => {
+  try {
+    const list = await API.orders.list();
+    list.forEach(o => { orders[o.id] = o; });
+    renderBoard();
+  } catch(e) {
+    console.warn(e);
+  }
+})();
+
+// "Geleden" tekst elke 30s verversen zodat je de leeftijd van kaarten ziet meelopen
+setInterval(renderBoard, 30000);
+</script>
+</body>
+</html>

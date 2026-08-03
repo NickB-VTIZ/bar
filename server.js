@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const APP_VERSION = '6.6.0';
+const APP_VERSION = '6.7.0';
 const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
@@ -2593,6 +2593,7 @@ app.get('/bar/start', (req, res) => sendPage(res, 'index.html'));
 app.get('/bar/beheer', (req, res) => sendPage(res, 'beheer.html'));
 app.get('/bar/boekhouding', (req, res) => sendPage(res, 'boekhouding.html'));
 app.get('/bar/login', (req, res) => sendPage(res, 'login.html'));
+app.get('/bar/bord', (req, res) => sendPage(res, 'bord.html'));
 app.get('/zwartgeld', (req, res) => sendPage(res, 'zwartgeld.html'));
 
 // Oude directe paden → redirect naar /bar-versie (backwards compat)
