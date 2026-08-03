@@ -201,6 +201,12 @@ API.on('ws_close', () => document.getElementById('dot').classList.add('off'));
 
 // WS listeners: enkel bestellingen bijhouden. Bewust GEEN stock- of banner-meldingen,
 // geen geluid, geen toast bij nieuwe bestelling — deze pagina is puur read/status-update.
+// De server stuurt via WS meteen een 'init' event met alle actieve bestellingen bij verbinding.
+API.on('init', d => {
+  orders = {};
+  (d.orders || []).forEach(o => { orders[o.id] = o; });
+  renderBoard();
+});
 API.on('order_created', d => {
   orders[d.order.id] = d.order;
   renderBoard();
@@ -211,17 +217,6 @@ API.on('order_updated', d => {
   renderBoard();
 });
 API.on('order_deleted', d => { delete orders[d.id]; renderBoard(); });
-
-// Initial load
-(async () => {
-  try {
-    const list = await API.orders.list();
-    list.forEach(o => { orders[o.id] = o; });
-    renderBoard();
-  } catch(e) {
-    console.warn(e);
-  }
-})();
 
 // "Geleden" tekst elke 30s verversen zodat je de leeftijd van kaarten ziet meelopen
 setInterval(renderBoard, 30000);
